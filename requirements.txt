@@ -1,0 +1,10 @@
+flowblueprint==0.2.1a0
+funcloom==0.10.5a0
+pyaes==1.6.1
+pyasn1==0.6.5
+python-dotenv==1.2.4
+refactrail==0.5.1a0
+refactrail-core==0.5.1a0
+rsa==4.9.1
+Telethon==1.45.0
+websockets==17.2
