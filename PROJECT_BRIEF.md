@@ -43,18 +43,22 @@ Flip phone (browser) <--HTTPS/WebSocket--> PC (FastAPI + Telethon) <--MTProto-->
 - [x] 1. Setup: Python, Git, VS Code; GitHub repo; `.gitignore` before anything else
 - [x] 2. Telethon script: log in, list last 10 chats, send a message to Saved Messages
 - [x] 3. Live receive: event handler printing incoming messages
-- [ ] 4. FastAPI wrapper: `GET /chats`, `GET /messages/{chat}`, `POST /send`
-- [ ] 5. Minimal web UI: chat list, message view, input (test on PC browser)
-- [ ] 6. D-pad navigation: focus handling, large text, small-screen layout (test on phone)
+- [x] 4. FastAPI wrapper: `GET /chats`, `GET /messages/{chat}`, `POST /send`
+- [x] 5. Minimal web UI: chat list, message view, input (test on PC browser)
+- [x] 6. D-pad navigation: focus handling, large text, small-screen layout (test on phone) - mostly done (d-pad double jump deferred)
 - [ ] 7. WebSocket push for real-time messages; simple auth
 - [ ] 8. Polish: unread counts, error handling, README with diagram and screenshots
 - [ ] 9. Later: old-laptop server, remote access, native Android app
 
 ## Current status
-“Next: milestone 4, FastAPI wrapper”
+
 
 
 ## Notes / decisions log
 
 _(Add dated entries here as the project evolves.)_
-Note 1: using flowseals tg-ws-proxy for backends connection to tg servers
+Note 1:
+- Using flowseals tg-ws-proxy for backends connection to tg servers
+Note 2, 3:
+- Known issue: on the flip phone's built-in browser, d-pad Up/Down moves focus two items at once (key tester shows one event per press; happens even with the page's key handler removed, so likely browser-native). Deferred to the native Android app phase, where key events can be handled directly.
+- Key codes on the phone: arrows = ArrowUp/Down/Left/Right, OK = Enter, F1 (112) and F2 (113) = soft keys, back key handled by the browser.

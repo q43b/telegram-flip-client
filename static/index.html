@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TG Flip</title>
+<style>
+  body { font-family: sans-serif; font-size: 18px; margin: 0; }
+  #chats button { display: block; width: 100%; text-align: left; padding: 10px;
+                  font-size: 18px; border: 0; border-bottom: 1px solid #ccc; background: #fff; }
+  button:focus, input:focus { outline: 3px solid #0057d9; }
+  #messages { padding: 8px; }
+  .msg { margin: 6px 0; padding: 6px; border-radius: 6px; background: #eee;
+         white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg.out { background: #d6f5d6; text-align: right; }
+  #compose { display: flex; gap: 4px; padding: 8px; }
+  #text { flex: 1; font-size: 18px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div id="err" style="color:#b00;padding:4px"></div>
+<script>
+window.onerror = function (msg, src, line) {
+  document.getElementById("err").textContent = "JS error: " + msg + " (line " + line + ")";
+};
+</script>
+<div id="chatsView">
+  <h2>Chats</h2>
+  <div id="chats"></div>
+</div>
+
+<div id="chatView" class="hidden">
+  <button id="back">Back</button>
+  <h2 id="title"></h2>
+  <div id="messages"></div>
+  <div id="compose">
+    <input id="text" placeholder="Message">
+    <button id="send">Send</button>
+  </div>
+</div>
+
+<script>
+let token = localStorage.getItem("token");
+if (!token) {
+  token = prompt("Token:");
+  localStorage.setItem("token", token);
+}
+let currentChat = null;
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { "x-token": token, "Content-Type": "application/json" },
+  });
+  if (res.status === 401) {
+    localStorage.removeItem("token");
+    alert("Bad token. Reload the page.");
+    throw new Error("401");
+  }
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
+async function loadChats() {
+  const chats = await api("/chats");
+  const box = document.getElementById("chats");
+  box.innerHTML = "";
+  for (const c of chats) {
+    const b = document.createElement("button");
+    b.textContent = c.name + (c.unread ? " (" + c.unread + ")" : "");
+    b.onclick = () => openChat(c.id, c.name);
+    box.appendChild(b);
+  }
+  var first = box.querySelector("button");
+if (first) first.focus();
+}
+
+async function openChat(id, name) {
+  currentChat = id;
+  document.getElementById("title").textContent = name;
+  document.getElementById("chatsView").classList.add("hidden");
+  document.getElementById("chatView").classList.remove("hidden");
+  await loadMessages();
+  document.getElementById("text").focus();
+}
+
+async function loadMessages() {
+  const msgs = await api("/messages/" + currentChat);
+  const box = document.getElementById("messages");
+  box.innerHTML = "";
+  for (const m of msgs) {
+    const d = document.createElement("div");
+    d.className = "msg" + (m.out ? " out" : "");
+    d.textContent = m.text || "[non-text message]";
+    box.appendChild(d);
+  }
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+async function sendMessage() {
+  const input = document.getElementById("text");
+  const text = input.value.trim();
+  if (!text) return;
+  await api("/send", { method: "POST", body: JSON.stringify({ chat_id: currentChat, text }) });
+  input.value = "";
+  await loadMessages();
+}
+
+document.getElementById("send").onclick = sendMessage;
+document.getElementById("text").onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
+document.getElementById("back").onclick = () => {
+  document.getElementById("chatView").classList.add("hidden");
+  document.getElementById("chatsView").classList.remove("hidden");
+  loadChats();
+};
+function focusables() {
+  return Array.from(document.querySelectorAll("button, input"))
+    .filter((el) => el.offsetParent !== null);
+}
+var lastNav = 0;
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  var now = Date.now();
+  if (now - lastNav < 100) return;
+  lastNav = now;
+  var items = focusables();
+  if (items.length === 0) return;
+  var i = items.indexOf(document.activeElement);
+  var next = e.key === "ArrowDown"
+    ? items[(i + 1) % items.length]
+    : items[(i - 1 + items.length) % items.length];
+  next.focus();
+  next.scrollIntoView(false);
+});
+loadChats().catch(function (e) {
+  document.getElementById("err").textContent = "Error: " + e;
+});
+</script>
+</body>
+</html>

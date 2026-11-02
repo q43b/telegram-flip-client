@@ -1,7 +1,8 @@
 import os
 import secrets
+import asyncio
 from contextlib import asynccontextmanager
-
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
@@ -24,7 +25,15 @@ client = TelegramClient(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await client.connect()
+    for attempt in range(1, 6):
+        try:
+            await client.connect()
+            break
+        except Exception as e:
+            print(f"Connect attempt {attempt} failed: {e}")
+            await asyncio.sleep(3)
+    else:
+        raise RuntimeError("Could not connect to Telegram after 5 attempts")
     if not await client.is_user_authorized():
         raise RuntimeError("Not logged in. Run list_chats.py once first.")
     yield
@@ -72,3 +81,4 @@ async def get_messages(chat_id: int, limit: int = 20):
 async def send(body: SendBody):
     msg = await client.send_message(body.chat_id, body.text)
     return {"id": msg.id}
+app.mount("/", StaticFiles(directory="static", html=True), name="static")

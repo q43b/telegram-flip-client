@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{font:20px sans-serif;margin:8px}</style></head>
+<body>
+<p>Press keys:</p>
+<pre id="log"></pre>
+<script>
+document.addEventListener("keydown", (e) => {
+  const log = document.getElementById("log");
+  log.textContent = e.key + " | code=" + e.code + " | keyCode=" + e.keyCode + "\n" + log.textContent;
+  e.preventDefault();
+});
+</script>
+</body></html>

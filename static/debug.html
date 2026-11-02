@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{font:18px sans-serif;margin:8px}</style></head>
+<body>
+<pre id="out"></pre>
+<script>
+var out = document.getElementById("out");
+function line(s) { out.textContent += s + "\n"; }
+function test(name, code) {
+  try { new Function(code)(); line("OK   " + name); }
+  catch (e) { line("FAIL " + name); }
+}
+line(navigator.userAgent);
+test("arrow functions", "var f = () => 1;");
+test("async/await", "async function f() { await 1; }");
+test("optional chaining", "var a = {}; a?.b;");
+test("object spread", "var a = {...{x:1}};");
+line(typeof fetch === "function" ? "OK   fetch" : "FAIL fetch");
+try { localStorage.setItem("t", "1"); line("OK   localStorage"); }
+catch (e) { line("FAIL localStorage"); }
+</script>
+</body></html>
