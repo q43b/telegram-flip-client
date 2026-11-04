@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Soft key label: sits above the right soft key and says what it does right now.
+     Hidden while the key does nothing. The left soft key (F1) is reserved for media. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/soft_key_right"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/soft_key_bar"
+    android:focusable="false"
+    android:gravity="end"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="2dp"
+    android:textColor="@color/white"
+    android:textStyle="bold"
+    android:visibility="gone" />

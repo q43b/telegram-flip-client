@@ -29,27 +29,44 @@ class ApiClient(private val baseUrl: String, val token: String) {
         return List(json.length()) { i ->
             val item = json.getJSONObject(i)
             val name = if (item.isNull("name")) "" else item.getString("name")
-            Chat(item.getLong("id"), name, item.getInt("unread"))
+            Chat(item.getLong("id"), name, item.getInt("unread"), item.optBoolean("forum"))
         }
     }
 
+    // Topics of a forum group, most recently active first
+    fun getTopics(chatId: Long, limit: Int = 50): List<Topic> {
+        val json = JSONArray(call(Request.Builder().url("$baseUrl/topics/$chatId?limit=$limit")))
+        return List(json.length()) { i ->
+            val item = json.getJSONObject(i)
+            Topic(item.getLong("id"), item.getString("title"), item.getInt("unread"))
+        }
+    }
+
+    // In all functions below, topicId = null means an ordinary chat (no topics).
+
     // Oldest first
-    fun getMessages(chatId: Long, limit: Int = 20): List<Message> {
-        val json = JSONArray(call(Request.Builder().url("$baseUrl/messages/$chatId?limit=$limit")))
+    fun getMessages(chatId: Long, topicId: Long?, limit: Int = 20): List<Message> {
+        val url = "$baseUrl/messages/$chatId?limit=$limit" + topicParam(topicId, "&")
+        val json = JSONArray(call(Request.Builder().url(url)))
         return List(json.length()) { i -> Message.fromJson(json.getJSONObject(i)) }
     }
 
     // Returns the new message's id
-    fun sendMessage(chatId: Long, text: String): Long {
-        val body = JSONObject().put("chat_id", chatId).put("text", text).toString()
-        val request = Request.Builder().url("$baseUrl/send").post(body.toRequestBody(JSON))
+    fun sendMessage(chatId: Long, topicId: Long?, text: String): Long {
+        val body = JSONObject().put("chat_id", chatId).put("text", text)
+        if (topicId != null) body.put("topic_id", topicId)
+        val request = Request.Builder().url("$baseUrl/send").post(body.toString().toRequestBody(JSON))
         return JSONObject(call(request)).getLong("id")
     }
 
     // Sends a read receipt to the other side, so only call it on a deliberate key press
-    fun markRead(chatId: Long) {
-        call(Request.Builder().url("$baseUrl/read/$chatId").post("".toRequestBody(null)))
+    fun markRead(chatId: Long, topicId: Long?) {
+        val url = "$baseUrl/read/$chatId" + topicParam(topicId, "?")
+        call(Request.Builder().url(url).post("".toRequestBody(null)))
     }
+
+    private fun topicParam(topicId: Long?, separator: String) =
+        if (topicId == null) "" else "${separator}topic_id=$topicId"
 
     private fun call(request: Request.Builder): String {
         http.newCall(request.header("x-token", token).build()).execute().use { response ->

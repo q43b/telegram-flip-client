@@ -5,6 +5,11 @@
     <string name="token_hint">Token</string>
     <string name="loading">Loading chats…</string>
     <string name="no_chats">No chats</string>
+    <string name="show_more_chats">Show more chats…</string>
+    <string name="soft_key_general">Open General</string>
+    <string name="general_topic">General</string>
+    <string name="loading_topics">Loading topics…</string>
+    <string name="no_topics">No topics</string>
     <string name="error_bad_token">Wrong token</string>
     <string name="error_no_server">Can\'t reach server</string>
     <string name="error_bad_address">Invalid server address</string>

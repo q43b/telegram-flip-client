@@ -25,6 +25,9 @@
             </intent-filter>
         </activity>
         <activity
+            android:name=".TopicsActivity"
+            android:exported="false" />
+        <activity
             android:name=".ChatActivity"
             android:exported="false" />
     </application>

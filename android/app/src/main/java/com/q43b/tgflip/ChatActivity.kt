@@ -45,6 +45,7 @@ class ChatActivity : AppCompatActivity() {
 
     private lateinit var api: ApiClient
     private var chatId = 0L
+    private var topicId: Long? = null  // set when this is one topic of a forum group
     private var live: LiveConnection? = null
     private var wasConnected = false
 
@@ -73,11 +74,12 @@ class ChatActivity : AppCompatActivity() {
         }
         api = ApiClient(address, token)
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
+        if (intent.hasExtra(EXTRA_TOPIC_ID)) topicId = intent.getLongExtra(EXTRA_TOPIC_ID, 0)
 
         connection = findViewById(R.id.connection)
         status = findViewById(R.id.status)
         messageList = findViewById(R.id.message_list)
-        findViewById<TextView>(R.id.chat_title).text = intent.getStringExtra(EXTRA_CHAT_NAME)
+        findViewById<TextView>(R.id.chat_title).text = intent.getStringExtra(EXTRA_TITLE)
         messageAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
         messageList.adapter = messageAdapter
 
@@ -127,7 +129,7 @@ class ChatActivity : AppCompatActivity() {
     // Right soft key = mark as read. Phones report it either as F2 or as SOFT_RIGHT.
     // Caught here, before any list or text box sees it; we act on key-up, like sending.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode == KeyEvent.KEYCODE_F2 || event.keyCode == KeyEvent.KEYCODE_SOFT_RIGHT) {
+        if (event.isRightSoftKey()) {
             if (event.action == KeyEvent.ACTION_UP) markAsRead()
             return true
         }
@@ -141,7 +143,7 @@ class ChatActivity : AppCompatActivity() {
         showStatus(getString(R.string.marking_read))
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) { api.markRead(chatId) }
+                withContext(Dispatchers.IO) { api.markRead(chatId, topicId) }
                 unread = 0
                 updateReadKey()
                 showStatus(getString(R.string.marked_read))
@@ -159,14 +161,17 @@ class ChatActivity : AppCompatActivity() {
         readKey.visibility = if (unread > 0) View.VISIBLE else View.GONE
     }
 
-    // Asks the server for this chat's unread count. The chat list endpoint is the only
-    // place that has it; if the chat is not among the first 20, keep what we have.
+    // Asks the server for this chat's (or topic's) unread count. Only the chat and topic
+    // lists have it; if the chat is not among the first 20, keep what we have.
     private fun refreshUnread() {
+        val topicId = topicId
         lifecycleScope.launch {
             try {
-                val chat = withContext(Dispatchers.IO) { api.getChats() }.find { it.id == chatId }
-                    ?: return@launch
-                unread = chat.unread
+                val fresh = withContext(Dispatchers.IO) {
+                    if (topicId == null) api.getChats().find { it.id == chatId }?.unread
+                    else api.getTopics(chatId).find { it.id == topicId }?.unread
+                } ?: return@launch
+                unread = fresh
                 updateReadKey()
             } catch (e: IOException) {
                 // The connection bar already shows network trouble
@@ -186,7 +191,7 @@ class ChatActivity : AppCompatActivity() {
         if (!quiet) showStatus(getString(R.string.loading_messages))
         lifecycleScope.launch {
             try {
-                val loaded = withContext(Dispatchers.IO) { api.getMessages(chatId) }
+                val loaded = withContext(Dispatchers.IO) { api.getMessages(chatId, topicId) }
                 showMessages(loaded)
             } catch (e: BadTokenException) {
                 showStatus(getString(R.string.error_bad_token))
@@ -227,9 +232,16 @@ class ChatActivity : AppCompatActivity() {
     private fun onServerEvent(event: JSONObject) {
         if (event.optLong("chat_id") != chatId) return
         when (event.optString("type")) {
-            "message" -> onLiveMessage(event)
+            "message" -> if (isInThisTopic(event)) onLiveMessage(event)
             "read" -> refreshUnread()  // read on another device, maybe only partly
         }
+    }
+
+    // The server sends topic_id null for ordinary chats and for a forum's General topic
+    private fun isInThisTopic(event: JSONObject): Boolean {
+        val topicId = topicId ?: return true
+        val eventTopic = if (event.isNull("topic_id")) null else event.optLong("topic_id")
+        return if (topicId == Topic.GENERAL_ID) eventTopic == null else eventTopic == topicId
     }
 
     private fun onLiveMessage(event: JSONObject) {
@@ -265,7 +277,7 @@ class ChatActivity : AppCompatActivity() {
         showStatus(getString(R.string.sending))
         lifecycleScope.launch {
             try {
-                val id = withContext(Dispatchers.IO) { api.sendMessage(chatId, text) }
+                val id = withContext(Dispatchers.IO) { api.sendMessage(chatId, topicId, text) }
                 messageInput.text.clear()
                 status.visibility = View.GONE
                 addMessage(Message(id, text, out = true, date = serverDate.format(Date())), follow = true)
@@ -297,14 +309,22 @@ class ChatActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_CHAT_ID = "chat_id"
-        private const val EXTRA_CHAT_NAME = "chat_name"
+        private const val EXTRA_TOPIC_ID = "topic_id"
+        private const val EXTRA_TITLE = "title"
         private const val EXTRA_UNREAD = "unread"
 
-        fun start(context: Context, chat: Chat) {
+        // topic = null for an ordinary chat; otherwise one topic of a forum group
+        fun start(context: Context, chat: Chat, topic: Topic? = null) {
             val intent = Intent(context, ChatActivity::class.java)
             intent.putExtra(EXTRA_CHAT_ID, chat.id)
-            intent.putExtra(EXTRA_CHAT_NAME, chat.name)
-            intent.putExtra(EXTRA_UNREAD, chat.unread)
+            if (topic == null) {
+                intent.putExtra(EXTRA_TITLE, chat.name)
+                intent.putExtra(EXTRA_UNREAD, chat.unread)
+            } else {
+                intent.putExtra(EXTRA_TOPIC_ID, topic.id)
+                intent.putExtra(EXTRA_TITLE, "${chat.name} › ${topic.title}")
+                intent.putExtra(EXTRA_UNREAD, topic.unread)
+            }
             context.startActivity(intent)
         }
     }

@@ -20,7 +20,11 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 - Chat screen (`ChatActivity.kt`): OK on a chat opens its last 20 messages, new ones arrive live. Opening does not mark as read.
 - Sending: a text box under the messages; OK sends via POST /send. The sent message shows at once (deduplicated by id against the live event).
 - Key plan: OK opens chats and sends. Right soft key (F2) = mark as read, as in `../server/static/index.html`. Left soft key (F1) is reserved for sticker/media sending, much later.
-- Mark as read: F2 / SOFT_RIGHT in the chat screen posts to /read. A soft key label "Mark as read (N)" shows only while the chat has unread messages; F2 does nothing otherwise. The count comes from the list, +1 per live incoming message, and is refetched from /chats on open, reconnect and "read" events.
+- Mark as read: F2 / SOFT_RIGHT in the chat screen posts to /read. A soft key label "Mark as read (N)" shows only while the chat has unread messages; F2 does nothing otherwise. The count comes from the list, +1 per live incoming message, and is refetched from /chats (or /topics) on open, reconnect and "read" events.
+- Older chats: a "Show more chats…" row at the end of the list raises the `/chats` limit by 20 each time (live refreshes keep the bigger limit).
+- Forum groups (groups split into topics): marked "›" in the list; OK opens `TopicsActivity.kt`, OK on a topic opens `ChatActivity` for that topic. In the list, F2 on a forum opens its General topic directly (soft key label "Open General").
+- A forum group's own unread counter is stale in Telegram (it never clears when topics are read one by one), so `/chats` reports forums as the sum of their topics' unread counts, cached per group until activity there or 60 s.
+- Forum caveats to watch: General (topic id 1) is loaded by scanning the group's last 200 messages for ones with no topic mark; topic reads on other devices may not send a live "read" event.
 
 ## Target device
 - Android 10 flip phone, small screen, d-pad. Keys seen in its browser: ArrowUp/Down/Left/Right, Enter (OK), soft keys F1 (keyCode 112) and F2 (113). Back is handled by the system.
@@ -29,12 +33,14 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 
 ## Server API (plain HTTP on the home network; the PC has a fixed LAN IP; port 8000)
 - Auth: every HTTP request needs the header `x-token: <API_TOKEN>`. The token is never hardcoded in the repo.
-- `GET /chats?limit=20` -> `[{id, name, unread}]`
-- `GET /messages/{chat_id}?limit=20` -> `[{id, text, out, date}]`, oldest first
-- `POST /send` with JSON `{chat_id, text}` -> `{id}`
-- `POST /read/{chat_id}` -> `{ok: true}` (this sends a read receipt, so it must stay a deliberate user action)
+- `GET /chats?limit=20` -> `[{id, name, unread, forum}]` (`forum`: group split into topics)
+- `GET /topics/{chat_id}?limit=50` -> `[{id, title, unread}]` for a forum group; General is id 1
+- `GET /messages/{chat_id}?limit=20[&topic_id=N]` -> `[{id, text, out, date}]`, oldest first
+- `POST /send` with JSON `{chat_id, text, topic_id?}` -> `{id}`
+- `POST /read/{chat_id}[?topic_id=N]` -> `{ok: true}` (this sends a read receipt, so it must stay a deliberate user action)
+- Without `topic_id`, every endpoint works on the whole chat, as before.
 - `WebSocket /ws`: the first text message must be the token (the server closes the connection after 5 seconds without it). The server then pushes JSON:
-  - `{type: "message", id, chat_id, text, out, date}`
+  - `{type: "message", id, chat_id, topic_id, text, out, date}` (`topic_id` is null in ordinary chats and in General)
   - `{type: "read", chat_id}` (read state changed in another client; refetch `/chats`)
 - After a WebSocket reconnect, refetch current state (chats and the open chat's messages).
 

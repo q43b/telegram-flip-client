@@ -2,7 +2,9 @@ package com.q43b.tgflip
 
 import android.os.Bundle
 import android.text.InputType
+import android.view.KeyEvent
 import android.view.View
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -27,7 +29,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var chatList: ListView
     private lateinit var chatAdapter: ArrayAdapter<String>
+    private lateinit var softKey: TextView
     private var chats: List<Chat> = emptyList()
+    private var chatLimit = PAGE_SIZE  // grows by a page with each "Show more chats"
     private var settingsDialog: AlertDialog? = null
 
     private var api: ApiClient? = null
@@ -51,7 +55,50 @@ class MainActivity : AppCompatActivity() {
         // One adapter for the screen's lifetime, so refreshes keep the d-pad selection
         chatAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
         chatList.adapter = chatAdapter
-        chatList.setOnItemClickListener { _, _, position, _ -> ChatActivity.start(this, chats[position]) }
+        // Rows past the chats are the "Show more chats" row
+        chatList.setOnItemClickListener { _, _, position, _ ->
+            val chat = chats.getOrNull(position)
+            if (chat != null) openChat(chat) else showMoreChats()
+        }
+        chatList.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) =
+                updateSoftKey()
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = updateSoftKey()
+        }
+
+        softKey = findViewById(R.id.soft_key_right)
+        softKey.setText(R.string.soft_key_general)
+        softKey.setOnClickListener { selectedChat()?.let(::openGeneral) }
+    }
+
+    // Right soft key on a topic group opens its General topic directly
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.isRightSoftKey()) {
+            if (event.action == KeyEvent.ACTION_UP) selectedChat()?.let(::openGeneral)
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun selectedChat(): Chat? = chats.getOrNull(chatList.selectedItemPosition)
+
+    private fun updateSoftKey() {
+        softKey.visibility = if (selectedChat()?.forum == true) View.VISIBLE else View.GONE
+    }
+
+    private fun openChat(chat: Chat) {
+        if (chat.forum) TopicsActivity.start(this, chat) else ChatActivity.start(this, chat)
+    }
+
+    private fun openGeneral(chat: Chat) {
+        if (!chat.forum) return
+        ChatActivity.start(this, chat, Topic(Topic.GENERAL_ID, getString(R.string.general_topic), 0))
+    }
+
+    private fun showMoreChats() {
+        chatLimit += PAGE_SIZE
+        loadChats(quiet = false)
     }
 
     // The app is visible: connect. Hidden: disconnect, to save battery.
@@ -93,7 +140,7 @@ class MainActivity : AppCompatActivity() {
         if (!quiet) showStatus(getString(R.string.loading))
         lifecycleScope.launch {
             try {
-                val chats = withContext(Dispatchers.IO) { api.getChats() }
+                val chats = withContext(Dispatchers.IO) { api.getChats(chatLimit) }
                 showChats(chats)
             } catch (e: BadTokenException) {
                 showError(getString(R.string.error_bad_token))
@@ -106,9 +153,19 @@ class MainActivity : AppCompatActivity() {
     private fun showChats(chats: List<Chat>) {
         this.chats = chats
         chatAdapter.clear()
-        chatAdapter.addAll(chats.map { if (it.unread > 0) "${it.name} (${it.unread})" else it.name })
+        chatAdapter.addAll(chats.map(::chatRow))
+        // A full page means there may be more. The selection stays on this row's position,
+        // so after loading more it lands on the first newly loaded chat.
+        if (chats.size >= chatLimit) chatAdapter.add(getString(R.string.show_more_chats))
         if (chats.isEmpty()) showStatus(getString(R.string.no_chats)) else status.visibility = View.GONE
         chatList.requestFocus()
+        updateSoftKey()
+    }
+
+    // "Name (3)"; topic groups get a "›" because they open a list of topics
+    private fun chatRow(chat: Chat): String {
+        val name = if (chat.forum) "${chat.name} ›" else chat.name
+        return if (chat.unread > 0) "$name (${chat.unread})" else name
     }
 
     private fun showConnection(state: LiveConnection.Status) {
@@ -171,5 +228,6 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val DEFAULT_ADDRESS = "http://192.168.31.24:8000"
+        const val PAGE_SIZE = 20
     }
 }
