@@ -2,11 +2,13 @@ import os
 import secrets
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi.staticfiles import StaticFiles
+
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import (APIRouter, Depends, FastAPI, Header, HTTPException,
+                     WebSocket, WebSocketDisconnect)
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from telethon import TelegramClient, connection
+from telethon import TelegramClient, connection, events
 
 load_dotenv()
 
@@ -21,6 +23,24 @@ client = TelegramClient(
         os.environ["PROXY_SECRET"],
     ),
 )
+
+ws_clients = set()  # currently connected browsers
+
+
+@client.on(events.NewMessage)
+async def on_new_message(event):
+    data = {
+        "id": event.id,
+        "chat_id": event.chat_id,
+        "text": event.raw_text or "",
+        "out": event.out,
+        "date": event.date.isoformat(),
+    }
+    for ws in list(ws_clients):
+        try:
+            await ws.send_json(data)
+        except Exception:
+            ws_clients.discard(ws)
 
 
 @asynccontextmanager
@@ -41,11 +61,12 @@ async def lifespan(app: FastAPI):
 
 
 def check_token(x_token: str = Header(default="")):
-    if not secrets.compare_digest(x_token, os.environ["API_TOKEN"]):
+    if not secrets.compare_digest(x_token.encode(), os.environ["API_TOKEN"].encode()):
         raise HTTPException(status_code=401, detail="Bad token")
 
 
-app = FastAPI(lifespan=lifespan, dependencies=[Depends(check_token)])
+app = FastAPI(lifespan=lifespan)
+api = APIRouter(dependencies=[Depends(check_token)])  # token required on these
 
 
 class SendBody(BaseModel):
@@ -53,7 +74,7 @@ class SendBody(BaseModel):
     text: str
 
 
-@app.get("/chats")
+@api.get("/chats")
 async def get_chats(limit: int = 20):
     chats = []
     async for d in client.iter_dialogs(limit=limit):
@@ -61,7 +82,7 @@ async def get_chats(limit: int = 20):
     return chats
 
 
-@app.get("/messages/{chat_id}")
+@api.get("/messages/{chat_id}")
 async def get_messages(chat_id: int, limit: int = 20):
     try:
         msgs = []
@@ -77,8 +98,31 @@ async def get_messages(chat_id: int, limit: int = 20):
     return list(reversed(msgs))
 
 
-@app.post("/send")
+@api.post("/send")
 async def send(body: SendBody):
     msg = await client.send_message(body.chat_id, body.text)
     return {"id": msg.id}
+
+
+app.include_router(api)
+
+
+@app.websocket("/ws")
+async def ws_endpoint(ws: WebSocket):
+    await ws.accept()
+    try:
+        # The first message must be the token (see notes below)
+        first = await asyncio.wait_for(ws.receive_text(), timeout=5)
+        if not secrets.compare_digest(first.encode(), os.environ["API_TOKEN"].encode()):
+            await ws.close(code=1008)
+            return
+        ws_clients.add(ws)
+        while True:
+            await ws.receive_text()  # keeps the connection open
+    except (WebSocketDisconnect, asyncio.TimeoutError):
+        pass
+    finally:
+        ws_clients.discard(ws)
+
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

@@ -85,17 +85,39 @@ async function openChat(id, name) {
   document.getElementById("text").focus();
 }
 
+var shown = {};
+
+function addMessage(m) {
+  if (shown[m.id]) return;
+  shown[m.id] = true;
+  var box = document.getElementById("messages");
+  var d = document.createElement("div");
+  d.className = "msg" + (m.out ? " out" : "");
+  d.textContent = m.text || "[non-text message]";
+  box.appendChild(d);
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
 async function loadMessages() {
   const msgs = await api("/messages/" + currentChat);
-  const box = document.getElementById("messages");
-  box.innerHTML = "";
-  for (const m of msgs) {
-    const d = document.createElement("div");
-    d.className = "msg" + (m.out ? " out" : "");
-    d.textContent = m.text || "[non-text message]";
-    box.appendChild(d);
-  }
-  window.scrollTo(0, document.body.scrollHeight);
+  document.getElementById("messages").innerHTML = "";
+  shown = {};
+  for (const m of msgs) addMessage(m);
+}
+
+var ws = null;
+function connectWs() {
+  var proto = location.protocol === "https:" ? "wss://" : "ws://";
+  ws = new WebSocket(proto + location.host + "/ws");
+  ws.onopen = function () { ws.send(token); };
+  ws.onmessage = function (e) {
+    var m = JSON.parse(e.data);
+    if (currentChat !== null && m.chat_id === currentChat &&
+        !document.getElementById("chatView").classList.contains("hidden")) {
+      addMessage(m);
+    }
+  };
+  ws.onclose = function () { setTimeout(connectWs, 3000); };
 }
 
 async function sendMessage() {
@@ -135,6 +157,7 @@ document.addEventListener("keydown", function (e) {
   next.focus();
   next.scrollIntoView(false);
 });
+connectWs();
 loadChats().catch(function (e) {
   document.getElementById("err").textContent = "Error: " + e;
 });
