@@ -14,8 +14,12 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.TGFlip">
+        <!-- configChanges: opening or closing the flip switches the phone's keyboard state.
+             By default Android would rebuild the open screen each time, losing a reply in
+             progress and reconnecting; listing them here keeps the screen as it is. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -26,9 +30,11 @@
         </activity>
         <activity
             android:name=".TopicsActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="false" />
         <activity
             android:name=".ChatActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="false" />
     </application>
 

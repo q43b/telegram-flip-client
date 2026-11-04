@@ -25,11 +25,24 @@
         android:padding="8dp"
         android:visibility="gone" />
 
-    <ListView
+    <!-- Takes OK before the keyboard app does; see OkListView.kt -->
+    <com.q43b.tgflip.OkListView
         android:id="@+id/message_list"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />
+
+    <!-- Shown while composing a reply; Back cancels it -->
+    <TextView
+        android:id="@+id/reply_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:paddingHorizontal="8dp"
+        android:paddingTop="4dp"
+        android:singleLine="true"
+        android:textStyle="italic"
+        android:visibility="gone" />
 
     <EditText
         android:id="@+id/message_input"

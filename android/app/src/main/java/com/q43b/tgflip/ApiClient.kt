@@ -47,10 +47,11 @@ class ApiClient(private val baseUrl: String, val token: String) {
         return List(json.length()) { i -> Message.fromJson(json.getJSONObject(i)) }
     }
 
-    // Returns the new message's id
-    fun sendMessage(chatId: Long, topicId: Long?, text: String): Long {
+    // Returns the new message's id. replyToId = the message being replied to, if any.
+    fun sendMessage(chatId: Long, topicId: Long?, text: String, replyToId: Long? = null): Long {
         val body = JSONObject().put("chat_id", chatId).put("text", text)
         if (topicId != null) body.put("topic_id", topicId)
+        if (replyToId != null) body.put("reply_to_id", replyToId)
         val request = Request.Builder().url("$baseUrl/send").post(body.toString().toRequestBody(JSON))
         return JSONObject(call(request)).getLong("id")
     }

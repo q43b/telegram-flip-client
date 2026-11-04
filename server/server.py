@@ -1,6 +1,7 @@
 import os
 import secrets
 import asyncio
+import functools
 import time
 from contextlib import asynccontextmanager
 
@@ -42,6 +43,17 @@ def topic_of(message):
         # A reply inside a topic points at the topic with reply_to_top_id
         return r.reply_to_top_id or r.reply_to_msg_id
     return None
+
+
+def reply_of(message):
+    """Id of the message this one replies to, or None.
+    In a topic every message points at the topic; that alone is not a reply."""
+    r = message.reply_to
+    if not isinstance(r, types.MessageReplyHeader):
+        return None
+    if getattr(r, "forum_topic", False) and r.reply_to_top_id is None:
+        return None
+    return r.reply_to_msg_id
 
 
 async def topic_messages(chat_id, topic_id, limit):
@@ -111,6 +123,7 @@ async def on_new_message(event):
         "id": event.id,
         "chat_id": event.chat_id,
         "topic_id": topic_of(event.message),  # None in ordinary chats and General
+        "reply_to_id": reply_of(event.message),
         "text": event.raw_text or "",
         "out": event.out,
         "date": event.date.isoformat(),
@@ -123,27 +136,99 @@ async def on_read(event):
     await broadcast({"type": "read", "chat_id": event.chat_id})
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Through the proxy, Telegram sometimes answers with a one-off error such as
-    # MTPROTO_CLUSTER_INVALID. A failed connect() leaves the client half-connected,
-    # and a second connect() would then skip setup, so retry from a clean disconnect.
-    # get_me() returns None only when really logged out; other errors raise and retry.
-    # (is_user_authorized() would report "not logged in" for any error, and cache it.)
+async def connect_telegram():
+    """Connects from scratch; returns get_me() (None = not logged in).
+
+    Through the proxy, Telegram sometimes answers with MTPROTO_CLUSTER_INVALID.
+    A failed connect() leaves the client half-connected, and a second connect()
+    would then skip setup, so retry from a clean disconnect.
+    get_me() returns None only when really logged out; other errors raise and retry.
+    (is_user_authorized() would report "not logged in" for any error, and cache it.)
+    """
     for attempt in range(1, 6):
         try:
             await client.connect()
-            me = await client.get_me()
-            break
+            return await client.get_me()
         except Exception as e:
             print(f"Connect attempt {attempt} failed: {e}")
             await client.disconnect()
             await asyncio.sleep(3)
-    else:
-        raise RuntimeError("Could not connect to Telegram after 5 attempts")
-    if me is None:
+    raise RuntimeError("Could not connect to Telegram after 5 attempts")
+
+
+# The same error also strikes while running: when the proxy drops the connection,
+# Telethon reconnects by itself, but then every request can fail with
+# MTPROTO_CLUSTER_INVALID until we reconnect from scratch.
+def is_cluster_error(e):
+    return "MTPROTO_CLUSTER_INVALID" in str(e)
+
+
+reconnect_lock = asyncio.Lock()
+last_recovery = 0.0
+
+
+async def recover():
+    """Reconnects from scratch. Several requests failing at once trigger one reconnect."""
+    global last_recovery
+    async with reconnect_lock:
+        if time.monotonic() - last_recovery < 10:
+            return  # another request just did it
+        print("Telegram connection is broken (MTPROTO_CLUSTER_INVALID); reconnecting")
+        await client.disconnect()
+        await connect_telegram()
+        last_recovery = time.monotonic()
+        print("Reconnected to Telegram")
+
+
+def recovering(endpoint):
+    """Wraps an endpoint: on MTPROTO_CLUSTER_INVALID, reconnect and try once more."""
+    @functools.wraps(endpoint)  # keeps the signature, which FastAPI reads
+    async def wrapper(*args, **kwargs):
+        try:
+            return await endpoint(*args, **kwargs)
+        except errors.RPCError as e:
+            if not is_cluster_error(e):
+                raise
+        await recover()
+        return await endpoint(*args, **kwargs)
+    return wrapper
+
+
+def bad_request(e):
+    """Turns a Telegram error into HTTP 400, except the broken-connection one,
+    which must reach @recovering."""
+    if is_cluster_error(e):
+        raise e
+    raise HTTPException(status_code=400, detail=str(e))
+
+
+WATCHDOG_INTERVAL = 120
+
+
+async def watchdog():
+    """Live updates stop silently while the connection is broken, so check it
+    now and then even when no requests come in."""
+    while True:
+        await asyncio.sleep(WATCHDOG_INTERVAL)
+        try:
+            await client.get_me()
+        except errors.RPCError as e:
+            if is_cluster_error(e):
+                try:
+                    await recover()
+                except Exception as e2:
+                    print(f"Reconnect failed: {e2}")
+        except Exception:
+            pass  # network trouble: Telethon keeps retrying on its own
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if await connect_telegram() is None:
         raise RuntimeError("Not logged in. Run list_chats.py once first.")
+    checker = asyncio.create_task(watchdog())
     yield
+    checker.cancel()
     await client.disconnect()
 
 
@@ -160,9 +245,11 @@ class SendBody(BaseModel):
     chat_id: int
     text: str
     topic_id: Optional[int] = None
+    reply_to_id: Optional[int] = None
 
 
 @api.get("/chats")
+@recovering
 async def get_chats(limit: int = 20):
     chats = []
     async for d in client.iter_dialogs(limit=limit):
@@ -177,40 +264,50 @@ async def get_chats(limit: int = 20):
 
 
 @api.get("/topics/{chat_id}")
+@recovering
 async def get_topics(chat_id: int, limit: int = 50):
     try:
         topics = await get_forum_topics(await client.get_input_entity(chat_id), limit)
     except ValueError:
         raise HTTPException(status_code=404, detail="Chat not found")
     except errors.RPCError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        bad_request(e)
     return [{"id": t.id, "title": t.title, "unread": t.unread_count} for t in topics]
 
 
 @api.get("/messages/{chat_id}")
+@recovering
 async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = None):
     try:
         found = await topic_messages(chat_id, topic_id, limit)
     except ValueError:
         raise HTTPException(status_code=404, detail="Chat not found")
     except errors.RPCError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        bad_request(e)
     msgs = [
-        {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat()}
+        {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
+         "reply_to_id": reply_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
 
 
 @api.post("/send")
+@recovering
 async def send(body: SendBody):
     # Replying to a topic's id is how Telegram files a message into that topic.
-    # General takes plain messages.
-    reply_to = body.topic_id if body.topic_id not in (None, GENERAL_TOPIC) else None
+    # General takes plain messages. A reply to a message stays in that message's topic.
+    if body.reply_to_id is not None:
+        reply_to = body.reply_to_id
+    elif body.topic_id not in (None, GENERAL_TOPIC):
+        reply_to = body.topic_id
+    else:
+        reply_to = None
     msg = await client.send_message(body.chat_id, body.text, reply_to=reply_to)
     return {"id": msg.id}
 
 @api.post("/read/{chat_id}")
+@recovering
 async def mark_read(chat_id: int, topic_id: Optional[int] = None):
     try:
         if topic_id is None:
@@ -227,7 +324,7 @@ async def mark_read(chat_id: int, topic_id: Optional[int] = None):
     except ValueError:
         raise HTTPException(status_code=404, detail="Chat not found")
     except errors.RPCError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        bad_request(e)
     forget_forum_unread(chat_id)  # after the read, so the next count sees it
     return {"ok": True}
 

@@ -10,8 +10,8 @@ import android.view.inputmethod.EditorInfo
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
-import android.widget.ListView
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -34,7 +34,7 @@ import java.util.Locale
 class ChatActivity : AppCompatActivity() {
     private lateinit var connection: TextView
     private lateinit var status: TextView
-    private lateinit var messageList: ListView
+    private lateinit var messageList: OkListView
     private lateinit var messageAdapter: ArrayAdapter<String>
     private lateinit var messageInput: EditText
     private lateinit var readKey: TextView
@@ -42,6 +42,18 @@ class ChatActivity : AppCompatActivity() {
     private var unread = 0
     private var sending = false
     private var markingRead = false
+
+    // Entries of the menu that OK on a message opens. New message features go here.
+    private val messageActions = listOf(
+        MessageAction(R.string.action_reply, perform = ::startReply),
+    )
+
+    private lateinit var replyBar: TextView
+    private var replyingTo: Message? = null
+    // While replying, Back cancels the reply instead of leaving the chat
+    private val cancelReplyOnBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = cancelReply()
+    }
 
     private lateinit var api: ApiClient
     private lateinit var cache: LocalCache
@@ -84,6 +96,14 @@ class ChatActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.chat_title).text = intent.getStringExtra(EXTRA_TITLE)
         messageAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
         messageList.adapter = messageAdapter
+        // OK on a message opens its menu (OkListView takes OK before the keyboard app);
+        // the click listener covers touch taps
+        messageList.onOk = { position -> messages.getOrNull(position)?.let(::showMessageMenu) }
+        messageList.setOnItemClickListener { _, _, position, _ ->
+            messages.getOrNull(position)?.let(::showMessageMenu)
+        }
+        replyBar = findViewById(R.id.reply_bar)
+        onBackPressedDispatcher.addCallback(this, cancelReplyOnBack)
 
         // OK on the keypad sends. We act on key-up and swallow key-down too,
         // so one press can never send twice.
@@ -134,8 +154,8 @@ class ChatActivity : AppCompatActivity() {
         super.onStop()
     }
 
-    // Right soft key = mark as read. Phones report it either as F2 or as SOFT_RIGHT.
-    // Caught here, before any list or text box sees it; we act on key-up, like sending.
+    // Right soft key = mark as read (F2 or SOFT_RIGHT, depending on the phone).
+    // Caught here, before the list or text box sees it; we act on key-up, like sending.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.isRightSoftKey()) {
             if (event.action == KeyEvent.ACTION_UP) markAsRead()
@@ -143,6 +163,9 @@ class ChatActivity : AppCompatActivity() {
         }
         return super.dispatchKeyEvent(event)
     }
+
+    private fun showMessageMenu(message: Message) =
+        MessageMenu.show(this, snippet(message), message, messageActions)
 
     // Does nothing while there is nothing unread, like the web version
     private fun markAsRead() {
@@ -291,12 +314,15 @@ class ChatActivity : AppCompatActivity() {
 
         sending = true
         showStatus(getString(R.string.sending))
+        val replyToId = replyingTo?.id
         lifecycleScope.launch {
             try {
-                val id = withContext(Dispatchers.IO) { api.sendMessage(chatId, topicId, text) }
+                val id = withContext(Dispatchers.IO) { api.sendMessage(chatId, topicId, text, replyToId) }
                 messageInput.text.clear()
+                cancelReply()
                 status.visibility = View.GONE
-                addMessage(Message(id, text, out = true, date = serverDate.format(Date())), follow = true)
+                val sent = Message(id, text, out = true, date = serverDate.format(Date()), replyToId = replyToId)
+                addMessage(sent, follow = true)
             } catch (e: IOException) {
                 // The text stays in the box, so OK again retries
                 showStatus(getString(R.string.error_send))
@@ -306,10 +332,36 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // From the message menu: the next message sent from the box replies to this one
+    private fun startReply(message: Message) {
+        replyingTo = message
+        replyBar.text = getString(R.string.replying_to, snippet(message))
+        replyBar.visibility = View.VISIBLE
+        cancelReplyOnBack.isEnabled = true
+        // On the next frame: the menu dialog is still closing now and could take focus back
+        messageInput.post { messageInput.requestFocus() }
+    }
+
+    private fun cancelReply() {
+        replyingTo = null
+        replyBar.visibility = View.GONE
+        cancelReplyOnBack.isEnabled = false
+    }
+
+    // A reply gets a first line quoting the start of the original, if it is loaded
     private fun formatMessage(message: Message): String {
         val text = message.text.ifEmpty { getString(R.string.media) }
         val time = formatDate(message.date)
-        return if (message.out) "$time ${getString(R.string.you)}: $text" else "$time $text"
+        val line = if (message.out) "$time ${getString(R.string.you)}: $text" else "$time $text"
+        val replyToId = message.replyToId ?: return line
+        val quoted = messages.find { it.id == replyToId }?.let(::snippet) ?: "…"
+        return "↪ $quoted\n$line"
+    }
+
+    // The start of a message on one line, for quotes, the reply bar and menu titles
+    private fun snippet(message: Message): String {
+        val text = message.text.ifEmpty { getString(R.string.media) }.replace('\n', ' ')
+        return if (text.length > SNIPPET_LENGTH) text.take(SNIPPET_LENGTH) + "…" else text
     }
 
     // "14:05" for today, "03.11 14:05" for older days, in the phone's time zone
@@ -328,6 +380,7 @@ class ChatActivity : AppCompatActivity() {
         private const val EXTRA_TOPIC_ID = "topic_id"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_UNREAD = "unread"
+        private const val SNIPPET_LENGTH = 30
 
         // topic = null for an ordinary chat; otherwise one topic of a forum group
         fun start(context: Context, chat: Chat, topic: Topic? = null) {
