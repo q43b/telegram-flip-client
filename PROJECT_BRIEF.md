@@ -9,7 +9,7 @@ Use Telegram on a retro Android 10 flip phone with a d-pad, in a region where Te
 ## Learner
 
 - Freshman CS student; university program is math-heavy and weak on programming
-- Strong in math; new to repos, GitHub, and vibe coding
+- New to repos, GitHub, and vibe coding
 - Wants real, demonstrable experience for the job market
 
 ## Working rules
@@ -65,14 +65,14 @@ Telegram
 - [x] 5. Minimal web UI: chat list, messages, input
 - [x] 6. Phone UI: reachable on LAN, d-pad focus navigation (double-jump deferred)
 - [x] 7. WebSocket push for new messages, with token auth
-- [ ] 8. Polish: unread counts, error handling, README with diagram and screenshots (unread counts done)
+- [x] 8. Polish: unread counts, error handling, README with diagram and screenshots
 - [ ] 9. Remote access from mobile data: experiment, then HTTPS and hardening
 - [ ] 10. Native Android app
 - [ ] 11. Move server to the old laptop (24/7)
 
 ## Current status
 
-Milestone 6 done; chat list, reading, and sending work on the flip phone over home Wi-Fi. Next: milestone 7.
+Milestones 1-8 done: chat list with live unread counts, reading, sending, mark-as-read, live updates, error handling, and README all work on the flip phone over home Wi-Fi. Remote access is blocked by CGNAT and deferred. Next: milestone 10 (native Android app) or a quick fixed-IP setup for the PC first.
 
 ## Decisions log
 
