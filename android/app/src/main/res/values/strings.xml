@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">TG Flip</string>
+    <string name="server_address_title">Server address</string>
 </resources>

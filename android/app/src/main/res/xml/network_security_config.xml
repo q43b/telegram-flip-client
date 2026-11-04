@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain HTTP is blocked by default. Allow it only for the home PC running the server. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.31.24</domain>
+    </domain-config>
+</network-security-config>
