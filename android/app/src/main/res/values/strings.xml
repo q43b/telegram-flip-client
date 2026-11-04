@@ -1,4 +1,21 @@
 <resources>
     <string name="app_name">TG Flip</string>
-    <string name="server_address_title">Server address</string>
+    <string name="settings_title">Server settings</string>
+    <string name="address_hint">Server address</string>
+    <string name="token_hint">Token</string>
+    <string name="loading">Loading chats…</string>
+    <string name="no_chats">No chats</string>
+    <string name="error_bad_token">Wrong token</string>
+    <string name="error_no_server">Can\'t reach server</string>
+    <string name="error_bad_address">Invalid server address</string>
+    <string name="loading_messages">Loading messages…</string>
+    <string name="no_messages">No messages</string>
+    <string name="media">[media]</string>
+    <string name="you">You</string>
+    <string name="message_hint">Message</string>
+    <string name="sending">Sending…</string>
+    <string name="error_send">Couldn\'t send. Press OK to try again.</string>
+    <string name="conn_connecting">Connecting…</string>
+    <string name="conn_connected">Connected</string>
+    <string name="conn_offline">Offline, reconnecting…</string>
 </resources>

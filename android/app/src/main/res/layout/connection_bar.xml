@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shown at the top of every screen; ConnectionBar.kt updates it. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/connection"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/conn_connecting"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="2dp"
+    android:text="@string/conn_connecting"
+    android:textColor="@color/white" />
