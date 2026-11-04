@@ -18,6 +18,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONException
@@ -36,8 +37,11 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var messageList: ListView
     private lateinit var messageAdapter: ArrayAdapter<String>
     private lateinit var messageInput: EditText
+    private lateinit var readKey: TextView
     private val messages = mutableListOf<Message>()
+    private var unread = 0
     private var sending = false
+    private var markingRead = false
 
     private lateinit var api: ApiClient
     private var chatId = 0L
@@ -87,6 +91,13 @@ class ChatActivity : AppCompatActivity() {
             if (event.action == KeyEvent.ACTION_UP) sendCurrentText()
             true
         }
+        // The label shows only while there is something to mark as read, as a reminder for F2.
+        // Tapping it works too on a touchscreen.
+        readKey = findViewById(R.id.soft_key_right)
+        readKey.setOnClickListener { markAsRead() }
+        unread = intent.getIntExtra(EXTRA_UNREAD, 0)
+        updateReadKey()
+
         // The send button of an on-screen keyboard, if the phone shows one
         messageInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND) {
@@ -104,12 +115,71 @@ class ChatActivity : AppCompatActivity() {
         live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent)
         live?.start()
         loadMessages(quiet = false)
+        refreshUnread()  // may have changed while the app was in the background
     }
 
     override fun onStop() {
         live?.stop()
         live = null
         super.onStop()
+    }
+
+    // Right soft key = mark as read. Phones report it either as F2 or as SOFT_RIGHT.
+    // Caught here, before any list or text box sees it; we act on key-up, like sending.
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_F2 || event.keyCode == KeyEvent.KEYCODE_SOFT_RIGHT) {
+            if (event.action == KeyEvent.ACTION_UP) markAsRead()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    // Does nothing while there is nothing unread, like the web version
+    private fun markAsRead() {
+        if (markingRead || unread == 0) return
+        markingRead = true
+        showStatus(getString(R.string.marking_read))
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.markRead(chatId) }
+                unread = 0
+                updateReadKey()
+                showStatus(getString(R.string.marked_read))
+                hideStatusLater(getString(R.string.marked_read))
+            } catch (e: IOException) {
+                showStatus(getString(R.string.error_mark_read))
+            } finally {
+                markingRead = false
+            }
+        }
+    }
+
+    private fun updateReadKey() {
+        readKey.text = getString(R.string.soft_key_mark_read, unread)
+        readKey.visibility = if (unread > 0) View.VISIBLE else View.GONE
+    }
+
+    // Asks the server for this chat's unread count. The chat list endpoint is the only
+    // place that has it; if the chat is not among the first 20, keep what we have.
+    private fun refreshUnread() {
+        lifecycleScope.launch {
+            try {
+                val chat = withContext(Dispatchers.IO) { api.getChats() }.find { it.id == chatId }
+                    ?: return@launch
+                unread = chat.unread
+                updateReadKey()
+            } catch (e: IOException) {
+                // The connection bar already shows network trouble
+            }
+        }
+    }
+
+    // Hides the status after a moment, unless something else has replaced it meanwhile
+    private fun hideStatusLater(text: String) {
+        lifecycleScope.launch {
+            delay(2_000)
+            if (status.text.toString() == text) status.visibility = View.GONE
+        }
     }
 
     private fun loadMessages(quiet: Boolean) {
@@ -146,13 +216,23 @@ class ChatActivity : AppCompatActivity() {
         connection.showConnection(state)
         // After a reconnect we may have missed messages, so refetch
         if (state == LiveConnection.Status.CONNECTED) {
-            if (wasConnected) loadMessages(quiet = true)
+            if (wasConnected) {
+                loadMessages(quiet = true)
+                refreshUnread()
+            }
             wasConnected = true
         }
     }
 
     private fun onServerEvent(event: JSONObject) {
-        if (event.optString("type") != "message" || event.optLong("chat_id") != chatId) return
+        if (event.optLong("chat_id") != chatId) return
+        when (event.optString("type")) {
+            "message" -> onLiveMessage(event)
+            "read" -> refreshUnread()  // read on another device, maybe only partly
+        }
+    }
+
+    private fun onLiveMessage(event: JSONObject) {
         val message = try {
             Message.fromJson(event)
         } catch (e: JSONException) {
@@ -161,15 +241,20 @@ class ChatActivity : AppCompatActivity() {
         // Follow new messages only if the user is reading the bottom of the chat
         val selected = messageList.selectedItemPosition
         val atBottom = selected == AdapterView.INVALID_POSITION || selected >= messageAdapter.count - 1
-        addMessage(message, follow = atBottom)
+        if (addMessage(message, follow = atBottom) && !message.out) {
+            unread++
+            updateReadKey()
+        }
     }
 
     // Our own sent messages arrive twice: from /send and as a live event. The id check keeps one.
-    private fun addMessage(message: Message, follow: Boolean) {
-        if (messages.any { it.id == message.id }) return
+    // Returns false if the message was already shown.
+    private fun addMessage(message: Message, follow: Boolean): Boolean {
+        if (messages.any { it.id == message.id }) return false
         messages.add(message)
         messageAdapter.add(formatMessage(message))
         if (follow) messageList.setSelection(messageAdapter.count - 1)
+        return true
     }
 
     private fun sendCurrentText() {
@@ -213,11 +298,13 @@ class ChatActivity : AppCompatActivity() {
     companion object {
         private const val EXTRA_CHAT_ID = "chat_id"
         private const val EXTRA_CHAT_NAME = "chat_name"
+        private const val EXTRA_UNREAD = "unread"
 
         fun start(context: Context, chat: Chat) {
             val intent = Intent(context, ChatActivity::class.java)
             intent.putExtra(EXTRA_CHAT_ID, chat.id)
             intent.putExtra(EXTRA_CHAT_NAME, chat.name)
+            intent.putExtra(EXTRA_UNREAD, chat.unread)
             context.startActivity(intent)
         }
     }

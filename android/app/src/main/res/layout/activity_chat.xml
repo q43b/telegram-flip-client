@@ -40,4 +40,19 @@
         android:importantForAutofill="no"
         android:inputType="textShortMessage|textCapSentences" />
 
+    <!-- Soft key labels: each sits above its physical key. Left (F1) is reserved for media. -->
+    <TextView
+        android:id="@+id/soft_key_right"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/soft_key_bar"
+        android:focusable="false"
+        android:gravity="end"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="2dp"
+        android:text="@string/soft_key_mark_read"
+        android:textColor="@color/white"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
 </LinearLayout>

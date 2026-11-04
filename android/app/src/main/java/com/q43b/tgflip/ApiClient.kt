@@ -46,6 +46,11 @@ class ApiClient(private val baseUrl: String, val token: String) {
         return JSONObject(call(request)).getLong("id")
     }
 
+    // Sends a read receipt to the other side, so only call it on a deliberate key press
+    fun markRead(chatId: Long) {
+        call(Request.Builder().url("$baseUrl/read/$chatId").post("".toRequestBody(null)))
+    }
+
     private fun call(request: Request.Builder): String {
         http.newCall(request.header("x-token", token).build()).execute().use { response ->
             if (response.code == 401) throw BadTokenException()

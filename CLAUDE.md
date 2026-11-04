@@ -19,13 +19,13 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 - Live connection: `LiveConnection.kt` keeps the WebSocket open (reconnect with backoff), drives a status bar at the top, and refetches chats on events and after reconnects.
 - Chat screen (`ChatActivity.kt`): OK on a chat opens its last 20 messages, new ones arrive live. Opening does not mark as read.
 - Sending: a text box under the messages; OK sends via POST /send. The sent message shows at once (deduplicated by id against the live event).
-- Key plan: OK opens chats and sends. One soft key = mark as read (see how `../server/static/index.html` did it). The other soft key is reserved for sticker/media sending, much later.
-- Next step: mark-as-read on a soft key (first check which KeyEvent codes the soft keys send).
+- Key plan: OK opens chats and sends. Right soft key (F2) = mark as read, as in `../server/static/index.html`. Left soft key (F1) is reserved for sticker/media sending, much later.
+- Mark as read: F2 / SOFT_RIGHT in the chat screen posts to /read. A soft key label "Mark as read (N)" shows only while the chat has unread messages; F2 does nothing otherwise. The count comes from the list, +1 per live incoming message, and is refetched from /chats on open, reconnect and "read" events.
 
 ## Target device
 - Android 10 flip phone, small screen, d-pad. Keys seen in its browser: ArrowUp/Down/Left/Right, Enter (OK), soft keys F1 (keyCode 112) and F2 (113). Back is handled by the system.
 - Known issue in the phone's browser: d-pad Up/Down moves focus two items at once. The reason to build a native app is to handle key events directly (onKeyDown) and fix this.
-- Check which native KeyEvent codes the soft keys really send before relying on F1/F2.
+- 112/113 are the browser's (JavaScript) codes for F1/F2. Native Android numbers keys differently: F1/F2 are `KEYCODE_F1`/`KEYCODE_F2` (131/132), but some phones send soft keys as `KEYCODE_SOFT_LEFT`/`KEYCODE_SOFT_RIGHT` (1/2) and the browser just labels them F1/F2. Accept both pairs.
 
 ## Server API (plain HTTP on the home network; the PC has a fixed LAN IP; port 8000)
 - Auth: every HTTP request needs the header `x-token: <API_TOKEN>`. The token is never hardcoded in the repo.
