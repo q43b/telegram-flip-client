@@ -64,8 +64,8 @@ Telegram
 - [x] 4. FastAPI wrapper: `GET /chats`, `GET /messages/{chat}`, `POST /send`, token auth
 - [x] 5. Minimal web UI: chat list, messages, input
 - [x] 6. Phone UI: reachable on LAN, d-pad focus navigation (double-jump deferred)
-- [ ] 7. WebSocket push for new messages, with token auth
-- [ ] 8. Polish: unread counts, error handling, README with diagram and screenshots
+- [x] 7. WebSocket push for new messages, with token auth
+- [ ] 8. Polish: unread counts, error handling, README with diagram and screenshots (unread counts done)
 - [ ] 9. Remote access from mobile data: experiment, then HTTPS and hardening
 - [ ] 10. Native Android app
 - [ ] 11. Move server to the old laptop (24/7)
