@@ -14,6 +14,9 @@ import java.util.concurrent.TimeUnit
 // Talks to the server's HTTP API. Every request carries the token header.
 class ApiClient(private val baseUrl: String, val token: String) {
     private val http = OkHttpClient.Builder()
+        // The server is on the home network and answers in milliseconds; when the PC is off,
+        // nothing answers at all, so give up sooner than OkHttp's default 10 s
+        .connectTimeout(5, TimeUnit.SECONDS)
         .pingInterval(30, TimeUnit.SECONDS)  // notices a dead WebSocket (e.g. Wi-Fi dropped)
         .build()
 
@@ -26,20 +29,13 @@ class ApiClient(private val baseUrl: String, val token: String) {
     // The functions below block until the server answers, so call them from a background thread.
     fun getChats(limit: Int = 20): List<Chat> {
         val json = JSONArray(call(Request.Builder().url("$baseUrl/chats?limit=$limit")))
-        return List(json.length()) { i ->
-            val item = json.getJSONObject(i)
-            val name = if (item.isNull("name")) "" else item.getString("name")
-            Chat(item.getLong("id"), name, item.getInt("unread"), item.optBoolean("forum"))
-        }
+        return List(json.length()) { i -> Chat.fromJson(json.getJSONObject(i)) }
     }
 
     // Topics of a forum group, most recently active first
     fun getTopics(chatId: Long, limit: Int = 50): List<Topic> {
         val json = JSONArray(call(Request.Builder().url("$baseUrl/topics/$chatId?limit=$limit")))
-        return List(json.length()) { i ->
-            val item = json.getJSONObject(i)
-            Topic(item.getLong("id"), item.getString("title"), item.getInt("unread"))
-        }
+        return List(json.length()) { i -> Topic.fromJson(json.getJSONObject(i)) }
     }
 
     // In all functions below, topicId = null means an ordinary chat (no topics).

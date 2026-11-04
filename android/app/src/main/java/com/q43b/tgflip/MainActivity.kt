@@ -25,6 +25,7 @@ import java.io.IOException
 
 class MainActivity : AppCompatActivity() {
     private lateinit var settings: ServerSettings
+    private lateinit var cache: LocalCache
     private lateinit var connection: TextView
     private lateinit var status: TextView
     private lateinit var chatList: ListView
@@ -49,6 +50,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         settings = ServerSettings(this)
+        cache = LocalCache(this)
         connection = findViewById(R.id.connection)
         status = findViewById(R.id.status)
         chatList = findViewById(R.id.chat_list)
@@ -131,7 +133,19 @@ class MainActivity : AppCompatActivity() {
         wasConnected = false
         live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent)
         live?.start()
-        loadChats(quiet = false)
+        lifecycleScope.launch {
+            showSavedChats()
+            loadChats(quiet = false)
+        }
+    }
+
+    // On a fresh screen, show the chats saved last time while the real ones load
+    private suspend fun showSavedChats() {
+        if (chats.isNotEmpty()) return
+        val saved = withContext(Dispatchers.IO) { cache.loadChats() } ?: return
+        // Ask for as many pages as were saved, so the list does not shrink on refresh
+        chatLimit = ((saved.size + PAGE_SIZE - 1) / PAGE_SIZE * PAGE_SIZE).coerceAtLeast(PAGE_SIZE)
+        showChats(saved)
     }
 
     // quiet = background refresh: no "Loading" text, and network errors are left to the status bar
@@ -140,12 +154,17 @@ class MainActivity : AppCompatActivity() {
         if (!quiet) showStatus(getString(R.string.loading))
         lifecycleScope.launch {
             try {
-                val chats = withContext(Dispatchers.IO) { api.getChats(chatLimit) }
-                showChats(chats)
+                val fresh = withContext(Dispatchers.IO) { api.getChats(chatLimit).also(cache::saveChats) }
+                showChats(fresh)
             } catch (e: BadTokenException) {
                 showError(getString(R.string.error_bad_token))
             } catch (e: IOException) {
-                if (!quiet) showError(getString(R.string.error_no_server))
+                when {
+                    quiet -> {}
+                    // Saved chats are on screen: say so, no settings dialog
+                    chats.isNotEmpty() -> showStatus(getString(R.string.offline_saved))
+                    else -> showError(getString(R.string.error_no_server))
+                }
             }
         }
     }

@@ -24,6 +24,7 @@ class LiveConnection(
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var retryDelayMs = MIN_RETRY_MS
+    private var offline = false  // dropped and not back yet: retries keep showing OFFLINE
 
     fun start() {
         if (socket == null && reconnectJob == null) connect()
@@ -37,13 +38,15 @@ class LiveConnection(
     }
 
     private fun connect() {
-        onStatus(Status.CONNECTING)
+        // CONNECTING only for the first try; a retry would flash gray while the server is down
+        if (!offline) onStatus(Status.CONNECTING)
         socket = api.openSocket(object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send(api.token)
                 scope.launch {
                     if (webSocket !== socket) return@launch
                     retryDelayMs = MIN_RETRY_MS
+                    offline = false
                     onStatus(Status.CONNECTED)
                 }
             }
@@ -75,6 +78,7 @@ class LiveConnection(
         scope.launch {
             if (webSocket !== socket) return@launch
             socket = null
+            offline = true
             onStatus(Status.OFFLINE)
             reconnectJob = scope.launch {
                 delay(retryDelayMs)

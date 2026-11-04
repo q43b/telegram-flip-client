@@ -12,6 +12,7 @@
     <string name="no_topics">No topics</string>
     <string name="error_bad_token">Wrong token</string>
     <string name="error_no_server">Can\'t reach server</string>
+    <string name="offline_saved">Offline: showing saved copy</string>
     <string name="error_bad_address">Invalid server address</string>
     <string name="loading_messages">Loading messages…</string>
     <string name="no_messages">No messages</string>

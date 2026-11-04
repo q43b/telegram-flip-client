@@ -44,6 +44,7 @@ class ChatActivity : AppCompatActivity() {
     private var markingRead = false
 
     private lateinit var api: ApiClient
+    private lateinit var cache: LocalCache
     private var chatId = 0L
     private var topicId: Long? = null  // set when this is one topic of a forum group
     private var live: LiveConnection? = null
@@ -73,6 +74,7 @@ class ChatActivity : AppCompatActivity() {
             return
         }
         api = ApiClient(address, token)
+        cache = LocalCache(this)
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         if (intent.hasExtra(EXTRA_TOPIC_ID)) topicId = intent.getLongExtra(EXTRA_TOPIC_ID, 0)
 
@@ -116,7 +118,13 @@ class ChatActivity : AppCompatActivity() {
         wasConnected = false
         live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent)
         live?.start()
-        loadMessages(quiet = false)
+        lifecycleScope.launch {
+            // On a fresh screen, show the messages saved last time while the real ones load
+            if (messages.isEmpty()) {
+                withContext(Dispatchers.IO) { cache.loadMessages(chatId, topicId) }?.let(::showMessages)
+            }
+            loadMessages(quiet = false)
+        }
         refreshUnread()  // may have changed while the app was in the background
     }
 
@@ -191,12 +199,17 @@ class ChatActivity : AppCompatActivity() {
         if (!quiet) showStatus(getString(R.string.loading_messages))
         lifecycleScope.launch {
             try {
-                val loaded = withContext(Dispatchers.IO) { api.getMessages(chatId, topicId) }
+                val loaded = withContext(Dispatchers.IO) {
+                    api.getMessages(chatId, topicId).also { cache.saveMessages(chatId, topicId, it) }
+                }
                 showMessages(loaded)
             } catch (e: BadTokenException) {
                 showStatus(getString(R.string.error_bad_token))
             } catch (e: IOException) {
-                if (!quiet) showStatus(getString(R.string.error_no_server))
+                if (!quiet) {
+                    val text = if (messages.isNotEmpty()) R.string.offline_saved else R.string.error_no_server
+                    showStatus(getString(text))
+                }
             }
         }
     }
@@ -266,6 +279,9 @@ class ChatActivity : AppCompatActivity() {
         messages.add(message)
         messageAdapter.add(formatMessage(message))
         if (follow) messageList.setSelection(messageAdapter.count - 1)
+        // Keep the saved copy current; save a snapshot, since the list keeps changing
+        val snapshot = messages.toList()
+        lifecycleScope.launch(Dispatchers.IO) { cache.saveMessages(chatId, topicId, snapshot) }
         return true
     }
 

@@ -27,6 +27,7 @@ class TopicsActivity : AppCompatActivity() {
     private var topics: List<Topic> = emptyList()
 
     private lateinit var api: ApiClient
+    private lateinit var cache: LocalCache
     private lateinit var chat: Chat
     private var live: LiveConnection? = null
     private var wasConnected = false
@@ -50,6 +51,7 @@ class TopicsActivity : AppCompatActivity() {
             return
         }
         api = ApiClient(address, token)
+        cache = LocalCache(this)
         chat = Chat(
             id = intent.getLongExtra(EXTRA_CHAT_ID, 0),
             name = intent.getStringExtra(EXTRA_CHAT_NAME).orEmpty(),
@@ -75,7 +77,13 @@ class TopicsActivity : AppCompatActivity() {
         wasConnected = false
         live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent)
         live?.start()
-        loadTopics(quiet = false)
+        lifecycleScope.launch {
+            // On a fresh screen, show the topics saved last time while the real ones load
+            if (topics.isEmpty()) {
+                withContext(Dispatchers.IO) { cache.loadTopics(chat.id) }?.let(::showTopics)
+            }
+            loadTopics(quiet = false)
+        }
     }
 
     override fun onStop() {
@@ -89,12 +97,17 @@ class TopicsActivity : AppCompatActivity() {
         if (!quiet) showStatus(getString(R.string.loading_topics))
         lifecycleScope.launch {
             try {
-                val loaded = withContext(Dispatchers.IO) { api.getTopics(chat.id) }
+                val loaded = withContext(Dispatchers.IO) {
+                    api.getTopics(chat.id).also { cache.saveTopics(chat.id, it) }
+                }
                 showTopics(loaded)
             } catch (e: BadTokenException) {
                 showStatus(getString(R.string.error_bad_token))
             } catch (e: IOException) {
-                if (!quiet) showStatus(getString(R.string.error_no_server))
+                if (!quiet) {
+                    val text = if (topics.isNotEmpty()) R.string.offline_saved else R.string.error_no_server
+                    showStatus(getString(text))
+                }
             }
         }
     }
