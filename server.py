@@ -27,20 +27,29 @@ client = TelegramClient(
 ws_clients = set()  # currently connected browsers
 
 
-@client.on(events.NewMessage)
-async def on_new_message(event):
-    data = {
-        "id": event.id,
-        "chat_id": event.chat_id,
-        "text": event.raw_text or "",
-        "out": event.out,
-        "date": event.date.isoformat(),
-    }
+async def broadcast(data):
     for ws in list(ws_clients):
         try:
             await ws.send_json(data)
         except Exception:
             ws_clients.discard(ws)
+
+
+@client.on(events.NewMessage)
+async def on_new_message(event):
+    await broadcast({
+        "type": "message",
+        "id": event.id,
+        "chat_id": event.chat_id,
+        "text": event.raw_text or "",
+        "out": event.out,
+        "date": event.date.isoformat(),
+    })
+
+
+@client.on(events.MessageRead(inbox=True))
+async def on_read(event):
+    await broadcast({"type": "read", "chat_id": event.chat_id})
 
 
 @asynccontextmanager
@@ -103,9 +112,15 @@ async def send(body: SendBody):
     msg = await client.send_message(body.chat_id, body.text)
     return {"id": msg.id}
 
+@api.post("/read/{chat_id}")
+async def mark_read(chat_id: int):
+    try:
+        await client.send_read_acknowledge(chat_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return {"ok": True}
 
 app.include_router(api)
-
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):

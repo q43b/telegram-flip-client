@@ -25,6 +25,7 @@ window.onerror = function (msg, src, line) {
   document.getElementById("err").textContent = "JS error: " + msg + " (line " + line + ")";
 };
 </script>
+
 <div id="chatsView">
   <h2>Chats</h2>
   <div id="chats"></div>
@@ -32,6 +33,7 @@ window.onerror = function (msg, src, line) {
 
 <div id="chatView" class="hidden">
   <button id="back">Back</button>
+  <button id="markRead" class="hidden">Mark as read</button>
   <h2 id="title"></h2>
   <div id="messages"></div>
   <div id="compose">
@@ -41,13 +43,24 @@ window.onerror = function (msg, src, line) {
 </div>
 
 <script>
-let token = localStorage.getItem("token");
+// ---------- state ----------
+var token = localStorage.getItem("token");
+if (location.hash.indexOf("#token=") === 0) {
+  token = decodeURIComponent(location.hash.slice(7));
+  localStorage.setItem("token", token);
+  history.replaceState(null, "", location.pathname);
+}
 if (!token) {
   token = prompt("Token:");
   localStorage.setItem("token", token);
 }
-let currentChat = null;
+var currentChat = null;
+var chatList = [];
+var shown = {};
+var ws = null;
+var lastNav = 0;
 
+// ---------- talking to the server ----------
 async function api(path, options = {}) {
   const res = await fetch(path, {
     ...options,
@@ -62,30 +75,79 @@ async function api(path, options = {}) {
   return res.json();
 }
 
-async function loadChats() {
-  const chats = await api("/chats");
-  const box = document.getElementById("chats");
+// ---------- chat list ----------
+function renderChats() {
+  var focusedId = document.activeElement && document.activeElement.dataset
+    ? document.activeElement.dataset.id : null;
+  var box = document.getElementById("chats");
   box.innerHTML = "";
-  for (const c of chats) {
-    const b = document.createElement("button");
+  chatList.forEach(function (c) {
+    var b = document.createElement("button");
+    b.dataset.id = c.id;
     b.textContent = c.name + (c.unread ? " (" + c.unread + ")" : "");
-    b.onclick = () => openChat(c.id, c.name);
+    b.onclick = function () { openChat(c.id, c.name); };
     box.appendChild(b);
-  }
-  var first = box.querySelector("button");
-if (first) first.focus();
+  });
+  var target = focusedId ? box.querySelector('[data-id="' + focusedId + '"]') : null;
+  if (target) target.focus();
 }
 
+async function loadChats() {
+  chatList = await api("/chats");
+  renderChats();
+  var first = document.querySelector("#chats button");
+  if (first) first.focus();
+}
+
+async function refreshChats() {
+  try {
+    chatList = await api("/chats");
+    renderChats();
+    if (currentChat !== null) updateMarkRead();
+  } catch (e) {}
+}
+
+function getChat(id) {
+  for (var i = 0; i < chatList.length; i++) {
+    if (chatList[i].id === id) return chatList[i];
+  }
+  return null;
+}
+
+// ---------- the "Mark as read" button ----------
+function updateMarkRead() {
+  var c = getChat(currentChat);
+  var btn = document.getElementById("markRead");
+  if (c && c.unread) {
+    btn.classList.remove("hidden");
+  } else {
+    if (document.activeElement === btn) document.getElementById("text").focus();
+    btn.classList.add("hidden");
+  }
+}
+
+document.getElementById("markRead").onclick = async function () {
+  try {
+    await api("/read/" + currentChat, { method: "POST" });
+    var c = getChat(currentChat);
+    if (c) c.unread = 0;
+    updateMarkRead();
+    document.getElementById("text").focus();
+  } catch (e) {
+    document.getElementById("err").textContent = "Could not mark as read: " + e;
+  }
+};
+
+// ---------- one chat ----------
 async function openChat(id, name) {
   currentChat = id;
   document.getElementById("title").textContent = name;
   document.getElementById("chatsView").classList.add("hidden");
   document.getElementById("chatView").classList.remove("hidden");
+  updateMarkRead();
   await loadMessages();
   document.getElementById("text").focus();
 }
-
-var shown = {};
 
 function addMessage(m) {
   if (shown[m.id]) return;
@@ -105,21 +167,6 @@ async function loadMessages() {
   for (const m of msgs) addMessage(m);
 }
 
-var ws = null;
-function connectWs() {
-  var proto = location.protocol === "https:" ? "wss://" : "ws://";
-  ws = new WebSocket(proto + location.host + "/ws");
-  ws.onopen = function () { ws.send(token); };
-  ws.onmessage = function (e) {
-    var m = JSON.parse(e.data);
-    if (currentChat !== null && m.chat_id === currentChat &&
-        !document.getElementById("chatView").classList.contains("hidden")) {
-      addMessage(m);
-    }
-  };
-  ws.onclose = function () { setTimeout(connectWs, 3000); };
-}
-
 async function sendMessage() {
   const input = document.getElementById("text");
   const text = input.value.trim();
@@ -129,18 +176,49 @@ async function sendMessage() {
   await loadMessages();
 }
 
+// ---------- live messages (WebSocket) ----------
+function connectWs() {
+  var proto = location.protocol === "https:" ? "wss://" : "ws://";
+  ws = new WebSocket(proto + location.host + "/ws");
+  ws.onopen = function () { ws.send(token); };
+  ws.onmessage = function (e) {
+    var m = JSON.parse(e.data);
+    if (m.type === "read") { refreshChats(); return; }
+    var chatOpen = currentChat !== null && m.chat_id === currentChat &&
+      !document.getElementById("chatView").classList.contains("hidden");
+    if (chatOpen) addMessage(m);
+
+    var found = false;
+    for (var i = 0; i < chatList.length; i++) {
+      if (chatList[i].id === m.chat_id) {
+        if (!m.out) chatList[i].unread = (chatList[i].unread || 0) + 1;
+        chatList.unshift(chatList.splice(i, 1)[0]);
+        found = true;
+        break;
+      }
+    }
+    if (chatOpen) updateMarkRead();
+    var listVisible = !document.getElementById("chatsView").classList.contains("hidden");
+    if (!found) { if (listVisible) loadChats(); return; }
+    if (listVisible) renderChats();
+  };
+  ws.onclose = function () { setTimeout(connectWs, 3000); };
+}
+
+// ---------- buttons and keys ----------
 document.getElementById("send").onclick = sendMessage;
-document.getElementById("text").onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
-document.getElementById("back").onclick = () => {
+document.getElementById("text").onkeydown = function (e) { if (e.key === "Enter") sendMessage(); };
+document.getElementById("back").onclick = function () {
   document.getElementById("chatView").classList.add("hidden");
   document.getElementById("chatsView").classList.remove("hidden");
   loadChats();
 };
+
 function focusables() {
   return Array.from(document.querySelectorAll("button, input"))
-    .filter((el) => el.offsetParent !== null);
+    .filter(function (el) { return el.offsetParent !== null; });
 }
-var lastNav = 0;
+
 document.addEventListener("keydown", function (e) {
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
   e.preventDefault();
@@ -157,6 +235,17 @@ document.addEventListener("keydown", function (e) {
   next.focus();
   next.scrollIntoView(false);
 });
+
+// F2 soft key = "Mark as read" while a chat is open
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "F2") return;
+  if (document.getElementById("chatView").classList.contains("hidden")) return;
+  e.preventDefault();
+  var b = document.getElementById("markRead");
+  if (!b.classList.contains("hidden")) b.click();
+});
+
+// ---------- start ----------
 connectWs();
 loadChats().catch(function (e) {
   document.getElementById("err").textContent = "Error: " + e;
