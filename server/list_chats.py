@@ -24,7 +24,5 @@ async def main():
     async for dialog in client.iter_dialogs(limit=10):
         print(f"- {dialog.name}")
 
-    await client.send_message("me", "Hello from my own Telegram client!")
-
 with client:
     client.loop.run_until_complete(main())

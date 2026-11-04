@@ -54,16 +54,23 @@ async def on_read(event):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Through the proxy, Telegram sometimes answers with a one-off error such as
+    # MTPROTO_CLUSTER_INVALID. A failed connect() leaves the client half-connected,
+    # and a second connect() would then skip setup, so retry from a clean disconnect.
+    # get_me() returns None only when really logged out; other errors raise and retry.
+    # (is_user_authorized() would report "not logged in" for any error, and cache it.)
     for attempt in range(1, 6):
         try:
             await client.connect()
+            me = await client.get_me()
             break
         except Exception as e:
             print(f"Connect attempt {attempt} failed: {e}")
+            await client.disconnect()
             await asyncio.sleep(3)
     else:
         raise RuntimeError("Could not connect to Telegram after 5 attempts")
-    if not await client.is_user_authorized():
+    if me is None:
         raise RuntimeError("Not logged in. Run list_chats.py once first.")
     yield
     await client.disconnect()
