@@ -115,6 +115,7 @@
     <string name="no_quick_phrases">No quick phrases yet: add some in Settings</string>
     <string name="add_phrase">+ Add phrase</string>
     <string name="setting_quick_phrases">Quick phrases: %1$d</string>
+    <string name="app_version">TG Flip %1$s</string>
     <string name="marking_read">Marking as read…</string>
     <string name="marked_read">Marked as read</string>
     <string name="error_mark_read">Couldn\'t mark as read</string>

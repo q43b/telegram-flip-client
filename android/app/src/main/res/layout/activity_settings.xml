@@ -21,6 +21,16 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
+    <!-- Small gray "TG Flip 0.7.1-alpha" line; not focusable, the d-pad skips it -->
+    <TextView
+        android:id="@+id/app_version"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="4dp"
+        android:textAppearance="?android:attr/textAppearanceSmall"
+        android:textColor="?android:attr/textColorSecondary" />
+
     <include layout="@layout/tab_bar" />
 
 </LinearLayout>

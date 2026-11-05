@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.ArrayAdapter
 import android.widget.ListView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -36,6 +37,10 @@ class SettingsActivity : AppCompatActivity() {
         list.adapter = adapter
         list.setOnItemClickListener { _, _, position, _ -> open(position) }
         list.requestFocus()
+
+        // versionName from build.gradle.kts (dev builds add "-dev")
+        val version = packageManager.getPackageInfo(packageName, 0).versionName
+        findViewById<TextView>(R.id.app_version).text = getString(R.string.app_version, version)
 
         setUpTabBar(Tab.SETTINGS) { finish() }
     }
