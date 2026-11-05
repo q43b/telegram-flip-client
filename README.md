@@ -12,7 +12,7 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 
 ## Features
 
-- Chat list with live unread counts, a preview of the newest message, newest activity on top, and "Show more chats" for older ones
+- Chat list with profile photos, live unread counts, a preview of the newest message, newest activity on top, and "Show more chats" for older ones. Photos are shrunk to tiny thumbnails on the server (about 1–2 KB each) and kept on both sides
 - Folders of your own on the phone: a total unread counter, and a folder can hide its chats from the main list (an alternative to archiving)
 - Forum groups (groups split into topics): a topic list, and each topic as its own chat
 - Read and send messages; "Load older messages" for history
@@ -131,7 +131,7 @@ PROJECT_BRIEF.md           Goals, decisions, milestones
 ## Known limitations and roadmap
 
 - **Home network only for now.** The home connection is behind carrier-grade NAT, and the remote-access options tried (Tailscale, tunnels, a rented server) are blocked or ruled out where I live. The app's VPN and Public modes are ready for when a route exists.
-- **Text only:** photos, stickers and other media show as "[media]".
+- **Text only in chats:** photos, stickers and other media show as "[media]". Profile photos in the chat list are the first step toward media.
 - The packaged server is Windows-only.
 - Planned for version 2: reactions, stickers and media.
 

@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var chatList: ListView
     private lateinit var chatAdapter: ArrayAdapter<CharSequence>
+    private lateinit var photos: PhotoLoader
     private var previewColor = Color.GRAY  // the theme's secondary text color, set in onCreate
     private lateinit var softKeys: SoftKeyBar
     private var chats: List<Chat> = emptyList()  // as shown (hidden folders' chats left out)
@@ -80,8 +81,10 @@ class MainActivity : AppCompatActivity() {
         connection = findViewById(R.id.connection)
         status = findViewById(R.id.status)
         chatList = findViewById(R.id.chat_list)
-        // One adapter for the screen's lifetime, so refreshes keep the d-pad selection
-        chatAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
+        // One adapter for the screen's lifetime, so refreshes keep the d-pad selection.
+        // A photo that arrives redraws the rows.
+        photos = PhotoLoader(this, lifecycleScope) { chatAdapter.notifyDataSetChanged() }
+        chatAdapter = ChatRowAdapter(this) { position -> chatAt(position)?.let(photos::drawable) }
         chatList.adapter = chatAdapter
         // Row 0 is the folders row, then the chats, then maybe "Show more chats"
         chatList.setOnItemClickListener { _, _, position, _ ->
@@ -162,6 +165,7 @@ class MainActivity : AppCompatActivity() {
         live?.stop()
         live = null
         api = null
+        photos.api = null
         val address = settings.getAddress()
         val token = settings.getToken()
         // Why this mode cannot connect, if it cannot
@@ -186,6 +190,7 @@ class MainActivity : AppCompatActivity() {
             if (!visible) return@launch
             val api = ApiClient(address, token!!)
             this@MainActivity.api = api
+            photos.api = api
             wasConnected = false
             live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent).also { it.start() }
             loadChats(quiet = false)

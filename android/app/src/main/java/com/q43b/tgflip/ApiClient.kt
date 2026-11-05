@@ -107,6 +107,18 @@ class ApiClient(baseUrl: String?, val token: String) {
         return JSONObject(call(request)).getLong("id")
     }
 
+    // A chat's profile photo as size×size JPEG bytes, or null when it has none.
+    // photoId (from /chats) lets the server answer from its own saved copy.
+    fun getPhoto(chatId: Long, photoId: String, size: Int): ByteArray? {
+        val url = endpoint("/photo/$chatId?size=$size&photo_id=$photoId")
+        http.newCall(Request.Builder().url(url).header("x-token", token).build()).execute().use { response ->
+            if (response.code == 404) return null
+            if (response.code == 401) throw BadTokenException()
+            if (!response.isSuccessful) throw IOException("Server error ${response.code}")
+            return response.body!!.bytes()
+        }
+    }
+
     private fun topicParam(topicId: Long?, separator: String) =
         if (topicId == null) "" else "${separator}topic_id=$topicId"
 

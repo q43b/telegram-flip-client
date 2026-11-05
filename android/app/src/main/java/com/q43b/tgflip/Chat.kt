@@ -5,17 +5,20 @@ import org.json.JSONObject
 // One row from GET /chats. Telegram ids can be larger than Int, so id is a Long.
 // forum = a group split into topics; it opens a topic list instead of messages.
 // last = the newest message, for the preview line (in a forum: of any topic).
+// photo = id of the current profile photo (changes with the photo), null without one.
 data class Chat(
     val id: Long,
     val name: String,
     val unread: Int,
     val forum: Boolean,
     val last: LastMessage? = null,
+    val photo: String? = null,
 ) {
     // Same keys as the server sends, so saved chats read back with fromJson
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("name", name).put("unread", unread).put("forum", forum)
         .put("last", last?.toJson() ?: JSONObject.NULL)
+        .put("photo", photo ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = Chat(
@@ -24,6 +27,7 @@ data class Chat(
             unread = json.getInt("unread"),
             forum = json.optBoolean("forum"),
             last = json.optJSONObject("last")?.let(LastMessage::fromJson),
+            photo = if (json.isNull("photo")) null else json.getString("photo"),
         )
     }
 }
