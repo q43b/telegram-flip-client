@@ -2,7 +2,9 @@ import os
 import secrets
 import asyncio
 import functools
+import itertools
 import time
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -13,6 +15,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 from telethon import TelegramClient, connection, errors, events, functions, types, utils
+from telethon.client.dialogs import _dialog_message_key  # to build dialogs like iter_dialogs
+from telethon.tl import custom
 
 load_dotenv()
 
@@ -456,20 +460,59 @@ class ForwardBody(BaseModel):
     to_chat_id: int
 
 
+async def chat_json(dialog):
+    forum = bool(getattr(dialog.entity, "forum", False))  # a group split into topics
+    return {
+        "id": dialog.id,
+        "name": dialog.name,
+        "unread": await forum_unread(dialog) if forum else dialog.unread_count,
+        "forum": forum,
+        "last": last_message_preview(dialog.message),
+    }
+
+
+async def dialogs_by_ids(chat_ids):
+    """The chats with these ids, newest activity first, built like iter_dialogs builds
+    its own (custom.Dialog), from one GetPeerDialogs request. Chats this account can't
+    resolve (left, or never seen) are skipped."""
+    peers = []
+    for chat_id in chat_ids:
+        try:
+            peers.append(types.InputDialogPeer(await client.get_input_entity(chat_id)))
+        except ValueError:
+            pass
+    if not peers:
+        return []
+    r = await client(functions.messages.GetPeerDialogsRequest(peers=peers))
+    entities = {
+        utils.get_peer_id(x): x
+        for x in itertools.chain(r.users, r.chats)
+        if not isinstance(x, (types.UserEmpty, types.ChatEmpty))
+    }
+    messages = {}
+    for m in r.messages:
+        m._finish_init(client, entities, None)  # as iter_dialogs does
+        messages[_dialog_message_key(m.peer_id, m.id)] = m
+    dialogs = [
+        custom.Dialog(client, d, entities, messages.get(_dialog_message_key(d.peer, d.top_message)))
+        for d in r.dialogs
+        if utils.get_peer_id(d.peer) in entities
+    ]
+    oldest = datetime.min.replace(tzinfo=timezone.utc)
+    return sorted(dialogs, key=lambda d: d.date or oldest, reverse=True)
+
+
+# ids: comma-separated chat ids (an app folder); then only those chats, ignoring limit
 @api.get("/chats")
 @recovering
-async def get_chats(limit: int = 20):
-    chats = []
-    async for d in client.iter_dialogs(limit=limit):
-        forum = bool(getattr(d.entity, "forum", False))  # a group split into topics
-        chats.append({
-            "id": d.id,
-            "name": d.name,
-            "unread": await forum_unread(d) if forum else d.unread_count,
-            "forum": forum,
-            "last": last_message_preview(d.message),
-        })
-    return chats
+async def get_chats(limit: int = 20, ids: Optional[str] = None):
+    if ids is not None:
+        try:
+            wanted = [int(i) for i in ids.split(",") if i.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="ids must be comma-separated numbers")
+        return [await chat_json(d) for d in await dialogs_by_ids(wanted)]
+    return [await chat_json(d) async for d in client.iter_dialogs(limit=limit)]
 
 
 @api.get("/topics/{chat_id}")
