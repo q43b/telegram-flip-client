@@ -492,6 +492,7 @@ class MainActivity : AppCompatActivity() {
         val call = last.call
         val body = when {
             last.kind == "call" && call != null -> MessageFormat.call(this, call, last.out)
+            last.kind == "voice" && last.voice != null -> MessageFormat.voice(this, last.voice)
             last.kind == "media" -> getString(R.string.media)
             last.kind == "event" -> getString(R.string.event)
             else -> MessageFormat.snippet(last.text, PREVIEW_LENGTH)

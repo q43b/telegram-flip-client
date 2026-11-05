@@ -116,8 +116,15 @@ class ApiClient(baseUrl: String?, val token: String) {
 
     // A chat's profile photo as size×size JPEG bytes, or null when it has none.
     // photoId (from /chats) lets the server answer from its own saved copy.
-    fun getPhoto(chatId: Long, photoId: String, size: Int): ByteArray? {
-        val url = endpoint("/photo/$chatId?size=$size&photo_id=$photoId")
+    fun getPhoto(chatId: Long, photoId: String, size: Int): ByteArray? =
+        bytes(endpoint("/photo/$chatId?size=$size&photo_id=$photoId"))
+
+    // A voice message's OGG/Opus file
+    fun getVoice(chatId: Long, messageId: Long): ByteArray =
+        bytes(endpoint("/voice/$chatId/$messageId")) ?: throw IOException("No such voice message")
+
+    // A file's bytes, or null for 404
+    private fun bytes(url: String): ByteArray? {
         http.newCall(Request.Builder().url(url).header("x-token", token).build()).execute().use { response ->
             if (response.code == 404) return null
             if (response.code == 401) throw BadTokenException()

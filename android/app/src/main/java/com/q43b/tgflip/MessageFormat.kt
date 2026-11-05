@@ -53,6 +53,14 @@ object MessageFormat {
         return "☎ $text"
     }
 
+    // "🎤 Voice message 0:12"
+    fun voice(context: Context, voice: VoiceInfo) =
+        "🎤 ${context.getString(R.string.voice_message)} ${duration(voice.duration)}"
+
+    // While it plays: "▶ 0:05 / 0:12"
+    fun voicePlaying(voice: VoiceInfo, position: Int) =
+        "▶ ${duration(position)} / ${duration(voice.duration)}"
+
     // A call someone made to me that I didn't take: shown in red instead of blue
     fun isUnanswered(call: CallInfo, out: Boolean) =
         !out && (call.reason == "missed" || call.reason == "busy")

@@ -32,7 +32,7 @@ data class Chat(
     }
 }
 
-// kind: "text", "media" (no text, e.g. a photo), "call" (details in call)
+// kind: "text", "media" (no text, e.g. a photo), "voice" (details in voice), "call" (details in call)
 // or "event" (joined, pinned, ...). sender: who wrote it, only for other people's
 // messages in groups.
 data class LastMessage(
@@ -42,11 +42,13 @@ data class LastMessage(
     val sender: String?,
     val kind: String,
     val call: CallInfo? = null,
+    val voice: VoiceInfo? = null,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("text", text).put("out", out).put("date", date)
         .put("sender", sender ?: JSONObject.NULL).put("kind", kind)
         .put("call", call?.toJson() ?: JSONObject.NULL)
+        .put("voice", voice?.toJson() ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = LastMessage(
@@ -56,6 +58,7 @@ data class LastMessage(
             sender = if (json.isNull("sender")) null else json.getString("sender"),
             kind = json.optString("kind", "text"),
             call = json.optJSONObject("call")?.let(CallInfo::fromJson),
+            voice = json.optJSONObject("voice")?.let(VoiceInfo::fromJson),
         )
     }
 }

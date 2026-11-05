@@ -55,7 +55,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     // Row 0: which connection mode is active. Rows 1..3: each mode's server.
-    // Then theme, quick phrases and cache. The chat list reconnects with new server values
+    // Then theme, quick phrases, cache and the voice format. The chat list reconnects with new server values
     // when shown again.
     private fun rows(): List<String> {
         val modes = ConnectionMode.entries.map { mode ->
@@ -68,7 +68,9 @@ class SettingsActivity : AppCompatActivity() {
             modes +
             getString(R.string.setting_theme, theme) +
             getString(R.string.setting_quick_phrases, QuickPhrases(this).load().size) +
-            getString(R.string.setting_cache)
+            getString(R.string.setting_cache) +
+            getString(R.string.setting_voice_compatible,
+                getString(if (VoiceFormat.isCompatible(this)) R.string.on else R.string.off))
     }
 
     private fun open(position: Int) {
@@ -93,6 +95,13 @@ class SettingsActivity : AppCompatActivity() {
             }
             modes.size + 2 -> QuickPhrasesEditor.show(this, ::refreshRows)
             modes.size + 3 -> CacheMenu.show(this)
+            // OK switches it on and off
+            modes.size + 4 -> {
+                VoiceFormat.saveCompatible(this, !VoiceFormat.isCompatible(this))
+                refreshRows()
+                val note = if (VoiceFormat.isCompatible(this)) R.string.voice_compatible_on else R.string.saved
+                Toast.makeText(this, note, Toast.LENGTH_LONG).show()
+            }
         }
     }
 

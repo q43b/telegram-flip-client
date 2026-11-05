@@ -3,6 +3,7 @@ package com.q43b.tgflip
 import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
+import android.media.AudioManager
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
@@ -37,6 +38,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var messageList: OkListView
     private lateinit var messageAdapter: ArrayAdapter<CharSequence>
+    private val rows = mutableListOf<CharSequence>()  // the adapter's own list, for updating one row
     private lateinit var messageInput: EditText
     private lateinit var softKeys: SoftKeyBar
     private val messages = mutableListOf<Message>()
@@ -48,6 +50,10 @@ class ChatActivity : AppCompatActivity() {
 
     // Entries of the menu that OK on a message opens. New message features go here.
     private val messageActions = listOf(
+        MessageAction(R.string.action_play, isAvailable = { it.voice != null && voice.currentId != it.id }) {
+            voice.play(chatId, it.id)
+        },
+        MessageAction(R.string.action_stop, isAvailable = { voice.currentId == it.id }) { voice.stop() },
         // Call records can only be deleted: Telegram refuses replies to them and forwarding them
         MessageAction(R.string.action_reply, isAvailable = { it.call == null }, perform = ::startReply),
         MessageAction(R.string.action_go_to_original, isAvailable = { it.replyToId != null }, perform = ::goToOriginal),
@@ -72,6 +78,7 @@ class ChatActivity : AppCompatActivity() {
 
     private lateinit var api: ApiClient
     private lateinit var cache: LocalCache
+    private lateinit var voice: VoicePlayer
     private var chatId = 0L
     private var topicId: Long? = null  // set when this is one topic of a forum group
     private var live: LiveConnection? = null
@@ -97,12 +104,14 @@ class ChatActivity : AppCompatActivity() {
         cache = LocalCache(this)
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         if (intent.hasExtra(EXTRA_TOPIC_ID)) topicId = intent.getLongExtra(EXTRA_TOPIC_ID, 0)
+        voice = VoicePlayer(this, lifecycleScope, ::refreshRow).also { it.api = api }
+        volumeControlStream = AudioManager.STREAM_MUSIC  // the volume keys set how loud voice messages play
 
         connection = findViewById(R.id.connection)
         status = findViewById(R.id.status)
         messageList = findViewById(R.id.message_list)
         findViewById<TextView>(R.id.chat_title).text = intent.getStringExtra(EXTRA_TITLE)
-        messageAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
+        messageAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, rows)
         messageList.adapter = messageAdapter
         // OK on a message opens its menu (OkListView takes OK before the keyboard app);
         // the click listener covers touch taps
@@ -160,6 +169,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        voice.stop()
         live?.stop()
         live = null
         super.onStop()
@@ -499,6 +509,14 @@ class ChatActivity : AppCompatActivity() {
         messageAdapter.addAll(messages.map(::formatMessage))
     }
 
+    // Only this message's line, e.g. while its voice message plays
+    private fun refreshRow(messageId: Long) {
+        val index = messages.indexOfFirst { it.id == messageId }
+        if (index < 0) return
+        rows[index + headerRows] = formatMessage(messages[index])
+        messageAdapter.notifyDataSetChanged()
+    }
+
     // Keeps the saved copy current; saves a snapshot, since the list keeps changing
     private fun saveMessages() {
         val snapshot = messages.toList()
@@ -669,7 +687,8 @@ class ChatActivity : AppCompatActivity() {
     private fun formatMessage(message: Message): CharSequence {
         val call = message.call
         if (call != null) return formatCall(message, call)
-        val text = message.text.ifEmpty { getString(R.string.media) }
+        val text = voiceLine(message)?.let { if (message.text.isEmpty()) it else "$it ${message.text}" }
+            ?: message.text.ifEmpty { getString(R.string.media) }
         val time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
         val line = SpannableStringBuilder("$time ")
         val sender = message.sender
@@ -696,11 +715,22 @@ class ChatActivity : AppCompatActivity() {
         return line
     }
 
+    // "🎤 Voice message 0:12", counting along while it plays; null for other messages
+    private fun voiceLine(message: Message): String? {
+        val info = message.voice ?: return null
+        return when {
+            voice.isLoading(message.id) -> getString(R.string.voice_loading)
+            voice.currentId == message.id -> MessageFormat.voicePlaying(info, voice.position)
+            else -> MessageFormat.voice(this, info)
+        }
+    }
+
     // The start of a message on one line, for quotes, the reply bar and menu titles
     private fun snippet(message: Message): String {
         val call = message.call
         val text = if (call != null) MessageFormat.call(this, call, message.out)
-        else message.text.ifEmpty { getString(R.string.media) }
+        else message.voice?.let { MessageFormat.voice(this, it) }
+            ?: message.text.ifEmpty { getString(R.string.media) }
         return MessageFormat.snippet(text, SNIPPET_LENGTH)
     }
 
