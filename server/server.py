@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from io import BytesIO
 
 from dotenv import load_dotenv
-from fastapi import (APIRouter, Depends, FastAPI, Header, HTTPException, Response,
+from fastapi import (APIRouter, Depends, FastAPI, Header, HTTPException, Request, Response,
                      WebSocket, WebSocketDisconnect)
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
@@ -23,7 +23,7 @@ from telethon.tl import custom
 load_dotenv()
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.10.0-alpha"
+VERSION = "0.10.1-alpha"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -748,19 +748,50 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
     return list(reversed(msgs))
 
 
+def reply_target(topic_id, reply_to_id):
+    """What a new message replies to. Replying to a topic's id is how Telegram files a
+    message into that topic. General takes plain messages. A reply to a message stays in
+    that message's topic."""
+    if reply_to_id is not None:
+        return reply_to_id
+    if topic_id not in (None, GENERAL_TOPIC):
+        return topic_id
+    return None
+
+
 @api.post("/send")
 @recovering
 async def send(body: SendBody):
-    # Replying to a topic's id is how Telegram files a message into that topic.
-    # General takes plain messages. A reply to a message stays in that message's topic.
-    if body.reply_to_id is not None:
-        reply_to = body.reply_to_id
-    elif body.topic_id not in (None, GENERAL_TOPIC):
-        reply_to = body.topic_id
-    else:
-        reply_to = None
-    msg = await client.send_message(body.chat_id, body.text, reply_to=reply_to)
+    msg = await client.send_message(body.chat_id, body.text,
+                                    reply_to=reply_target(body.topic_id, body.reply_to_id))
     return {"id": msg.id}
+
+
+MAX_VOICE_BYTES = 10 * 1024 * 1024  # about 40 minutes of the phone's recordings
+
+
+# The body is the recording itself (OGG/Opus, as the phone's recorder makes it), so no
+# form parsing is needed; the rest comes in the query. Sent as a voice message.
+@api.post("/send_voice")
+@recovering
+async def send_voice(request: Request, chat_id: int, duration: int,
+                     topic_id: Optional[int] = None, reply_to_id: Optional[int] = None):
+    data = await request.body()
+    if not data or len(data) > MAX_VOICE_BYTES:
+        raise HTTPException(status_code=400, detail="Empty or too large")
+    file = BytesIO(data)
+    file.name = "voice.ogg"  # tells Telethon the type
+    try:
+        msg = await client.send_file(
+            chat_id, file, voice_note=True,
+            attributes=[types.DocumentAttributeAudio(duration=duration, voice=True)],
+            reply_to=reply_target(topic_id, reply_to_id))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    return {"id": msg.id}
+
 
 @api.post("/read/{chat_id}")
 @recovering
