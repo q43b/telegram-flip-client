@@ -6,13 +6,15 @@ import itertools
 import time
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+from io import BytesIO
 
 from dotenv import load_dotenv
-from fastapi import (APIRouter, Depends, FastAPI, Header, HTTPException,
+from fastapi import (APIRouter, Depends, FastAPI, Header, HTTPException, Response,
                      WebSocket, WebSocketDisconnect)
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
 
+from PIL import Image
 from pydantic import BaseModel
 from telethon import TelegramClient, connection, errors, events, functions, types, utils
 from telethon.client.dialogs import _dialog_message_key  # to build dialogs like iter_dialogs
@@ -21,7 +23,7 @@ from telethon.tl import custom
 load_dotenv()
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.7.1-alpha"
+VERSION = "0.8.0-alpha"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -47,6 +49,12 @@ client = TelegramClient(
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 ws_clients = set()  # currently connected browsers
+
+# Profile photos, shrunk to the size the app asked for, saved as
+# <chat id>_<photo id>_<size>.jpg so each is fetched from Telegram only once.
+# Next to the session and .env (the working folder), also for the packaged server.
+PHOTO_CACHE = "photo_cache"
+PHOTO_SIZES = range(16, 161)  # Telegram's small profile photo is 160×160
 
 # Forum groups ("topics"): the General topic always has id 1, and its messages
 # carry no topic mark at all, unlike messages in every other topic.
@@ -472,7 +480,26 @@ async def chat_json(dialog):
         "unread": await forum_unread(dialog) if forum else dialog.unread_count,
         "forum": forum,
         "last": last_message_preview(dialog.message),
+        "photo": photo_id_of(dialog.entity),
     }
+
+
+def photo_id_of(entity):
+    """Id of the chat's current profile photo as a string, or None without one.
+    It changes when the photo does, so the app knows when its saved copy is stale."""
+    photo = getattr(entity, "photo", None)
+    pid = getattr(photo, "photo_id", None)  # the *Empty photo types have none
+    return str(pid) if pid else None
+
+
+def shrink_photo(data, size):
+    """JPEG bytes resized to size×size (profile photos are square)."""
+    image = Image.open(BytesIO(data)).convert("RGB")
+    if image.size != (size, size):
+        image = image.resize((size, size), Image.LANCZOS)
+    out = BytesIO()
+    image.save(out, "JPEG", quality=85)
+    return out.getvalue()
 
 
 async def dialogs_by_ids(chat_ids):
@@ -517,6 +544,46 @@ async def get_chats(limit: int = 20, ids: Optional[str] = None):
             raise HTTPException(status_code=400, detail="ids must be comma-separated numbers")
         return [await chat_json(d) for d in await dialogs_by_ids(wanted)]
     return [await chat_json(d) async for d in client.iter_dialogs(limit=limit)]
+
+
+# photo_id (from /chats) lets a saved copy answer without asking Telegram at all
+@api.get("/photo/{chat_id}")
+@recovering
+async def get_photo(chat_id: int, size: int = 48, photo_id: Optional[str] = None):
+    if size not in PHOTO_SIZES:
+        raise HTTPException(status_code=400, detail=f"size must be {PHOTO_SIZES.start}-{PHOTO_SIZES.stop - 1}")
+    headers = {"Cache-Control": "private, max-age=86400"}
+
+    def cached(pid):
+        return os.path.join(PHOTO_CACHE, f"{chat_id}_{pid}_{size}.jpg")
+
+    if photo_id and photo_id.isdigit() and os.path.exists(cached(photo_id)):
+        with open(cached(photo_id), "rb") as f:
+            return Response(f.read(), media_type="image/jpeg", headers=headers)
+    try:
+        entity = await client.get_entity(chat_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    current = photo_id_of(entity)
+    if current is None:
+        raise HTTPException(status_code=404, detail="No photo")
+    path = cached(current)
+    if not os.path.exists(path):
+        try:
+            data = await client.download_profile_photo(entity, file=bytes, download_big=False)
+        except errors.RPCError as e:
+            bad_request(e)
+        if not data:
+            raise HTTPException(status_code=404, detail="No photo")
+        os.makedirs(PHOTO_CACHE, exist_ok=True)
+        # Copies of this chat's older photos are no use any more
+        for old in os.listdir(PHOTO_CACHE):
+            if old.startswith(f"{chat_id}_") and not old.startswith(f"{chat_id}_{current}_"):
+                os.remove(os.path.join(PHOTO_CACHE, old))
+        with open(path, "wb") as f:
+            f.write(shrink_photo(data, size))
+    with open(path, "rb") as f:
+        return Response(f.read(), media_type="image/jpeg", headers=headers)
 
 
 @api.get("/topics/{chat_id}")
