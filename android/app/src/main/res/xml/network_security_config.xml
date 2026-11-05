@@ -1,15 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Plain HTTP is blocked by default. It is allowed only where nothing travels readable
-     on the open internet; the Public connection mode always uses HTTPS. -->
-<network-security-config>
-    <!-- Local mode: the home PC on the home network -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">192.168.31.24</domain>
-    </domain-config>
-    <!-- VPN mode: Tailscale names (<device>.<tailnet>.ts.net) only resolve inside the
-         Tailscale network, whose tunnel is encrypted. To use the PC's Tailscale IP
-         (100.x.y.z) instead of its name, add that IP here. -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">ts.net</domain>
-    </domain-config>
+<!-- Android blocks plain HTTP by default, and this file is fixed when the app is built,
+     so it cannot follow the IPs entered in Settings. Plain HTTP is therefore allowed here,
+     and the app itself decides where it goes: it only ever connects to the addresses
+     entered in Settings, Local network and VPN use plain HTTP to those, and Public
+     internet always uses HTTPS (see ConnectionMode.kt). -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <!-- Deliberate, see above; hence lint's InsecureBaseConfiguration warning is silenced -->
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration" />
 </network-security-config>

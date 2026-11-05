@@ -4,7 +4,9 @@ import androidx.annotation.StringRes
 
 // How the phone reaches the server. Each mode keeps its own address; the token is shared.
 // The rest of the app only asks ServerSettings for "the address", so a new way of
-// connecting is one more entry here plus its network rules.
+// connecting is one more entry here. `scheme` is the only thing deciding plain HTTP vs
+// HTTPS: network_security_config.xml allows plain HTTP to any host, because it cannot
+// follow the addresses entered in Settings.
 //   LOCAL:  home Wi-Fi, plain HTTP to the PC's LAN IP.
 //   VPN:    through Tailscale (or another VPN). Plain HTTP, but inside the VPN's
 //           encrypted tunnel, so nothing travels readable on the internet.

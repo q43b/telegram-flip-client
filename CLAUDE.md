@@ -27,7 +27,7 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 - Compose bar above the box: "Replying to" or "Editing"; Back cancels it. Replies show a "↪ quote" first line when the original is loaded; edited messages show "(edited)" after the time.
 - Settings (`SettingsActivity.kt`): d-pad Right in the chat list opens it (slides in from the left, like the official app's side menu); Left or Back closes it. A bottom tab bar (`tab_bar.xml`, `TabBar.kt`) shows "Chats | Settings" with the active one highlighted. Rows: Server (IP, port, token) via `ServerSettingsDialog.kt`, the same dialog the chat list shows on first launch and connection errors.
 - Settings also has Theme (Follow phone / Light / Dark; `ThemeSetting.kt`, applied at start by `TGFlipApp.kt`).
-- Connection modes (`ConnectionMode.kt`): Local network (http, LAN IP), VPN (http inside Tailscale; `*.ts.net` names allowed in `network_security_config.xml`, a 100.x IP would need adding there), Public internet (https only). Each mode has its own address, the token is shared, `ServerSettings.getAddress()` returns the active mode's. Settings: "Connection" row switches mode, one row per mode's server. The connection bar shows the mode ("Connected · VPN"). VPN and Public are not tested yet.
+- Connection modes (`ConnectionMode.kt`): Local network (http, LAN IP), VPN (http inside Tailscale or another VPN), Public internet (https only). Any IP or name entered for Local or VPN works without a rebuild. Each mode has its own address, the token is shared, `ServerSettings.getAddress()` returns the active mode's. Settings: "Connection" row switches mode, one row per mode's server. The connection bar shows the mode ("Connected · VPN"). VPN and Public are not tested yet.
 - A mode without an address: screens still open from the saved copy, the bar says "No server · <mode>", and `ApiClient` (built with a null address) fails every request with `NoServerException`. The server dialog in the chat list can always be closed; it opens by itself only on first launch (no token).
 - Offline cache (`LocalCache.kt`): the last chats, topics and messages (newest 100 per chat/topic) are saved as JSON files in `noBackupFilesDir` (kept out of phone backups). Screens show the saved copy first, then replace it with fresh data; offline they say "Offline: showing saved copy".
 - Older chats: a "Show more chats…" row at the end of the list raises the `/chats` limit by 20 each time (live refreshes keep the bigger limit).
@@ -65,7 +65,10 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 
 ## Constraints and decisions
 - The app and server share only a base URL and a token. How the phone reaches the server is a separate, swappable layer. Keep the protocol plain HTTP + WebSocket.
-- The home ISP uses CGNAT and the PC has no real public IPv6 (only Teredo), so there is no direct remote access. Options weighed: Tailscale (trying first, sideloaded; the phone has no Play Store), Cloudflare Tunnel, moving the server to a VPS abroad (also removes the MTProxy), a public IP from the ISP.
-- Plain HTTP means Android's cleartext-traffic block must be addressed explicitly (network security config), limited to the home network.
+- The home ISP uses CGNAT and the PC has no real public IPv6 (only Teredo), so there is no direct remote access. Remote access is shelved (2026-11-05), all options ruled out:
+  - Tailscale/TailSocks: the provider's DPI disrupts it; the PC only gets through thanks to Zapret, the phone never went online (TailSocks's built-in DPI bypass did not help), and an earlier try failed on mobile data.
+  - No public IPv4 from the ISP; Cloudflare is blocked; a foreign VPS risks its IP being blocked; Russian VPSs may not be used for bypassing by law.
+  - The connection modes (VPN, Public) stay in the app for later.
+- Plain HTTP: `network_security_config.xml` allows it in general (it is fixed at build time and cannot follow Settings). The app limits it itself: it only connects to the addresses entered in Settings; Local network and VPN modes use http, Public internet always https (`ConnectionMode.scheme`).
 - Message text must never be rendered as HTML.
 - Keep the app light: it runs on a weak phone.
