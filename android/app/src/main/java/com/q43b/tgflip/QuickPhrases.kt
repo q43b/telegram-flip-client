@@ -2,9 +2,6 @@ package com.q43b.tgflip
 
 import android.app.Activity
 import android.content.Context
-import android.text.InputType
-import android.widget.EditText
-import androidx.appcompat.app.AlertDialog
 import org.json.JSONArray
 import org.json.JSONException
 
@@ -77,20 +74,6 @@ object QuickPhrasesEditor {
         }
     }
 
-    // A one-field dialog; blank text is ignored
-    private fun askText(activity: Activity, title: Int, initial: String, onDone: (String) -> Unit) {
-        val input = EditText(activity)
-        input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-        input.setText(initial)
-        input.setSelection(input.text.length)
-        AlertDialog.Builder(activity)
-            .setTitle(title)
-            .setView(input)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val text = input.text.toString().trim()
-                if (text.isNotEmpty()) onDone(text)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
+    private fun askText(activity: Activity, title: Int, initial: String, onDone: (String) -> Unit) =
+        MessageMenu.askText(activity, activity.getString(title), initial, onDone)
 }

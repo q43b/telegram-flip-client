@@ -1,6 +1,8 @@
 package com.q43b.tgflip
 
 import android.content.Context
+import android.text.InputType
+import android.widget.EditText
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 
@@ -29,6 +31,23 @@ object MessageMenu {
         AlertDialog.Builder(context)
             .setTitle(title)
             .setItems(items.toTypedArray()) { _, which -> onPick(which) }
+            .show()
+    }
+
+    // A one-field text dialog (a phrase, a folder name, ...); blank text is ignored
+    fun askText(context: Context, title: String, initial: String, onDone: (String) -> Unit) {
+        val input = EditText(context)
+        input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        input.setText(initial)
+        input.setSelection(input.text.length)
+        AlertDialog.Builder(context)
+            .setTitle(title)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val text = input.text.toString().trim()
+                if (text.isNotEmpty()) onDone(text)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 }

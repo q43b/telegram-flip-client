@@ -12,7 +12,8 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 
 ## Features
 
-- Chat list with live unread counts, newest activity on top, and "Show more chats" for older ones
+- Chat list with live unread counts, a preview of the newest message, newest activity on top, and "Show more chats" for older ones
+- Folders of your own on the phone: a total unread counter, and a folder can hide its chats from the main list (an alternative to archiving)
 - Forum groups (groups split into topics): a topic list, and each topic as its own chat
 - Read and send messages; "Load older messages" for history
 - Message menu on OK: reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone")

@@ -42,6 +42,13 @@ class ApiClient(baseUrl: String?, val token: String) {
         return List(json.length()) { i -> Chat.fromJson(json.getJSONObject(i)) }
     }
 
+    // Only these chats (an app folder), newest activity first
+    fun getChatsByIds(ids: Collection<Long>): List<Chat> {
+        if (ids.isEmpty()) return emptyList()
+        val json = JSONArray(call(Request.Builder().url(endpoint("/chats?ids=" + ids.joinToString(",")))))
+        return List(json.length()) { i -> Chat.fromJson(json.getJSONObject(i)) }
+    }
+
     // Topics of a forum group, most recently active first
     fun getTopics(chatId: Long, limit: Int = 50): List<Topic> {
         val json = JSONArray(call(Request.Builder().url(endpoint("/topics/$chatId?limit=$limit"))))

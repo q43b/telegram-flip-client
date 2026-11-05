@@ -1,17 +1,20 @@
 package com.q43b.tgflip
 
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.TextUtils
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.view.KeyEvent
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ListView
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -34,9 +37,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var chatAdapter: ArrayAdapter<CharSequence>
     private var previewColor = Color.GRAY  // the theme's secondary text color, set in onCreate
     private lateinit var softKeys: SoftKeyBar
-    private var chats: List<Chat> = emptyList()
+    private var chats: List<Chat> = emptyList()  // as shown (hidden folders' chats left out)
+    private var loadedChats: List<Chat> = emptyList()  // as last loaded
+    // The chats of all folders, fetched together each refresh: the unread counts on the
+    // folders row and menu come from these, and inside a folder its chats too
+    private var folderChats: List<Chat> = emptyList()
     private var chatLimit = PAGE_SIZE  // grows by a page with each "Show more chats"
     private var settingsDialog: AlertDialog? = null
+
+    // The open folder (the app's own, see Folders.kt); null = all chats
+    private lateinit var folders: Folders
+    private var folderId: Long? = null
+    private val folder: Folder? get() = folderId?.let { folders.find(it) }
+    // Inside a folder, Back returns to all chats instead of leaving the app
+    private val leaveFolderOnBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = switchFolder(null)
+    }
 
     private var api: ApiClient? = null
     private var live: LiveConnection? = null
@@ -67,11 +83,17 @@ class MainActivity : AppCompatActivity() {
         // One adapter for the screen's lifetime, so refreshes keep the d-pad selection
         chatAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
         chatList.adapter = chatAdapter
-        // Rows past the chats are the "Show more chats" row
+        // Row 0 is the folders row, then the chats, then maybe "Show more chats"
         chatList.setOnItemClickListener { _, _, position, _ ->
-            val chat = chats.getOrNull(position)
-            if (chat != null) openChat(chat) else showMoreChats()
+            val chat = chatAt(position)
+            when {
+                position == 0 -> showFoldersMenu()
+                chat != null -> openChat(chat)
+                else -> showMoreChats()
+            }
         }
+        folders = Folders(this)
+        onBackPressedDispatcher.addCallback(this, leaveFolderOnBack)
         chatList.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) =
                 updateSoftKey()
@@ -100,7 +122,10 @@ class MainActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    private fun selectedChat(): Chat? = chats.getOrNull(chatList.selectedItemPosition)
+    // The folders row shifts the chats down by one
+    private fun chatAt(position: Int): Chat? = chats.getOrNull(position - 1)
+
+    private fun selectedChat(): Chat? = chatAt(chatList.selectedItemPosition)
 
     private fun updateSoftKey() {
         softKeys.setRight(if (selectedChat()?.forum == true) getString(R.string.soft_key_general) else null)
@@ -167,22 +192,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // On a fresh screen, show the chats saved last time while the real ones load
+    // On a fresh screen, show the chats saved last time while the real ones load.
+    // In a folder: those of the saved chats that are in it.
     private suspend fun showSavedChats() {
         if (chats.isNotEmpty()) return
         val saved = withContext(Dispatchers.IO) { cache.loadChats() } ?: return
+        val folder = folder
+        if (folder != null) {
+            showChats(saved.filter { it.id in folder.chatIds })
+            return
+        }
         // Ask for as many pages as were saved, so the list does not shrink on refresh
         chatLimit = ((saved.size + PAGE_SIZE - 1) / PAGE_SIZE * PAGE_SIZE).coerceAtLeast(PAGE_SIZE)
         showChats(saved)
     }
 
-    // quiet = background refresh: no "Loading" text, and network errors are left to the status bar
+    // quiet = background refresh: no "Loading" text, and network errors are left to the status bar.
+    // With folders, one more request fetches the chats of all folders: for their unread counts,
+    // and inside a folder for its chats too.
     private fun loadChats(quiet: Boolean) {
         val api = api ?: return
         if (!quiet) showStatus(getString(R.string.loading))
+        val folder = folder
+        val inAnyFolder = folders.load().flatMap { it.chatIds }.toSet()
         lifecycleScope.launch {
             try {
-                val fresh = withContext(Dispatchers.IO) { api.getChats(chatLimit).also(cache::saveChats) }
+                val (inFolders, fresh) = withContext(Dispatchers.IO) {
+                    val inFolders = api.getChatsByIds(inAnyFolder)  // no request without folders
+                    // Only the full list is saved offline
+                    val fresh = if (folder == null) api.getChats(chatLimit).also(cache::saveChats)
+                    else inFolders.filter { it.id in folder.chatIds }
+                    inFolders to fresh
+                }
+                if (folderId != folder?.id) return@launch  // switched folders meanwhile
+                folderChats = inFolders
                 showChats(fresh)
             } catch (e: BadTokenException) {
                 showError(getString(R.string.error_bad_token))
@@ -197,16 +240,235 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showChats(chats: List<Chat>) {
-        this.chats = chats
+    // loaded: as fetched. In All chats, chats of hidden folders are left out.
+    private fun showChats(loaded: List<Chat>) {
+        loadedChats = loaded
+        val hiddenIds = if (folderId == null) {
+            folders.load().filter { it.hidden }.flatMap { it.chatIds }.toSet()
+        } else {
+            emptySet()
+        }
+        chats = loaded.filter { it.id !in hiddenIds }
         chatAdapter.clear()
+        chatAdapter.add(foldersRow())
         chatAdapter.addAll(chats.map(::chatRow))
         // A full page means there may be more. The selection stays on this row's position,
-        // so after loading more it lands on the first newly loaded chat.
-        if (chats.size >= chatLimit) chatAdapter.add(getString(R.string.show_more_chats))
-        if (chats.isEmpty()) showStatus(getString(R.string.no_chats)) else status.visibility = View.GONE
+        // so after loading more it lands on the first newly loaded chat. Folders are complete.
+        if (folderId == null && loaded.size >= chatLimit) chatAdapter.add(getString(R.string.show_more_chats))
+        when {
+            chats.isNotEmpty() -> status.visibility = View.GONE
+            folderId != null -> showStatus(getString(R.string.folder_empty))
+            else -> showStatus(getString(R.string.no_chats))
+        }
         chatList.requestFocus()
         updateSoftKey()
+    }
+
+    // After a folder setting changed: the same chats, shown with the new settings
+    private fun redraw() = showChats(loadedChats)
+
+    // "📁 Folders… (12)" at the top of all chats; inside a folder "📁 Work · Folders… (12)".
+    // The number is the total unread across the folders that count.
+    private fun foldersRow(): CharSequence {
+        val name = folder?.name
+        val base = if (name == null) getString(R.string.folders_row) else getString(R.string.folders_row_in, name)
+        val total = totalUnread()
+        val text = SpannableString(if (total > 0) "$base ($total)" else base)
+        text.setSpan(StyleSpan(Typeface.BOLD), 0, text.length, 0)
+        return text
+    }
+
+    private fun unreadIn(folder: Folder) = folderChats.filter { it.id in folder.chatIds }.sumOf { it.unread }
+
+    // A chat in several counting folders counts once
+    private fun totalUnread(): Int {
+        val counted = folders.load().filter { it.countUnread }.flatMap { it.chatIds }.toSet()
+        return folderChats.filter { it.id in counted }.sumOf { it.unread }
+    }
+
+    private fun folderLabel(folder: Folder): String {
+        val unread = unreadIn(folder)
+        return if (unread > 0) "📁 ${folder.name} ($unread)" else "📁 ${folder.name}"
+    }
+
+    // Opens a folder (null = all chats): its saved chats at once, then the fresh ones
+    private fun switchFolder(id: Long?) {
+        folderId = id
+        leaveFolderOnBack.isEnabled = id != null
+        chats = emptyList()
+        lifecycleScope.launch {
+            showSavedChats()
+            if (chats.isEmpty()) showChats(emptyList())  // nothing saved: at least the folders row
+            chatList.setSelection(0)
+            loadChats(quiet = false)
+        }
+    }
+
+    // OK on the folders row: switch to a folder (or back to all chats), or Folder settings
+    private fun showFoldersMenu() {
+        val current = folder
+        val entries = mutableListOf<Pair<String, () -> Unit>>()
+        if (current != null) entries += getString(R.string.all_chats) to { switchFolder(null) }
+        for (f in folders.load()) {
+            if (f.id != current?.id) entries += folderLabel(f) to { switchFolder(f.id) }
+        }
+        entries += getString(R.string.folder_settings) to ::showFolderSettings
+        val title = current?.name ?: getString(R.string.folders)
+        MessageMenu.choose(this, title, entries.map { it.first }) { entries[it].second() }
+    }
+
+    private fun showFolderSettings() {
+        val items = listOf(getString(R.string.create_folder), getString(R.string.edit_folder))
+        MessageMenu.choose(this, getString(R.string.folder_settings_title), items) { which ->
+            if (which == 0) newFolder() else pickFolderToEdit()
+        }
+    }
+
+    // Name, then the chats to put in it, then it opens
+    private fun newFolder() {
+        MessageMenu.askText(this, getString(R.string.new_folder_title), "") { name ->
+            val created = folders.create(name)
+            addChats(created) { switchFolder(created.id) }
+        }
+    }
+
+    private fun pickFolderToEdit() {
+        val all = folders.load()
+        if (all.isEmpty()) {
+            showStatus(getString(R.string.no_folders))
+            return
+        }
+        MessageMenu.choose(this, getString(R.string.edit_folder), all.map { "📁 ${it.name}" }) { editFolder(all[it].id) }
+    }
+
+    // One folder's settings. After a change it opens again, so several edits are quick.
+    private fun editFolder(id: Long) {
+        val f = folders.find(id) ?: return
+        val again = { editFolder(id) }
+        val entries = listOf<Pair<String, () -> Unit>>(
+            getString(R.string.folder_rename) to { renameFolder(f, again) },
+            getString(R.string.folder_add_chats) to { addChats(f, then = again) },
+            getString(R.string.folder_remove_chats) to { removeChats(f, again) },
+            getString(R.string.folder_hidden, onOff(f.hidden)) to {
+                folders.setHidden(id, !f.hidden)
+                redraw()
+                again()
+            },
+            getString(R.string.folder_count_unread, onOff(f.countUnread)) to {
+                folders.setCountUnread(id, !f.countUnread)
+                redraw()
+                again()
+            },
+            getString(R.string.folder_delete) to { deleteFolder(f) },
+        )
+        MessageMenu.choose(this, "📁 ${f.name}", entries.map { it.first }) { entries[it].second() }
+    }
+
+    private fun onOff(on: Boolean) = getString(if (on) R.string.on else R.string.off)
+
+    private fun renameFolder(target: Folder, then: () -> Unit) {
+        MessageMenu.askText(this, getString(R.string.folder_rename), target.name) { name ->
+            folders.rename(target.id, name)
+            redraw()  // the folders row may show the new name
+            then()
+        }
+    }
+
+    // A checklist of the saved full chat list, minus chats already in the folder.
+    // "Load more chats" fetches another page and opens it again, keeping the ticks.
+    private fun addChats(target: Folder, ticked: Set<Long> = emptySet(), then: () -> Unit) {
+        lifecycleScope.launch {
+            val saved = withContext(Dispatchers.IO) { cache.loadChats() }.orEmpty()
+            val options = saved.filter { it.id !in target.chatIds }.map { FolderChat(it.id, it.name) }
+            // A full page means there may be more, as with "Show more chats"
+            val loadMore = if (saved.size >= chatLimit) {
+                { nowTicked: Set<Long> -> loadMoreChats { addChats(target, nowTicked, then) } }
+            } else {
+                null
+            }
+            pickChats(getString(R.string.add_chats_title, target.name), options, ticked, loadMore) { picked ->
+                folders.addChats(target.id, picked)
+                loadChats(quiet = false)
+                then()
+            }
+        }
+    }
+
+    // One more page of the full chat list, saved like "Show more chats" does, so the
+    // main list grows too; then `then` (e.g. reopening the checklist)
+    private fun loadMoreChats(then: () -> Unit) {
+        val api = api ?: run {
+            showStatus(getString(R.string.error_no_server))
+            return
+        }
+        showStatus(getString(R.string.loading))
+        lifecycleScope.launch {
+            try {
+                val more = withContext(Dispatchers.IO) { api.getChats(chatLimit + PAGE_SIZE).also(cache::saveChats) }
+                chatLimit += PAGE_SIZE
+                if (folderId == null) showChats(more) else status.visibility = View.GONE
+                then()
+            } catch (e: IOException) {
+                showStatus(getString(R.string.error_no_server))
+            }
+        }
+    }
+
+    // A checklist of the folder's chats: the ticked ones are removed
+    private fun removeChats(target: Folder, then: () -> Unit) {
+        if (target.chats.isEmpty()) {
+            showStatus(getString(R.string.folder_empty))
+            return
+        }
+        pickChats(getString(R.string.remove_chats_title, target.name), target.chats) { picked ->
+            folders.removeChats(target.id, picked.map { it.id }.toSet())
+            loadChats(quiet = false)
+            then()
+        }
+    }
+
+    // OK ticks or unticks a chat; the dialog's OK hands over the ticked ones,
+    // Cancel / Back changes nothing. ticked: chats ticked from the start.
+    // loadMore: if given, a "Load more chats" button that gets the currently ticked ids.
+    private fun pickChats(
+        title: String,
+        options: List<FolderChat>,
+        ticked: Set<Long> = emptySet(),
+        loadMore: ((Set<Long>) -> Unit)? = null,
+        onDone: (List<FolderChat>) -> Unit,
+    ) {
+        if (options.isEmpty() && loadMore == null) {
+            showStatus(getString(R.string.no_chats_to_pick))
+            return
+        }
+        val checked = BooleanArray(options.size) { options[it].id in ticked }
+        val tickedNow = { options.filterIndexed { i, _ -> checked[i] } }
+        val builder = AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMultiChoiceItems(options.map { it.name }.toTypedArray(), checked) { _, which, isChecked ->
+                checked[which] = isChecked
+            }
+            .setPositiveButton(android.R.string.ok) { _, _ -> onDone(tickedNow()) }
+            .setNegativeButton(android.R.string.cancel, null)
+        if (loadMore != null) {
+            builder.setNeutralButton(R.string.load_more_chats) { _, _ ->
+                loadMore(tickedNow().map { it.id }.toSet())
+            }
+        }
+        builder.show()
+    }
+
+    // Only the folder goes; its chats stay in Telegram as they are
+    private fun deleteFolder(target: Folder) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.folder_delete_title, target.name))
+            .setMessage(R.string.folder_delete_message)
+            .setPositiveButton(R.string.action_delete) { _, _ ->
+                folders.delete(target.id)
+                if (folderId == target.id) switchFolder(null) else redraw()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     // "Name (3)"; topic groups get a "›" because they open a list of topics.
