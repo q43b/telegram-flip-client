@@ -1,131 +1,147 @@
 # Telegram Flip Client
 
-A personal, study-oriented project: use Telegram on an Android 10 flip phone with a d-pad, in a region where Telegram is blocked. A Python backend on my own PC talks to Telegram, and a small web app on the phone talks to that backend. Important: vibecoded with Claude!
+A personal, study-oriented project: use Telegram on an Android 10 flip phone with a d-pad, in a region where Telegram is blocked. A Python server on my own PC talks to Telegram, and a native Android app on the phone talks to that server. Important: vibecoded with Claude!
 
-Built step by step as a way to learn Git/GitHub, async Python, APIs, authentication, WebSockets, and UI design under hardware constraints.
+Built step by step as a way to learn Git/GitHub, async Python, APIs, authentication, WebSockets, Android and Kotlin, and UI design under hardware constraints.
 
 ## Screenshots
 
-| Chat list | A chat |
-|---|---|
-| ![Chat list](docs/screenshots/chat-list.png) | ![Chat view](docs/screenshots/chat.png) |
+| Chat list | A chat | Message menu | Settings |
+|---|---|---|---|
+| ![Chat list](docs/screenshots/app-chat-list.png) | ![A chat](docs/screenshots/app-chat.png) | ![Message menu](docs/screenshots/app-message-menu.png) | ![Settings](docs/screenshots/app-settings.png) |
 
 ## Features
 
-- Chat list with live unread counts; the most recently active chat moves to the top
-- Read and send messages
-- Live updates over a WebSocket, with automatic reconnect and a resync after reconnecting
-- "Mark as read" as a deliberate action (button, or the F2 soft key), so read receipts are never sent by accident
-- Read state stays in sync with other Telegram clients
-- Visible connection status and error messages on the small screen
-- D-pad navigation (Up/Down moves focus, Enter activates) and large, high-contrast focus outlines
-- Token authentication on both the HTTP API and the WebSocket
+- Chat list with live unread counts, newest activity on top, and "Show more chats" for older ones
+- Forum groups (groups split into topics): a topic list, and each topic as its own chat
+- Read and send messages; "Load older messages" for history
+- Message menu on OK: reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone")
+- Replies show a quote of the original; edited messages show "(edited)"
+- Live updates over a WebSocket (new, edited and deleted messages), with automatic reconnect and a resync afterwards
+- "Mark as read" as a deliberate action on the F2 soft key, so read receipts are never sent by accident; a soft key label shows when there is something to mark
+- Offline reading: the last chats, topics and messages are kept on the phone
+- Connection status bar on every screen
+- Settings: server address per connection mode (local network, VPN, public internet over HTTPS), app token, theme (light, dark, follow phone)
+- Built for the d-pad: every action works with Up/Down, OK, Left/Right, Back and the soft keys
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Phone["Flip phone browser<br/>HTML/JS, d-pad"] -- "HTTP + WebSocket<br/>base URL + token" --> Server["Home PC<br/>FastAPI + Telethon"]
-    Server -- "MTProto" --> Proxy["tg-ws-proxy<br/>127.0.0.1:1443"]
+    Phone["Flip phone<br/>Android app (Kotlin)"] -- "HTTP + WebSocket<br/>base URL + token" --> Server["Home PC<br/>FastAPI + Telethon"]
+    Server -- "MTProto" --> Proxy["MTProxy<br/>(optional)"]
     Proxy --> TG["Telegram"]
 ```
 
-The phone and the server only share a **base URL and a token**. How the phone reaches the server is deliberately a separate layer, so it can be swapped later without touching app logic.
+The phone and the server only share a **base URL and a token**. How the phone reaches the server is deliberately a separate layer (the app's connection modes), so it can be swapped without touching app logic.
 
-## Tech stack
+## Getting it running
 
-- **Backend:** Python 3.13, [Telethon](https://github.com/LonamiWebs/Telethon) (MTProto client), FastAPI, uvicorn, WebSockets
-- **Frontend:** plain HTML, CSS and JavaScript served by the backend (no build step)
-- **Telegram access:** any local MTProto proxy works, or a VPN, or maybe Telegram works for you by itself; I use tg-ws-proxy by Flowseal (MIT license) https://github.com/Flowseal/tg-ws-proxy
+Both downloads are on the [Releases](https://github.com/q43b/telegram-flip-client/releases) page.
+
+### 1. The server (Windows)
+
+1. Get your own API ID and API hash at https://my.telegram.org ("API development tools").
+2. Download `tgflip-server-<version>-win64.zip`, unzip it anywhere and double-click `tgflip-server.exe`.
+3. The first run asks for the API ID and hash, an MTProxy (only if Telegram is blocked for you; press Enter to skip) and the app token (press Enter to generate one). Then it logs in to Telegram: phone number, the code Telegram sends, and your 2FA password if you have one.
+4. If Windows Firewall asks, allow it on private networks.
+
+Later runs just start. Settings and the login stay next to the exe (`.env`, `tg_session.session`).
+
+> **The phone can't connect although the server started?** Windows probably treats your home Wi-Fi as a "Public" network, where it blocks incoming connections. Set it to Private: Settings > Network & internet > Wi-Fi > (your network) > Network profile type > Private.
+
+### 2. The app (Android 7 or newer)
+
+1. Download `TG-Flip-<version>.apk` to the phone and install it (allow installing from unknown sources if asked).
+2. On first start, enter the server: your PC's IP address on the home network (e.g. `192.168.1.20`), port `8000`, and the app token.
+
+### Keys
+
+| Key | Chat list | Chat | Elsewhere |
+|---|---|---|---|
+| Up / Down | Move through chats | Move through messages | Move through lists |
+| OK | Open chat (or topic list) | Message menu; in the text box: send | Choose |
+| Right | Open Settings | | |
+| Left | | | Close Settings |
+| F2 (right soft key) | Open a forum's General topic | Mark as read | |
+| Back | | Cancel a reply or edit, otherwise leave | Go back |
+
+## Building from source
+
+### Server
+
+```powershell
+git clone https://github.com/q43b/telegram-flip-client.git
+cd telegram-flip-client
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r server\requirements.txt
+cd server
+python run_server.py
+```
+
+`run_server.py` does the same first-run setup as the packaged server. Alternatively, copy `server/.env.example` to `server/.env`, fill it in, and run `uvicorn server:app --host 0.0.0.0` (log in once with `python list_chats.py`).
+
+To build the Windows zip: `pip install -r server\requirements-build.txt`, then `powershell -ExecutionPolicy Bypass -File server\build_server.ps1`. It lands in `dist/`.
+
+### App
+
+Open `android/` in Android Studio. **Run** installs a dev build, a separate app called "TG Flip (dev)", so it sits next to a release install.
+
+Release builds (`gradlew assembleRelease`) are signed with your own key: create one with `keytool`, then copy `android/keystore.properties.example` to `android/keystore.properties` and fill it in. That file and the key are git-ignored. Without them, release builds come out unsigned.
 
 ## Project layout
 
 ```
-server.py            FastAPI app: REST endpoints, WebSocket, Telethon client
-list_chats.py        One-off script: log in, list chats, send a test message
-listen.py            One-off script: print incoming messages
-static/index.html    The phone UI
-static/keys.html     Tool: shows which key codes the phone sends
-static/debug.html    Tool: checks which JavaScript features the phone's browser supports
-PROJECT_BRIEF.md     Goals, decisions, milestones
+android/                   The Android app (Kotlin, Views)
+  app/src/main/java/...    Screens (MainActivity, TopicsActivity, ChatActivity, SettingsActivity),
+                           ApiClient, LiveConnection, LocalCache, ConnectionMode, ...
+server/
+  server.py                FastAPI app: REST endpoints, WebSocket, Telethon client
+  run_server.py            Start script: first-run setup, Telegram login, then the server
+  build_server.ps1         Builds the packaged Windows server (PyInstaller)
+  packaging/README.txt     The README inside the server zip
+  static/                  The earlier web client, still served at http://<PC>:8000/
+  list_chats.py            One-off script: log in and list chats
+  listen.py                One-off script: print incoming messages
+docs/screenshots/          Screenshots for this README
+PROJECT_BRIEF.md           Goals, decisions, milestones
 ```
-
-## Packaged server (Windows, easiest)
-
-Download `tgflip-server-<version>-win64.zip` from [Releases](https://github.com/q43b/telegram-flip-client/releases), unzip it and double-click `tgflip-server.exe`. The first run asks for your API ID and hash, an optional MTProxy and the app token, then logs in to Telegram. Settings and the login stay next to the exe (`.env`, `tg_session.session`). See `README.txt` inside the zip.
-
-To build the zip yourself: install `server/requirements-build.txt` into the venv, then run `powershell -ExecutionPolicy Bypass -File server\build_server.ps1`.
-
-## Setup from source (Windows, PowerShell)
-
-1. Get your own `api_id` and `api_hash` at https://my.telegram.org.
-2. (Optional, can skip if TG works already) Run a local MTProto proxy (I use tg-ws-proxy) and note its host, port and secret.
-3. Clone the repository:
-
-   ```powershell
-   git clone https://github.com/q43b/telegram-flip-client.git
-   cd telegram-flip-client
-   ```
-4. Create a virtual environment and install dependencies:
-
-   ```powershell
-   python -m venv venv
-   .\venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   ```
-
-5. Create a `.env` file (never commit it):
-
-   ```
-   API_ID=...
-   API_HASH=...
-   PROXY_HOST=127.0.0.1
-   PROXY_PORT=1443
-   PROXY_SECRET=...
-   API_TOKEN=a-long-random-string
-   ```
-
-   Generate a token with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
-
-6. Log in once (this creates the session file) (sometimes needs to be rerun, it tells you when):
-
-   ```powershell
-   python list_chats.py
-   ```
-
-7. Start the server:
-
-   ```powershell
-   uvicorn server:app --host 0.0.0.0
-   ```
-
-8. On the phone (same Wi-Fi), open `http://<PC-IP>:8000/#token=<API_TOKEN>`. The token is stored on the phone and removed from the address bar.
 
 ## Security notes
 
-- The Telegram session file gives full access to the account. It is git-ignored and must never be shared.
-- Secrets live in `.env`, not in code. Token comparison uses `secrets.compare_digest`.
-- The WebSocket token is sent as the first message, not in the URL, so it does not end up in logs.
-- Message text is inserted with `textContent`, never `innerHTML`, so a message cannot inject HTML or scripts into the page.
-- The server speaks plain HTTP and is meant for a trusted home network only. Do not expose it to the internet without HTTPS, rate limiting and stronger authentication.
+- The Telegram session file gives full access to the account. It is git-ignored, never packed into the server zip, and must never be shared.
+- Secrets live in `.env`, not in code. Token comparison uses `secrets.compare_digest`. The WebSocket token is sent as the first message, not in the URL, so it does not end up in logs.
+- Message text is always shown as plain text, never interpreted as HTML.
+- On the local network and inside a VPN the app uses plain HTTP; in the "Public internet" connection mode it always uses HTTPS, so the token and messages never cross the open internet readable. The server itself is meant for a trusted network; don't expose it to the internet without HTTPS in front.
+- Messages saved for offline reading are kept in the app's private storage and excluded from phone backups.
+- Release APKs are signed; the signing key and its passwords never enter the repository.
 
 ## Design decisions worth noting
 
-- **Old-browser compatibility:** the phone's built-in browser does not support optional chaining. A small test page (`debug.html`) reports what it supports, and the UI is written in conservative JavaScript.
-- **Push plus resync:** the WebSocket only delivers new events, so after a reconnect the page refetches current state instead of trusting what it saw before.
-- **Keeping the user in control:** reading and acknowledging are separate actions, because acknowledging sends a read receipt.
+- **Native app instead of the phone's browser:** in the browser, the d-pad moved focus two items at a time. The native app handles keys directly. On screens with a text box, the phone's keyboard app swallows OK before the app sees it, so the message list takes OK in `onKeyPreIme`, which runs first.
+- **Push plus resync:** the WebSocket only delivers new events, so after a reconnect the app refetches current state instead of trusting what it saw before.
+- **Keeping the user in control:** opening a chat never marks it as read; that is a separate key press, because it sends a read receipt.
+- **Resilience behind a flaky proxy:** the MTProxy sometimes leaves the Telegram connection broken (`MTPROTO_CLUSTER_INVALID`). The server reconnects from scratch and retries the request once, and a watchdog checks the connection every two minutes.
+- **Forum unread counts:** Telegram's own unread counter for a forum group goes stale, so the server adds up the topics' counts instead.
 
 ## Known limitations and roadmap
 
-- Home Wi-Fi only. Remote access is blocked by carrier-grade NAT on the home connection; options are being evaluated.
-- On the phone's built-in browser, d-pad Up/Down moves focus two items at once. The key tester shows one event per press, so this looks like browser behavior; a native Android app is planned to handle key events directly.
-- Text messages only: other message types are shown as "[non-text message]".
-- Planned: native Android app, move the server to an always-on machine.
+- **Home network only for now.** The home connection is behind carrier-grade NAT, and the remote-access options tried (Tailscale, tunnels, a rented server) are blocked or ruled out where I live. The app's VPN and Public modes are ready for when a route exists.
+- **Text only:** photos, stickers and other media show as "[media]".
+- The packaged server is Windows-only.
+- Planned for version 2: reactions, stickers and media.
 
 ## Credits
 
-- [tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) by Flowseal (MIT), used as a separate program and not included in this repo
 - [Telethon](https://github.com/LonamiWebs/Telethon) for the Telegram client
+- [tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) by Flowseal (MIT), the MTProxy I use, as a separate program and not included in this repo
+- [OkHttp](https://square.github.io/okhttp/) for HTTP and WebSockets in the app
+- [PyInstaller](https://pyinstaller.org/) for the packaged server
+
+## License
+
+MIT, see [LICENSE](LICENSE).
 
 ## Disclaimer
 
