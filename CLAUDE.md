@@ -13,13 +13,14 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 
 ## Current state
 - Backend milestones 1-8 done: chats, messages, send, mark-as-read, live updates, error handling.
+- Packaged server: `server/run_server.py` (first-run setup writes `.env`, Telegram login via `client.start()`, then uvicorn from code, all in one event loop) is the entry point of `tgflip-server.exe`. `server/build_server.ps1` builds `dist/tgflip-server-<version>-win64.zip` with PyInstaller (one-folder; `requirements-build.txt`) and refuses to pack `.env`/`*.session`. `.env` and the session live next to the exe. The MTProxy is optional (empty PROXY_HOST = direct). `uvicorn server:app` still works for development.
 - Server resilience: the MTProxy sometimes leaves Telethon connected but answering MTPROTO_CLUSTER_INVALID to everything. `connect_telegram()` retries from a clean disconnect at startup; at runtime, endpoints wrapped in `@recovering` reconnect and retry once, and a watchdog checks every 2 minutes.
 - Android project created here (Kotlin, Empty Views Activity; build.gradle.kts has minSdk 24).
 - Builds: dev builds (`installDebug`, what Claude installs for testing) are a separate app, `com.q43b.tgflip.debug`, named "TG Flip (dev)", so they sit next to the release. Release builds (`assembleRelease`) are signed with the owner's key via `android/keystore.properties` (git-ignored; template `keystore.properties.example`); without that file they come out unsigned. Never read, print or commit the keystore or its passwords.
 - The WebView proof of concept (commit a685194) was replaced by native screens. Do not bring it back.
 - Native chat list works on the phone: `ListView` + OkHttp (`ApiClient.kt`), address and token in SharedPreferences (`ServerSettings.kt`). No d-pad double-move in the native list.
 - Live connection: `LiveConnection.kt` keeps the WebSocket open (reconnect with backoff), drives a status bar at the top, and refetches chats on events and after reconnects.
-- Chat screen (`ChatActivity.kt`): OK on a chat opens its last 20 messages, new ones arrive live. Opening does not mark as read.
+- Chat screen (`ChatActivity.kt`): OK on a chat opens its last 20 messages, new ones arrive live. Opening does not mark as read. A "Load older messages…" row at the top raises the `/messages` limit by 20 and keeps the previous top message highlighted (the row shifts message positions by one: use `messageAt`). For General, the server scans `max(200, limit × 10)` messages.
 - Sending: a text box under the messages; OK sends via POST /send. The sent message shows at once (deduplicated by id against the live event).
 - Key plan: OK opens chats and sends. Right soft key (F2) = mark as read, as in `../server/static/index.html`. Left soft key (F1) is reserved for sticker/media sending, much later.
 - Mark as read: F2 / SOFT_RIGHT in the chat screen posts to /read. A soft key label "Mark as read (N)" shows only while the chat has unread messages; F2 does nothing otherwise. The count comes from the list, +1 per live incoming message, and is refetched from /chats (or /topics) on open, reconnect and "read" events.

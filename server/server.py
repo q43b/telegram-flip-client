@@ -16,24 +16,38 @@ from telethon import TelegramClient, connection, errors, events, functions, type
 
 load_dotenv()
 
+# The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
+if os.environ.get("PROXY_HOST"):
+    proxy_args = dict(
+        connection=connection.ConnectionTcpMTProxyRandomizedIntermediate,
+        proxy=(
+            os.environ["PROXY_HOST"],
+            int(os.environ["PROXY_PORT"]),
+            os.environ["PROXY_SECRET"],
+        ),
+    )
+else:
+    proxy_args = {}
+
 client = TelegramClient(
     "tg_session",
     int(os.environ["API_ID"]),
     os.environ["API_HASH"],
-    connection=connection.ConnectionTcpMTProxyRandomizedIntermediate,
-    proxy=(
-        os.environ["PROXY_HOST"],
-        int(os.environ["PROXY_PORT"]),
-        os.environ["PROXY_SECRET"],
-    ),
+    **proxy_args,
 )
+
+# The web page lives next to this file, also inside the packaged server
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 ws_clients = set()  # currently connected browsers
 
 # Forum groups ("topics"): the General topic always has id 1, and its messages
 # carry no topic mark at all, unlike messages in every other topic.
 GENERAL_TOPIC = 1
-GENERAL_SCAN = 200  # how far back to look when collecting General's messages
+# How far back to look when collecting General's messages: at least GENERAL_SCAN, and
+# GENERAL_SCAN_PER_MESSAGE per requested message, so "load older messages" can go deeper
+GENERAL_SCAN = 200
+GENERAL_SCAN_PER_MESSAGE = 10
 
 
 def topic_of(message):
@@ -88,7 +102,8 @@ async def topic_messages(chat_id, topic_id, limit):
     # General: take the group's recent messages that belong to no other topic.
     # "Topic created" notices also carry no mark, so skip those.
     found = []
-    async for m in client.iter_messages(chat_id, limit=GENERAL_SCAN):
+    scan = max(GENERAL_SCAN, limit * GENERAL_SCAN_PER_MESSAGE)
+    async for m in client.iter_messages(chat_id, limit=scan):
         if topic_of(m) is None and not isinstance(m.action, types.MessageActionTopicCreate):
             found.append(m)
             if len(found) >= limit:
@@ -481,4 +496,4 @@ async def ws_endpoint(ws: WebSocket):
         ws_clients.discard(ws)
 
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

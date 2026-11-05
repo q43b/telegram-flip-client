@@ -1,0 +1,2 @@
+# Only for building the packaged server (build_server.ps1), not for running it
+pyinstaller==6.22.3

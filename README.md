@@ -50,7 +50,13 @@ static/debug.html    Tool: checks which JavaScript features the phone's browser 
 PROJECT_BRIEF.md     Goals, decisions, milestones
 ```
 
-## Setup (Windows, PowerShell)
+## Packaged server (Windows, easiest)
+
+Download `tgflip-server-<version>-win64.zip` from [Releases](https://github.com/q43b/telegram-flip-client/releases), unzip it and double-click `tgflip-server.exe`. The first run asks for your API ID and hash, an optional MTProxy and the app token, then logs in to Telegram. Settings and the login stay next to the exe (`.env`, `tg_session.session`). See `README.txt` inside the zip.
+
+To build the zip yourself: install `server/requirements-build.txt` into the venv, then run `powershell -ExecutionPolicy Bypass -File server\build_server.ps1`.
+
+## Setup from source (Windows, PowerShell)
 
 1. Get your own `api_id` and `api_hash` at https://my.telegram.org.
 2. (Optional, can skip if TG works already) Run a local MTProto proxy (I use tg-ws-proxy) and note its host, port and secret.
