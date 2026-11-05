@@ -22,8 +22,13 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 - Sending: a text box under the messages; OK sends via POST /send. The sent message shows at once (deduplicated by id against the live event).
 - Key plan: OK opens chats and sends. Right soft key (F2) = mark as read, as in `../server/static/index.html`. Left soft key (F1) is reserved for sticker/media sending, much later.
 - Mark as read: F2 / SOFT_RIGHT in the chat screen posts to /read. A soft key label "Mark as read (N)" shows only while the chat has unread messages; F2 does nothing otherwise. The count comes from the list, +1 per live incoming message, and is refetched from /chats (or /topics) on open, reconnect and "read" events.
-- Message menu (`MessageMenu.kt`): OK on a message opens a list of `MessageAction`s (label, isAvailable, perform), declared in `ChatActivity.messageActions`. Now: Reply, Edit (own text messages), Forward (pick a chat), Delete (asks the server which of "for me" / "for everyone" Telegram allows). Planned: reactions.
+- Message menu (`MessageMenu.kt`): OK on a message opens a list of `MessageAction`s (label, isAvailable, perform), declared in `ChatActivity.messageActions`. Now: Reply, Edit (own text messages), Forward (pick a chat), Delete (asks the server which of "for me" / "for everyone" Telegram allows).
+- Version 1 is feature-complete for text. Reactions, stickers and media (left soft key F1) are planned for version 2; media transfer needs its own design (size, weak phone, slow proxy).
 - Compose bar above the box: "Replying to" or "Editing"; Back cancels it. Replies show a "↪ quote" first line when the original is loaded; edited messages show "(edited)" after the time.
+- Settings (`SettingsActivity.kt`): d-pad Right in the chat list opens it (slides in from the left, like the official app's side menu); Left or Back closes it. A bottom tab bar (`tab_bar.xml`, `TabBar.kt`) shows "Chats | Settings" with the active one highlighted. Rows: Server (IP, port, token) via `ServerSettingsDialog.kt`, the same dialog the chat list shows on first launch and connection errors.
+- Settings also has Theme (Follow phone / Light / Dark; `ThemeSetting.kt`, applied at start by `TGFlipApp.kt`).
+- Connection modes (`ConnectionMode.kt`): Local network (http, LAN IP), VPN (http inside Tailscale; `*.ts.net` names allowed in `network_security_config.xml`, a 100.x IP would need adding there), Public internet (https only). Each mode has its own address, the token is shared, `ServerSettings.getAddress()` returns the active mode's. Settings: "Connection" row switches mode, one row per mode's server. The connection bar shows the mode ("Connected · VPN"). VPN and Public are not tested yet.
+- A mode without an address: screens still open from the saved copy, the bar says "No server · <mode>", and `ApiClient` (built with a null address) fails every request with `NoServerException`. The server dialog in the chat list can always be closed; it opens by itself only on first launch (no token).
 - Offline cache (`LocalCache.kt`): the last chats, topics and messages (newest 100 per chat/topic) are saved as JSON files in `noBackupFilesDir` (kept out of phone backups). Screens show the saved copy first, then replace it with fresh data; offline they say "Offline: showing saved copy".
 - Older chats: a "Show more chats…" row at the end of the list raises the `/chats` limit by 20 each time (live refreshes keep the bigger limit).
 - Forum groups (groups split into topics): marked "›" in the list; OK opens `TopicsActivity.kt`, OK on a topic opens `ChatActivity` for that topic. In the list, F2 on a forum opens its General topic directly (soft key label "Open General").
@@ -60,7 +65,7 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 
 ## Constraints and decisions
 - The app and server share only a base URL and a token. How the phone reaches the server is a separate, swappable layer. Keep the protocol plain HTTP + WebSocket.
-- Home Wi-Fi only for now (the home ISP uses CGNAT, so no direct remote access).
+- The home ISP uses CGNAT and the PC has no real public IPv6 (only Teredo), so there is no direct remote access. Options weighed: Tailscale (trying first, sideloaded; the phone has no Play Store), Cloudflare Tunnel, moving the server to a VPS abroad (also removes the MTProxy), a public IP from the ISP.
 - Plain HTTP means Android's cleartext-traffic block must be addressed explicitly (network security config), limited to the home network.
 - Message text must never be rendered as HTML.
 - Keep the app light: it runs on a weak phone.

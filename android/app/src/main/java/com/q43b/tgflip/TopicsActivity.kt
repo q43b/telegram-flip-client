@@ -43,14 +43,9 @@ class TopicsActivity : AppCompatActivity() {
         }
 
         // The list screen only opens this after settings are saved, but be safe
+        // Without a server for the current mode the screen still opens from the saved copy
         val settings = ServerSettings(this)
-        val address = settings.getAddress()
-        val token = settings.getToken()
-        if (address == null || token == null) {
-            finish()
-            return
-        }
-        api = ApiClient(address, token)
+        api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
         cache = LocalCache(this)
         chat = Chat(
             id = intent.getLongExtra(EXTRA_CHAT_ID, 0),
@@ -75,8 +70,11 @@ class TopicsActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         wasConnected = false
-        live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent)
-        live?.start()
+        if (api.hasServer) {
+            live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent).also { it.start() }
+        } else {
+            connection.showNoServer()
+        }
         lifecycleScope.launch {
             // On a fresh screen, show the topics saved last time while the real ones load
             if (topics.isEmpty()) {
@@ -103,6 +101,8 @@ class TopicsActivity : AppCompatActivity() {
                 showTopics(loaded)
             } catch (e: BadTokenException) {
                 showStatus(getString(R.string.error_bad_token))
+            } catch (e: NoServerException) {
+                showStatus(getString(R.string.server_not_set_short))
             } catch (e: IOException) {
                 if (!quiet) {
                     val text = if (topics.isNotEmpty()) R.string.offline_saved else R.string.error_no_server

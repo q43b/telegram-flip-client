@@ -1,13 +1,10 @@
 package com.q43b.tgflip
 
 import android.os.Bundle
-import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
-import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
@@ -38,6 +35,9 @@ class MainActivity : AppCompatActivity() {
     private var api: ApiClient? = null
     private var live: LiveConnection? = null
     private var wasConnected = false
+    // Between onStart and onStop. Android's own lifecycle state only becomes STARTED
+    // after onStart returns, too late for code that runs during onStart.
+    private var visible = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,12 +72,20 @@ class MainActivity : AppCompatActivity() {
         softKey = findViewById(R.id.soft_key_right)
         softKey.setText(R.string.soft_key_general)
         softKey.setOnClickListener { selectedChat()?.let(::openGeneral) }
+
+        setUpTabBar(Tab.CHATS) { SettingsActivity.start(this) }
     }
 
-    // Right soft key on a topic group opens its General topic directly
+    // Right soft key on a topic group opens its General topic directly.
+    // D-pad Right opens Settings, like swiping open the official app's side menu
+    // (the list only uses Up and Down, so Right is free here).
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.isRightSoftKey()) {
             if (event.action == KeyEvent.ACTION_UP) selectedChat()?.let(::openGeneral)
+            return true
+        }
+        if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            if (event.action == KeyEvent.ACTION_UP) SettingsActivity.start(this)
             return true
         }
         return super.dispatchKeyEvent(event)
@@ -106,10 +114,12 @@ class MainActivity : AppCompatActivity() {
     // The app is visible: connect. Hidden: disconnect, to save battery.
     override fun onStart() {
         super.onStart()
+        visible = true
         start()
     }
 
     override fun onStop() {
+        visible = false
         live?.stop()
         super.onStop()
     }
@@ -117,24 +127,33 @@ class MainActivity : AppCompatActivity() {
     private fun start() {
         live?.stop()
         live = null
+        api = null
         val address = settings.getAddress()
         val token = settings.getToken()
-        if (address == null || token == null) {
-            askForSettings()
-            return
-        }
-        if (address.toHttpUrlOrNull() == null) {
-            showError(getString(R.string.error_bad_address))
-            return
+        // Why this mode cannot connect, if it cannot
+        val problem = when {
+            address == null || token == null -> getString(R.string.server_not_set, getString(settings.getMode().label))
+            address.toHttpUrlOrNull() == null -> getString(R.string.error_bad_address)
+            else -> null
         }
 
-        val api = ApiClient(address, token)
-        this.api = api
-        wasConnected = false
-        live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent)
-        live?.start()
         lifecycleScope.launch {
+            // The saved copy shows in every case, also when this mode has no server yet
             showSavedChats()
+            if (problem != null) {
+                connection.showNoServer()
+                showStatus(problem)  // after the saved chats, which hide the status line
+                // A hint, not a forced dialog: the user may just have switched modes.
+                // Only the very first launch (no token yet) opens the dialog by itself.
+                if (token == null) askForSettings()
+                return@launch
+            }
+            // The screen may have been hidden meanwhile; onStart will run start() again
+            if (!visible) return@launch
+            val api = ApiClient(address, token!!)
+            this@MainActivity.api = api
+            wasConnected = false
+            live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent).also { it.start() }
             loadChats(quiet = false)
         }
     }
@@ -214,39 +233,14 @@ class MainActivity : AppCompatActivity() {
         askForSettings()
     }
 
+    // First launch or a connection error. Always closable (Back or Cancel): the status line
+    // keeps the hint, and Settings (Right) has the same fields.
     private fun askForSettings() {
         if (settingsDialog?.isShowing == true) return
-
-        val addressInput = EditText(this)
-        addressInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-        addressInput.hint = getString(R.string.address_hint)
-        addressInput.setText(settings.getAddress() ?: DEFAULT_ADDRESS)
-
-        // Visible on purpose: typing a hidden token on a keypad is too error-prone
-        val tokenInput = EditText(this)
-        tokenInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-        tokenInput.hint = getString(R.string.token_hint)
-        tokenInput.setText(settings.getToken() ?: "")
-
-        val fields = LinearLayout(this)
-        fields.orientation = LinearLayout.VERTICAL
-        fields.addView(addressInput)
-        fields.addView(tokenInput)
-
-        settingsDialog = AlertDialog.Builder(this)
-            .setTitle(R.string.settings_title)
-            .setView(fields)
-            .setCancelable(false)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                settings.saveAddress(addressInput.text.toString().trim().trimEnd('/'))
-                settings.saveToken(tokenInput.text.toString().trim())
-                start()
-            }
-            .show()
+        settingsDialog = ServerSettingsDialog.show(this, settings, settings.getMode(), cancelable = true) { start() }
     }
 
     private companion object {
-        const val DEFAULT_ADDRESS = "http://192.168.31.24:8000"
         const val PAGE_SIZE = 20
     }
 }

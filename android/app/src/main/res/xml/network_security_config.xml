@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Plain HTTP is blocked by default. Allow it only for the home PC running the server. -->
+<!-- Plain HTTP is blocked by default. It is allowed only where nothing travels readable
+     on the open internet; the Public connection mode always uses HTTPS. -->
 <network-security-config>
+    <!-- Local mode: the home PC on the home network -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">192.168.31.24</domain>
+    </domain-config>
+    <!-- VPN mode: Tailscale names (<device>.<tailnet>.ts.net) only resolve inside the
+         Tailscale network, whose tunnel is encrypted. To use the PC's Tailscale IP
+         (100.x.y.z) instead of its name, add that IP here. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">ts.net</domain>
     </domain-config>
 </network-security-config>

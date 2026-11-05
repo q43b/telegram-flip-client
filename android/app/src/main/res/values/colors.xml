@@ -6,4 +6,7 @@
     <color name="conn_connected">#FF2E7D32</color>
     <color name="conn_offline">#FFC62828</color>
     <color name="soft_key_bar">#FF424242</color>
+    <color name="tab_bar">#FF212121</color>
+    <color name="tab_active">#FF1565C0</color>
+    <color name="tab_inactive">#FF9E9E9E</color>
 </resources>
