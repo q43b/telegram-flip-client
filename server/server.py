@@ -23,7 +23,7 @@ from telethon.tl import custom
 load_dotenv()
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.8.0-alpha"
+VERSION = "0.9.0-alpha"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -122,6 +122,15 @@ def sender_name(message, sender=None):
         return None
     s = sender if sender is not None else message.sender
     return getattr(s, "first_name", None) or getattr(s, "title", None)
+
+
+def sender_id_of(message, sender=None):
+    """User id of who wrote a message, for opening their profile or a private chat with them
+    from a group. Set exactly where sender_name is, and only for people (not channels)."""
+    if sender_name(message, sender) is None:
+        return None
+    s = sender if sender is not None else message.sender
+    return s.id if isinstance(s, types.User) else None
 
 
 PREVIEW_LENGTH = 100  # the phone shows far less; no need to send whole messages
@@ -255,6 +264,7 @@ async def on_new_message(event):
         "edited": is_edited(event.message),
         "call": None,
         "sender": sender_name(event.message, sender),
+        "sender_id": sender_id_of(event.message, sender),
     })
 
 
@@ -546,6 +556,94 @@ async def get_chats(limit: int = 20, ids: Optional[str] = None):
     return [await chat_json(d) async for d in client.iter_dialogs(limit=limit)]
 
 
+# A person's profile. username and phone are null when not set or hidden by their privacy
+# settings. Asks Telegram each time, so it shows what is visible right now.
+@api.get("/profile/{user_id}")
+@recovering
+async def get_profile(user_id: int):
+    try:
+        user = await client.get_entity(user_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="User not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    if not isinstance(user, types.User):
+        raise HTTPException(status_code=404, detail="Not a person")
+    # Collectible usernames come as a list; the first active one is the main one
+    username = user.username or next((u.username for u in user.usernames or [] if u.active), None)
+    return {
+        "id": user.id,
+        "name": utils.get_display_name(user),
+        "username": username,
+        "phone": f"+{user.phone}" if user.phone else None,
+        "photo": photo_id_of(user),
+        "bot": bool(user.bot),
+    }
+
+
+MAX_MEMBERS = 500  # per request; the app asks for more a page at a time
+
+
+def member_role(participant):
+    """"owner", "admin" or None, for both kinds of groups (Chat* in small old-style groups)."""
+    if isinstance(participant, (types.ChannelParticipantCreator, types.ChatParticipantCreator)):
+        return "owner"
+    if isinstance(participant, (types.ChannelParticipantAdmin, types.ChatParticipantAdmin)):
+        return "admin"
+    return None
+
+
+# A group's (or channel's) info and its first `members` members, as Telegram lists them
+# (recently active first). total is the real member count. members is null where
+# Telegram refuses the list (channels, unless I'm an admin); partial is true where a
+# group hides its members, and Telegram then lists only some of them (the admins).
+@api.get("/group/{chat_id}")
+@recovering
+async def get_group(chat_id: int, members: int = 50):
+    try:
+        entity = await client.get_entity(chat_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    if isinstance(entity, types.User):
+        raise HTTPException(status_code=404, detail="Not a group")
+    info = {
+        "id": chat_id,
+        "name": utils.get_display_name(entity),
+        "photo": photo_id_of(entity),
+        "channel": bool(getattr(entity, "broadcast", False)),
+        "total": getattr(entity, "participants_count", None),
+        "members": None,
+        "partial": False,
+    }
+    # Supergroups and channels: the real count comes only with the full info (where members
+    # are hidden, the member list counts just the few it shows)
+    if isinstance(entity, types.Channel):
+        try:
+            full = (await client(functions.channels.GetFullChannelRequest(entity))).full_chat
+            info["total"] = full.participants_count
+        except errors.RPCError as e:
+            bad_request(e)
+    limit = max(1, min(members, MAX_MEMBERS))
+    try:
+        found = await client.get_participants(entity, limit=limit)
+    except errors.RPCError as e:
+        if is_cluster_error(e):
+            raise
+        return info  # Telegram refuses the list
+    if info["total"] is None:
+        info["total"] = found.total
+    # Fewer than asked for and fewer than there are: Telegram shows only some
+    info["partial"] = len(found) < min(limit, info["total"])
+    info["members"] = [
+        {"id": u.id, "name": utils.get_display_name(u) or "Deleted account", "photo": photo_id_of(u),
+         "role": member_role(getattr(u, "participant", None)), "bot": bool(u.bot)}
+        for u in found
+    ]
+    return info
+
+
 # photo_id (from /chats) lets a saved copy answer without asking Telegram at all
 @api.get("/photo/{chat_id}")
 @recovering
@@ -610,7 +708,7 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
     msgs = [
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
-         "sender": sender_name(m)}
+         "sender": sender_name(m), "sender_id": sender_id_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
