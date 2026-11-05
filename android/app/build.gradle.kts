@@ -21,8 +21,10 @@ android {
         applicationId = "com.q43b.tgflip"
         minSdk = 24
         targetSdk = 37
+        // versionCode must go up with every release, or Android won't install it as an update.
+        // versionName matches the git tag, without the "v" (tag v0.1.0-alpha).
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.1.0-alpha"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

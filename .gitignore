@@ -5,3 +5,5 @@ __pycache__/
 *.session-journal
 *.jks
 *.keystore
+# Release files (APKs, server bundles) to upload to GitHub Releases, not to commit
+dist/
