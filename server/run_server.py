@@ -14,7 +14,7 @@ import sys
 FROZEN = getattr(sys, "frozen", False)  # True inside the packaged exe
 BASE_DIR = os.path.dirname(sys.executable if FROZEN else os.path.abspath(__file__))
 ENV_FILE = os.path.join(BASE_DIR, ".env")
-DEFAULT_PORT = 8000
+DEFAULT_PORT = 9436  # "q43b" in leet; 8000 is often taken by other programs
 
 
 def ask(prompt, required=True):

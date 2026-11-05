@@ -98,6 +98,17 @@ def call_of(message):
     }
 
 
+def sender_name(message, sender=None):
+    """Who wrote a message, shown in groups: their first name (or a channel's title when a
+    channel posts into a group). None for my own messages, private chats and channel posts,
+    where it's clear anyway. Telegram sends the senders along with the messages, so this
+    needs no extra requests; pass sender when it was fetched separately (live events)."""
+    if message.out or message.is_private or getattr(message, "post", False):
+        return None
+    s = sender if sender is not None else message.sender
+    return getattr(s, "first_name", None) or getattr(s, "title", None)
+
+
 PREVIEW_LENGTH = 100  # the phone shows far less; no need to send whole messages
 
 
@@ -120,15 +131,11 @@ def last_message_preview(message):
     else:
         text = message.raw_text or ""
         kind = "text" if text else "media"
-    sender = None
-    if not message.out and not message.is_private and not getattr(message, "post", False):
-        s = message.sender  # comes with the chat list's own data
-        sender = getattr(s, "first_name", None) or getattr(s, "title", None)
     return {
         "text": text[:PREVIEW_LENGTH],
         "out": message.out,
         "date": message.date.isoformat(),
-        "sender": sender,
+        "sender": sender_name(message),
         "kind": kind,
         "call": call,
     }
@@ -217,6 +224,10 @@ async def broadcast(data):
 @client.on(events.NewMessage)
 async def on_new_message(event):
     forget_forum_unread(event.chat_id)
+    try:
+        sender = await event.get_sender()  # usually cached from the update itself
+    except (ValueError, errors.RPCError):
+        sender = None
     await broadcast({
         "type": "message",
         "id": event.id,
@@ -228,6 +239,7 @@ async def on_new_message(event):
         "date": event.date.isoformat(),
         "edited": is_edited(event.message),
         "call": None,
+        "sender": sender_name(event.message, sender),
     })
 
 
@@ -483,7 +495,8 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
         bad_request(e)
     msgs = [
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
-         "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m)}
+         "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
+         "sender": sender_name(m)}
         for m in found
     ]
     return list(reversed(msgs))

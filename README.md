@@ -53,7 +53,7 @@ Later runs just start. Settings and the login stay next to the exe (`.env`, `tg_
 ### 2. The app (Android 7 or newer)
 
 1. Download `TG-Flip-<version>.apk` to the phone and install it (allow installing from unknown sources if asked).
-2. On first start, enter the server: your PC's IP address on the home network (e.g. `192.168.1.20`), port `8000`, and the app token.
+2. On first start, enter the server: your PC's IP address on the home network (e.g. `192.168.1.20`), port `9436`, and the app token.
 
 ### Keys
 
@@ -80,7 +80,7 @@ cd server
 python run_server.py
 ```
 
-`run_server.py` does the same first-run setup as the packaged server. Alternatively, copy `server/.env.example` to `server/.env`, fill it in, and run `uvicorn server:app --host 0.0.0.0` (log in once with `python list_chats.py`).
+`run_server.py` does the same first-run setup as the packaged server. Alternatively, copy `server/.env.example` to `server/.env`, fill it in, and run `uvicorn server:app --host 0.0.0.0 --port 9436` (log in once with `python list_chats.py`).
 
 To build the Windows zip: `pip install -r server\requirements-build.txt`, then `powershell -ExecutionPolicy Bypass -File server\build_server.ps1`. It lands in `dist/`.
 
@@ -101,7 +101,7 @@ server/
   run_server.py            Start script: first-run setup, Telegram login, then the server
   build_server.ps1         Builds the packaged Windows server (PyInstaller)
   packaging/README.txt     The README inside the server zip
-  static/                  The earlier web client, still served at http://<PC>:8000/
+  static/                  The earlier web client, still served at http://<PC>:9436/
   list_chats.py            One-off script: log in and list chats
   listen.py                One-off script: print incoming messages
 docs/screenshots/          Screenshots for this README

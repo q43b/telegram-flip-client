@@ -25,7 +25,7 @@ Later runs just start. Stop the server with Ctrl+C or by closing the window.
 
 In the phone app
 ----------------
-Settings > Local network: this PC's IP address on your home network, port 8000,
+Settings > Local network: this PC's IP address on your home network, port 9436,
 and the app token.
 
 Keep private
