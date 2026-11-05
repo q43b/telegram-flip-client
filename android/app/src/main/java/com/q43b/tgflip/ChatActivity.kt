@@ -38,7 +38,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var messageList: OkListView
     private lateinit var messageAdapter: ArrayAdapter<CharSequence>
     private lateinit var messageInput: EditText
-    private lateinit var readKey: TextView
+    private lateinit var softKeys: SoftKeyBar
     private val messages = mutableListOf<Message>()
     private var messageLimit = PAGE_SIZE  // grows by a page with each "Load older messages"
     private var hasOlder = false  // the "Load older messages" row is shown
@@ -117,10 +117,12 @@ class ChatActivity : AppCompatActivity() {
             if (event.action == KeyEvent.ACTION_UP) sendCurrentText()
             true
         }
-        // The label shows only while there is something to mark as read, as a reminder for F2.
-        // Tapping it works too on a touchscreen.
-        readKey = findViewById(R.id.soft_key_right)
-        readKey.setOnClickListener { markAsRead() }
+        // Soft key labels: "Mark as read (N)" above F1 only while there is something to
+        // mark; "Menu" above F2 always. Tapping them works too on a touchscreen.
+        softKeys = SoftKeyBar(this)
+        softKeys.onLeftTap(::markAsRead)
+        softKeys.onRightTap(::showSoftKeyMenu)
+        softKeys.setRight(getString(R.string.soft_key_menu))
         unread = intent.getIntExtra(EXTRA_UNREAD, 0)
         updateReadKey()
 
@@ -159,14 +161,57 @@ class ChatActivity : AppCompatActivity() {
         super.onStop()
     }
 
-    // Right soft key = mark as read (F2 or SOFT_RIGHT, depending on the phone).
-    // Caught here, before the list or text box sees it; we act on key-up, like sending.
+    // Left soft key = mark as read, right soft key = the soft key menu (F1 / F2, or
+    // SOFT_LEFT / SOFT_RIGHT, depending on the phone). The menu is on the right because the
+    // phone's keyboard app uses F1 while typing. Caught here, before the list sees them;
+    // we act on key-up, like sending.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.isRightSoftKey()) {
+        if (event.isLeftSoftKey()) {
             if (event.action == KeyEvent.ACTION_UP) markAsRead()
             return true
         }
+        if (event.isRightSoftKey()) {
+            if (event.action == KeyEvent.ACTION_UP) showSoftKeyMenu()
+            return true
+        }
         return super.dispatchKeyEvent(event)
+    }
+
+    // F2: Media and Stickers are placeholders for version 2; Quick phrases works
+    private fun showSoftKeyMenu() {
+        val items = listOf(R.string.quick_phrases, R.string.menu_stickers, R.string.menu_media)
+        MessageMenu.choose(this, getString(R.string.soft_key_menu), items.map(::getString)) { which ->
+            when (items[which]) {
+                R.string.quick_phrases -> showQuickPhrases()
+                else -> {
+                    val text = getString(R.string.coming_later)
+                    showStatus(text)
+                    hideStatusLater(text)
+                }
+            }
+        }
+    }
+
+    private fun showQuickPhrases() {
+        val phrases = QuickPhrases(this).load()
+        if (phrases.isEmpty()) {
+            showStatus(getString(R.string.no_quick_phrases))
+            return
+        }
+        val items = phrases.map { MessageFormat.snippet(it, 40) }
+        MessageMenu.choose(this, getString(R.string.quick_phrases), items) { insertPhrase(phrases[it]) }
+    }
+
+    // Puts the phrase into the message box at the cursor (replacing a selection), with a
+    // space in front if it would otherwise stick to the previous word, then focuses the box
+    private fun insertPhrase(phrase: String) {
+        val text = messageInput.text
+        val start = minOf(messageInput.selectionStart, messageInput.selectionEnd).coerceAtLeast(0)
+        val end = maxOf(messageInput.selectionStart, messageInput.selectionEnd).coerceAtLeast(0)
+        val needsSpace = start > 0 && !text[start - 1].isWhitespace()
+        text.replace(start, end, if (needsSpace) " $phrase" else phrase)
+        // On the next frame: the menu dialog is still closing now and could take focus back
+        messageInput.post { messageInput.requestFocus() }
     }
 
     private fun showMessageMenu(message: Message) =
@@ -193,8 +238,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun updateReadKey() {
-        readKey.text = getString(R.string.soft_key_mark_read, unread)
-        readKey.visibility = if (unread > 0) View.VISIBLE else View.GONE
+        softKeys.setLeft(if (unread > 0) getString(R.string.soft_key_mark_read, unread) else null)
     }
 
     // Asks the server for this chat's (or topic's) unread count. Only the chat and topic

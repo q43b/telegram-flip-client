@@ -18,7 +18,8 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Message menu on OK: reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone")
 - Replies show a quote of the original; edited messages show "(edited)"
 - Live updates over a WebSocket (new, edited and deleted messages), with automatic reconnect and a resync afterwards
-- "Mark as read" as a deliberate action on the F2 soft key, so read receipts are never sent by accident; a soft key label shows when there is something to mark
+- "Mark as read" as a deliberate action on the F1 soft key, so read receipts are never sent by accident; a soft key label shows when there is something to mark
+- Quick phrases: saved phrases (set up in Settings) you drop into the message box from the F2 soft key menu, since typing on a keypad is slow
 - Offline reading: the last chats, topics and messages are kept on the phone
 - Connection status bar on every screen
 - Settings: server address per connection mode (local network, VPN, public internet over HTTPS), app token, theme (light, dark, follow phone)
@@ -63,7 +64,8 @@ Later runs just start. Settings and the login stay next to the exe (`.env`, `tg_
 | OK | Open chat (or topic list) | Message menu; in the text box: send | Choose |
 | Right | Open Settings | | |
 | Left | | | Close Settings |
-| F2 (right soft key) | Open a forum's General topic | Mark as read | |
+| F1 (left soft key) | | Mark as read | |
+| F2 (right soft key) | Open a forum's General topic | Menu: quick phrases (media and stickers to come) | |
 | Back | | Cancel a reply or edit, otherwise leave | Go back |
 
 ## Building from source

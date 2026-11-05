@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var chatList: ListView
     private lateinit var chatAdapter: ArrayAdapter<CharSequence>
     private var previewColor = Color.GRAY  // the theme's secondary text color, set in onCreate
-    private lateinit var softKey: TextView
+    private lateinit var softKeys: SoftKeyBar
     private var chats: List<Chat> = emptyList()
     private var chatLimit = PAGE_SIZE  // grows by a page with each "Show more chats"
     private var settingsDialog: AlertDialog? = null
@@ -79,9 +79,8 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) = updateSoftKey()
         }
 
-        softKey = findViewById(R.id.soft_key_right)
-        softKey.setText(R.string.soft_key_general)
-        softKey.setOnClickListener { selectedChat()?.let(::openGeneral) }
+        softKeys = SoftKeyBar(this)
+        softKeys.onRightTap { selectedChat()?.let(::openGeneral) }
 
         setUpTabBar(Tab.CHATS) { SettingsActivity.start(this) }
     }
@@ -104,7 +103,7 @@ class MainActivity : AppCompatActivity() {
     private fun selectedChat(): Chat? = chats.getOrNull(chatList.selectedItemPosition)
 
     private fun updateSoftKey() {
-        softKey.visibility = if (selectedChat()?.forum == true) View.VISIBLE else View.GONE
+        softKeys.setRight(if (selectedChat()?.forum == true) getString(R.string.soft_key_general) else null)
     }
 
     private fun openChat(chat: Chat) {

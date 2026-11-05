@@ -50,7 +50,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     // Row 0: which connection mode is active. Rows 1..3: each mode's server.
-    // Last row: theme. The chat list reconnects with the new values when shown again.
+    // Then theme and quick phrases. The chat list reconnects with new server values when
+    // shown again.
     private fun rows(): List<String> {
         val modes = ConnectionMode.entries.map { mode ->
             // The address without "http(s)://", as host:port
@@ -60,7 +61,8 @@ class SettingsActivity : AppCompatActivity() {
         val theme = getString(ThemeSetting.label(ThemeSetting.load(this)))
         return listOf(getString(R.string.setting_mode, getString(settings.getMode().label))) +
             modes +
-            getString(R.string.setting_theme, theme)
+            getString(R.string.setting_theme, theme) +
+            getString(R.string.setting_quick_phrases, QuickPhrases(this).load().size)
     }
 
     private fun open(position: Int) {
@@ -83,6 +85,7 @@ class SettingsActivity : AppCompatActivity() {
                 // Android redraws this screen in the new theme, which also refreshes the rows
                 ThemeSetting.save(this, ThemeSetting.choices[which].first)
             }
+            modes.size + 2 -> QuickPhrasesEditor.show(this, ::refreshRows)
         }
     }
 
