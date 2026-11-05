@@ -1,6 +1,11 @@
 package com.q43b.tgflip
 
+import android.graphics.Color
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.TextUtils
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.view.KeyEvent
 import android.view.View
 import android.widget.AdapterView
@@ -26,7 +31,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var connection: TextView
     private lateinit var status: TextView
     private lateinit var chatList: ListView
-    private lateinit var chatAdapter: ArrayAdapter<String>
+    private lateinit var chatAdapter: ArrayAdapter<CharSequence>
+    private var previewColor = Color.GRAY  // the theme's secondary text color, set in onCreate
     private lateinit var softKey: TextView
     private var chats: List<Chat> = emptyList()
     private var chatLimit = PAGE_SIZE  // grows by a page with each "Show more chats"
@@ -51,6 +57,10 @@ class MainActivity : AppCompatActivity() {
 
         settings = ServerSettings(this)
         cache = LocalCache(this)
+        // Gray that suits both light and dark theme
+        val attrs = obtainStyledAttributes(intArrayOf(android.R.attr.textColorSecondary))
+        previewColor = attrs.getColor(0, Color.GRAY)
+        attrs.recycle()
         connection = findViewById(R.id.connection)
         status = findViewById(R.id.status)
         chatList = findViewById(R.id.chat_list)
@@ -200,10 +210,30 @@ class MainActivity : AppCompatActivity() {
         updateSoftKey()
     }
 
-    // "Name (3)"; topic groups get a "›" because they open a list of topics
-    private fun chatRow(chat: Chat): String {
+    // "Name (3)"; topic groups get a "›" because they open a list of topics.
+    // Below it, smaller and grayed, the newest message: "14:05 Anna: hi there…"
+    private fun chatRow(chat: Chat): CharSequence {
         val name = if (chat.forum) "${chat.name} ›" else chat.name
-        return if (chat.unread > 0) "$name (${chat.unread})" else name
+        val title = if (chat.unread > 0) "$name (${chat.unread})" else name
+        val last = chat.last ?: return title
+        val preview = SpannableString(previewLine(last))
+        preview.setSpan(RelativeSizeSpan(0.8f), 0, preview.length, 0)
+        preview.setSpan(ForegroundColorSpan(previewColor), 0, preview.length, 0)
+        return TextUtils.concat(title, "\n", preview)
+    }
+
+    private fun previewLine(last: LastMessage): String {
+        val body = when (last.kind) {
+            "media" -> getString(R.string.media)
+            "event" -> getString(R.string.event)
+            else -> MessageFormat.snippet(last.text, PREVIEW_LENGTH)
+        }
+        val who = when {
+            last.out -> "${getString(R.string.you)}: "
+            last.sender != null -> "${MessageFormat.snippet(last.sender, SENDER_LENGTH)}: "
+            else -> ""
+        }
+        return "${MessageFormat.time(last.date)} $who$body"
     }
 
     private fun showConnection(state: LiveConnection.Status) {
@@ -217,9 +247,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onServerEvent(event: JSONObject) {
-        // A new message or a read elsewhere changes unread counts and order
+        // A new message or a read elsewhere changes unread counts and order;
+        // edits and deletes can change the newest message shown in the preview
         when (event.optString("type")) {
-            "message", "read" -> loadChats(quiet = true)
+            "message", "read", "edited", "deleted" -> loadChats(quiet = true)
         }
     }
 
@@ -242,5 +273,7 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val PAGE_SIZE = 20
+        const val PREVIEW_LENGTH = 32  // about one line of the small preview text
+        const val SENDER_LENGTH = 12
     }
 }

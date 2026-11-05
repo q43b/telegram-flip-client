@@ -40,6 +40,7 @@
     <string name="no_messages">No messages</string>
     <string name="load_older">Load older messages…</string>
     <string name="media">[media]</string>
+    <string name="event">[event]</string>
     <string name="you">You</string>
     <string name="message_hint">Message</string>
     <string name="action_reply">Reply</string>

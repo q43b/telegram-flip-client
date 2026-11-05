@@ -4,10 +4,18 @@ import org.json.JSONObject
 
 // One row from GET /chats. Telegram ids can be larger than Int, so id is a Long.
 // forum = a group split into topics; it opens a topic list instead of messages.
-data class Chat(val id: Long, val name: String, val unread: Int, val forum: Boolean) {
+// last = the newest message, for the preview line (in a forum: of any topic).
+data class Chat(
+    val id: Long,
+    val name: String,
+    val unread: Int,
+    val forum: Boolean,
+    val last: LastMessage? = null,
+) {
     // Same keys as the server sends, so saved chats read back with fromJson
-    fun toJson(): JSONObject =
-        JSONObject().put("id", id).put("name", name).put("unread", unread).put("forum", forum)
+    fun toJson(): JSONObject = JSONObject()
+        .put("id", id).put("name", name).put("unread", unread).put("forum", forum)
+        .put("last", last?.toJson() ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = Chat(
@@ -15,6 +23,31 @@ data class Chat(val id: Long, val name: String, val unread: Int, val forum: Bool
             name = if (json.isNull("name")) "" else json.getString("name"),
             unread = json.getInt("unread"),
             forum = json.optBoolean("forum"),
+            last = json.optJSONObject("last")?.let(LastMessage::fromJson),
+        )
+    }
+}
+
+// kind: "text", "media" (no text, e.g. a photo) or "event" (joined, pinned, ...).
+// sender: who wrote it, only for other people's messages in groups.
+data class LastMessage(
+    val text: String,
+    val out: Boolean,
+    val date: String,
+    val sender: String?,
+    val kind: String,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("text", text).put("out", out).put("date", date)
+        .put("sender", sender ?: JSONObject.NULL).put("kind", kind)
+
+    companion object {
+        fun fromJson(json: JSONObject) = LastMessage(
+            text = json.optString("text"),
+            out = json.optBoolean("out"),
+            date = json.optString("date"),
+            sender = if (json.isNull("sender")) null else json.getString("sender"),
+            kind = json.optString("kind", "text"),
         )
     }
 }

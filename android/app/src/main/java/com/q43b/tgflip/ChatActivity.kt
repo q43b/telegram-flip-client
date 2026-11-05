@@ -3,7 +3,6 @@ package com.q43b.tgflip
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.text.format.DateUtils
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -24,10 +23,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
-import java.text.ParseException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 // Shows one chat's latest messages and adds new ones live.
 // Opening a chat does not mark it as read: that sends a read receipt, so it stays a deliberate action.
@@ -70,9 +65,6 @@ class ChatActivity : AppCompatActivity() {
     private var live: LiveConnection? = null
     private var wasConnected = false
 
-    private val serverDate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
-    private val timeOnly = SimpleDateFormat("HH:mm", Locale.getDefault())
-    private val dayAndTime = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -406,7 +398,7 @@ class ChatActivity : AppCompatActivity() {
                 messageInput.text.clear()
                 cancelCompose()
                 status.visibility = View.GONE
-                val sent = Message(id, text, out = true, date = serverDate.format(Date()), replyToId = replyToId)
+                val sent = Message(id, text, out = true, date = MessageFormat.now(), replyToId = replyToId)
                 addMessage(sent, follow = true)
             } catch (e: IOException) {
                 // The text stays in the box, so OK again retries
@@ -557,21 +549,10 @@ class ChatActivity : AppCompatActivity() {
     }
 
     // The start of a message on one line, for quotes, the reply bar and menu titles
-    private fun snippet(message: Message): String {
-        val text = message.text.ifEmpty { getString(R.string.media) }.replace('\n', ' ')
-        return if (text.length > SNIPPET_LENGTH) text.take(SNIPPET_LENGTH) + "…" else text
-    }
+    private fun snippet(message: Message): String =
+        MessageFormat.snippet(message.text.ifEmpty { getString(R.string.media) }, SNIPPET_LENGTH)
 
-    // "14:05" for today, "03.11 14:05" for older days, in the phone's time zone
-    private fun formatDate(date: String): String {
-        return try {
-            // The server may add fractions of a second; the parser does not need them
-            val parsed = serverDate.parse(date.replace(Regex("\\.\\d+"), "")) ?: return ""
-            if (DateUtils.isToday(parsed.time)) timeOnly.format(parsed) else dayAndTime.format(parsed)
-        } catch (e: ParseException) {
-            ""
-        }
-    }
+    private fun formatDate(date: String) = MessageFormat.time(date)
 
     companion object {
         private const val EXTRA_CHAT_ID = "chat_id"
