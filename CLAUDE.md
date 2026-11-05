@@ -18,7 +18,7 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 - Android project created here (Kotlin, Empty Views Activity; build.gradle.kts has minSdk 24).
 - Builds: dev builds (`installDebug`, what Claude installs for testing) are a separate app, `com.q43b.tgflip.debug`, named "TG Flip (dev)", so they sit next to the release. Release builds (`assembleRelease`) are signed with the owner's key via `android/keystore.properties` (git-ignored; template `keystore.properties.example`); without that file they come out unsigned. Never read, print or commit the keystore or its passwords.
 - The WebView proof of concept (commit a685194) was replaced by native screens. Do not bring it back.
-- Native chat list works on the phone: `ListView` + OkHttp (`ApiClient.kt`), address and token in SharedPreferences (`ServerSettings.kt`). No d-pad double-move in the native list.
+- Native chat list works on the phone: `ListView` + OkHttp (`ApiClient.kt`), address and token in SharedPreferences (`ServerSettings.kt`). No d-pad double-move in the native list. Each row has a smaller gray preview line ("14:05 Anna: hi…") from `/chats` `last`; time and snippet formatting is shared in `MessageFormat.kt`.
 - Live connection: `LiveConnection.kt` keeps the WebSocket open (reconnect with backoff), drives a status bar at the top, and refetches chats on events and after reconnects.
 - Chat screen (`ChatActivity.kt`): OK on a chat opens its last 20 messages, new ones arrive live. Opening does not mark as read. A "Load older messages…" row at the top raises the `/messages` limit by 20 and keeps the previous top message highlighted (the row shifts message positions by one: use `messageAt`). For General, the server scans `max(200, limit × 10)` messages.
 - Sending: a text box under the messages; OK sends via POST /send. The sent message shows at once (deduplicated by id against the live event).
@@ -47,7 +47,7 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 
 ## Server API (plain HTTP on the home network; the PC has a fixed LAN IP; port 8000)
 - Auth: every HTTP request needs the header `x-token: <API_TOKEN>`. The token is never hardcoded in the repo.
-- `GET /chats?limit=20` -> `[{id, name, unread, forum}]` (`forum`: group split into topics)
+- `GET /chats?limit=20` -> `[{id, name, unread, forum, last}]` (`forum`: group split into topics; `last`: `{text, out, date, sender, kind}` or null, the dialog's newest message, in a forum of any topic; `kind` text/media/event; `sender` only for others' messages in groups; comes with the dialog list, no extra requests)
 - `GET /topics/{chat_id}?limit=50` -> `[{id, title, unread}]` for a forum group; General is id 1
 - `GET /messages/{chat_id}?limit=20[&topic_id=N]` -> `[{id, text, out, date, reply_to_id}]`, oldest first (`reply_to_id` null if not a reply)
 - `POST /send` with JSON `{chat_id, text, topic_id?, reply_to_id?}` -> `{id}`

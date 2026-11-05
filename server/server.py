@@ -75,6 +75,37 @@ def is_edited(message):
     return message.edit_date is not None and not message.edit_hide
 
 
+PREVIEW_LENGTH = 100  # the phone shows far less; no need to send whole messages
+
+
+def last_message_preview(message):
+    """The chat list's preview line: {text, out, date, sender, kind}, or None.
+
+    It comes with the chat list itself (each dialog's last message, in a forum group the
+    newest of any topic), so it costs no extra requests. kind: "text", "media" (no text,
+    e.g. a photo or sticker) or "event" (joined, pinned, ...). sender: who wrote it, only
+    for other people's messages in groups; None in private chats and channel posts.
+    """
+    if message is None:
+        return None
+    if isinstance(message, types.MessageService):
+        text, kind = "", "event"
+    else:
+        text = message.raw_text or ""
+        kind = "text" if text else "media"
+    sender = None
+    if not message.out and not message.is_private and not getattr(message, "post", False):
+        s = message.sender  # comes with the chat list's own data
+        sender = getattr(s, "first_name", None) or getattr(s, "title", None)
+    return {
+        "text": text[:PREVIEW_LENGTH],
+        "out": message.out,
+        "date": message.date.isoformat(),
+        "sender": sender,
+        "kind": kind,
+    }
+
+
 # Telegram's server settings, including how long messages can be edited and deleted
 # for everyone. Asked once; they rarely change.
 telegram_config = None
@@ -238,7 +269,11 @@ async def recover():
 
 
 def recovering(endpoint):
-    """Wraps an endpoint: on MTPROTO_CLUSTER_INVALID, reconnect and try once more."""
+    """Wraps an endpoint: on MTPROTO_CLUSTER_INVALID, reconnect and try once more.
+
+    Requests still waiting on Telegram when another request's recover() disconnects get
+    cancelled by Telethon; those wait for that recovery and retry too.
+    """
     @functools.wraps(endpoint)  # keeps the signature, which FastAPI reads
     async def wrapper(*args, **kwargs):
         try:
@@ -246,7 +281,12 @@ def recovering(endpoint):
         except errors.RPCError as e:
             if not is_cluster_error(e):
                 raise
-        await recover()
+        except asyncio.CancelledError:
+            task = asyncio.current_task()
+            if task is not None and task.cancelling():
+                raise  # this request itself was cancelled (e.g. the phone hung up)
+            # Otherwise only Telethon's pending request was cancelled, by a reconnect
+        await recover()  # waits for a recovery already under way, then skips its own
         return await endpoint(*args, **kwargs)
     return wrapper
 
@@ -334,6 +374,7 @@ async def get_chats(limit: int = 20):
             "name": d.name,
             "unread": await forum_unread(d) if forum else d.unread_count,
             "forum": forum,
+            "last": last_message_preview(d.message),
         })
     return chats
 
