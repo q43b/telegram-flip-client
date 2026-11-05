@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.SpannableString
+import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.view.KeyEvent
@@ -49,6 +50,7 @@ class ChatActivity : AppCompatActivity() {
     private val messageActions = listOf(
         // Call records can only be deleted: Telegram refuses replies to them and forwarding them
         MessageAction(R.string.action_reply, isAvailable = { it.call == null }, perform = ::startReply),
+        MessageAction(R.string.action_go_to_original, isAvailable = { it.replyToId != null }, perform = ::goToOriginal),
         // Own text messages only; Telegram itself refuses edits after its time limit
         MessageAction(R.string.action_edit, isAvailable = { it.out && it.text.isNotEmpty() }, perform = ::startEdit),
         MessageAction(R.string.action_forward, isAvailable = { it.call == null }, perform = ::startForward),
@@ -235,6 +237,42 @@ class ChatActivity : AppCompatActivity() {
     private fun loadOlder() {
         messageLimit += PAGE_SIZE
         loadMessages(quiet = false, keepId = messages.firstOrNull()?.id)
+    }
+
+    // From the message menu, on a reply: highlight the message it replies to. If it isn't
+    // loaded yet, load older pages until it shows up (at most MAX_SEARCH_PAGES), keeping
+    // the highlight on the reply meanwhile.
+    private fun goToOriginal(reply: Message) {
+        val originalId = reply.replyToId ?: return
+        if (highlight(originalId)) return
+        lifecycleScope.launch {
+            showStatus(getString(R.string.searching_original))
+            for (page in 1..MAX_SEARCH_PAGES) {
+                messageLimit += PAGE_SIZE
+                val loaded = try {
+                    withContext(Dispatchers.IO) {
+                        api.getMessages(chatId, topicId, messageLimit).also { cache.saveMessages(chatId, topicId, it) }
+                    }
+                } catch (e: IOException) {
+                    showStatus(getString(R.string.error_no_server))
+                    return@launch
+                }
+                val found = loaded.any { it.id == originalId }
+                showMessages(loaded, keepId = if (found) originalId else reply.id)
+                if (found) return@launch  // showMessages also hid the status line
+                if (!hasOlder) break  // reached the start of the chat
+            }
+            showStatus(getString(R.string.original_not_found))
+        }
+    }
+
+    // Moves the highlight to a loaded message; false if it isn't loaded
+    private fun highlight(id: Long): Boolean {
+        val index = messages.indexOfFirst { it.id == id }
+        if (index < 0) return false
+        messageList.setSelection(index + headerRows)
+        messageList.requestFocus()
+        return true
     }
 
     // keepId: the message to highlight afterwards; null = the newest, at the bottom
@@ -544,6 +582,7 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // "14:05 You: hi" / "14:05 Anna: hi" (others in groups, name in bold) / "14:05 hi" (private).
     // A reply gets a first line quoting the start of the original, if it is loaded.
     // Edited messages get "(edited)" after the time. Calls get their own colored line.
     private fun formatMessage(message: Message): CharSequence {
@@ -551,10 +590,20 @@ class ChatActivity : AppCompatActivity() {
         if (call != null) return formatCall(message, call)
         val text = message.text.ifEmpty { getString(R.string.media) }
         val time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
-        val line = if (message.out) "$time ${getString(R.string.you)}: $text" else "$time $text"
+        val line = SpannableStringBuilder("$time ")
+        val sender = message.sender
+        when {
+            message.out -> line.append("${getString(R.string.you)}: ")
+            sender != null -> {
+                val start = line.length
+                line.append("${MessageFormat.snippet(sender, SENDER_LENGTH)}: ")
+                line.setSpan(StyleSpan(Typeface.BOLD), start, line.length, 0)
+            }
+        }
+        line.append(text)
         val replyToId = message.replyToId ?: return line
         val quoted = messages.find { it.id == replyToId }?.let(::snippet) ?: "…"
-        return "↪ $quoted\n$line"
+        return SpannableStringBuilder("↪ $quoted\n").append(line)
     }
 
     // "14:05 ☎ Missed call" in italics: red when someone's call went unanswered, else blue
@@ -582,7 +631,9 @@ class ChatActivity : AppCompatActivity() {
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_UNREAD = "unread"
         private const val SNIPPET_LENGTH = 30
+        private const val SENDER_LENGTH = 16
         private const val PAGE_SIZE = 20
+        private const val MAX_SEARCH_PAGES = 10  // "Go to original" looks at most this far back
 
         // topic = null for an ordinary chat; otherwise one topic of a forum group
         fun start(context: Context, chat: Chat, topic: Topic? = null) {

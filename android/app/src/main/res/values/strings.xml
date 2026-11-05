@@ -57,6 +57,9 @@
     <string name="message_hint">Message</string>
     <string name="action_reply">Reply</string>
     <string name="replying_to">↪ Replying to: %1$s (Back = cancel)</string>
+    <string name="action_go_to_original">Go to original</string>
+    <string name="searching_original">Looking for the original…</string>
+    <string name="original_not_found">Original not found (deleted, or too far back)</string>
     <string name="action_edit">Edit</string>
     <string name="action_forward">Forward</string>
     <string name="action_delete">Delete</string>
