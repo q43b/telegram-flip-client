@@ -62,6 +62,31 @@ class ApiClient(private val baseUrl: String, val token: String) {
         call(Request.Builder().url(url).post("".toRequestBody(null)))
     }
 
+    fun editMessage(chatId: Long, messageId: Long, text: String) {
+        val body = JSONObject().put("chat_id", chatId).put("message_id", messageId).put("text", text)
+        call(Request.Builder().url("$baseUrl/edit").post(body.toString().toRequestBody(JSON)))
+    }
+
+    // Which deletes Telegram allows for this message (depends on chat type, age, admin rights)
+    fun getDeleteOptions(chatId: Long, messageId: Long): DeleteOptions {
+        val json = JSONObject(call(Request.Builder().url("$baseUrl/delete_options/$chatId/$messageId")))
+        return DeleteOptions(json.getBoolean("for_me"), json.getBoolean("for_everyone"))
+    }
+
+    // forEveryone = also remove it for the other side (Telegram calls this "revoke")
+    fun deleteMessage(chatId: Long, messageId: Long, forEveryone: Boolean) {
+        val body = JSONObject().put("chat_id", chatId).put("message_id", messageId).put("revoke", forEveryone)
+        call(Request.Builder().url("$baseUrl/delete").post(body.toString().toRequestBody(JSON)))
+    }
+
+    // Returns the forwarded copy's id
+    fun forwardMessage(fromChatId: Long, messageId: Long, toChatId: Long): Long {
+        val body = JSONObject().put("from_chat_id", fromChatId).put("message_id", messageId)
+            .put("to_chat_id", toChatId)
+        val request = Request.Builder().url("$baseUrl/forward").post(body.toString().toRequestBody(JSON))
+        return JSONObject(call(request)).getLong("id")
+    }
+
     private fun topicParam(topicId: Long?, separator: String) =
         if (topicId == null) "" else "${separator}topic_id=$topicId"
 
@@ -79,3 +104,5 @@ class ApiClient(private val baseUrl: String, val token: String) {
 }
 
 class BadTokenException : IOException("Bad token")
+
+data class DeleteOptions(val forMe: Boolean, val forEveryone: Boolean)

@@ -22,8 +22,8 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 - Sending: a text box under the messages; OK sends via POST /send. The sent message shows at once (deduplicated by id against the live event).
 - Key plan: OK opens chats and sends. Right soft key (F2) = mark as read, as in `../server/static/index.html`. Left soft key (F1) is reserved for sticker/media sending, much later.
 - Mark as read: F2 / SOFT_RIGHT in the chat screen posts to /read. A soft key label "Mark as read (N)" shows only while the chat has unread messages; F2 does nothing otherwise. The count comes from the list, +1 per live incoming message, and is refetched from /chats (or /topics) on open, reconnect and "read" events.
-- Message menu (`MessageMenu.kt`): OK on a message opens a list of `MessageAction`s (label, isAvailable, perform), declared in `ChatActivity.messageActions`. Now: Reply. Planned: forward, reaction, delete, edit (own messages only, via isAvailable).
-- Reply: shows a "Replying to" line above the box; Back cancels it. Replies show a "↪ quote" first line when the original is loaded.
+- Message menu (`MessageMenu.kt`): OK on a message opens a list of `MessageAction`s (label, isAvailable, perform), declared in `ChatActivity.messageActions`. Now: Reply, Edit (own text messages), Forward (pick a chat), Delete (asks the server which of "for me" / "for everyone" Telegram allows). Planned: reactions.
+- Compose bar above the box: "Replying to" or "Editing"; Back cancels it. Replies show a "↪ quote" first line when the original is loaded; edited messages show "(edited)" after the time.
 - Offline cache (`LocalCache.kt`): the last chats, topics and messages (newest 100 per chat/topic) are saved as JSON files in `noBackupFilesDir` (kept out of phone backups). Screens show the saved copy first, then replace it with fresh data; offline they say "Offline: showing saved copy".
 - Older chats: a "Show more chats…" row at the end of the list raises the `/chats` limit by 20 each time (live refreshes keep the bigger limit).
 - Forum groups (groups split into topics): marked "›" in the list; OK opens `TopicsActivity.kt`, OK on a topic opens `ChatActivity` for that topic. In the list, F2 on a forum opens its General topic directly (soft key label "Open General").
@@ -46,9 +46,16 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 - `POST /send` with JSON `{chat_id, text, topic_id?, reply_to_id?}` -> `{id}`
 - `POST /read/{chat_id}[?topic_id=N]` -> `{ok: true}` (this sends a read receipt, so it must stay a deliberate user action)
 - Without `topic_id`, every endpoint works on the whole chat, as before.
+- Messages also carry `edited` (true = show "(edited)"; from Telegram's edit_date, unless edit_hide).
+- `POST /edit` `{chat_id, message_id, text}` -> `{ok}` (400 when too old: Telegram's edit_time_limit)
+- `GET /delete_options/{chat_id}/{message_id}` -> `{for_me, for_everyone}`, worked out from chat type, message age and owner, admin rights, and Telegram's config (revoke_pm_time_limit, revoke_pm_inbox, revoke_time_limit). Supergroups/channels have no "for me".
+- `POST /delete` `{chat_id, message_id, revoke}` -> `{ok}` (`revoke` = for everyone)
+- `POST /forward` `{from_chat_id, message_id, to_chat_id}` -> `{id}` (into a forum: lands in General)
 - `WebSocket /ws`: the first text message must be the token (the server closes the connection after 5 seconds without it). The server then pushes JSON:
   - `{type: "message", id, chat_id, topic_id, reply_to_id, text, out, date}` (`topic_id` is null in ordinary chats and in General)
   - `{type: "read", chat_id}` (read state changed in another client; refetch `/chats`)
+  - `{type: "edited", id, chat_id, text, edited}`
+  - `{type: "deleted", chat_id, ids}` (`chat_id` is null outside channels/supergroups; there ids are unique per account)
 - After a WebSocket reconnect, refetch current state (chats and the open chat's messages).
 
 ## Constraints and decisions

@@ -46,13 +46,19 @@ class ChatActivity : AppCompatActivity() {
     // Entries of the menu that OK on a message opens. New message features go here.
     private val messageActions = listOf(
         MessageAction(R.string.action_reply, perform = ::startReply),
+        // Own text messages only; Telegram itself refuses edits after its time limit
+        MessageAction(R.string.action_edit, isAvailable = { it.out && it.text.isNotEmpty() }, perform = ::startEdit),
+        MessageAction(R.string.action_forward, perform = ::startForward),
+        MessageAction(R.string.action_delete, perform = ::startDelete),
     )
 
-    private lateinit var replyBar: TextView
+    // What the message box does next: a plain message, a reply, or an edit.
+    // The bar above the box says which; Back cancels it instead of leaving the chat.
+    private lateinit var composeBar: TextView
     private var replyingTo: Message? = null
-    // While replying, Back cancels the reply instead of leaving the chat
-    private val cancelReplyOnBack = object : OnBackPressedCallback(false) {
-        override fun handleOnBackPressed() = cancelReply()
+    private var editing: Message? = null
+    private val cancelComposeOnBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = cancelCompose()
     }
 
     private lateinit var api: ApiClient
@@ -102,8 +108,8 @@ class ChatActivity : AppCompatActivity() {
         messageList.setOnItemClickListener { _, _, position, _ ->
             messages.getOrNull(position)?.let(::showMessageMenu)
         }
-        replyBar = findViewById(R.id.reply_bar)
-        onBackPressedDispatcher.addCallback(this, cancelReplyOnBack)
+        composeBar = findViewById(R.id.compose_bar)
+        onBackPressedDispatcher.addCallback(this, cancelComposeOnBack)
 
         // OK on the keypad sends. We act on key-up and swallow key-down too,
         // so one press can never send twice.
@@ -266,12 +272,38 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun onServerEvent(event: JSONObject) {
+        val type = event.optString("type")
+        if (type == "deleted") {
+            onLiveDelete(event)  // may come without a chat_id
+            return
+        }
         if (event.optLong("chat_id") != chatId) return
-        when (event.optString("type")) {
+        when (type) {
             "message" -> if (isInThisTopic(event)) onLiveMessage(event)
+            "edited" -> onLiveEdit(event)
             "read" -> refreshUnread()  // read on another device, maybe only partly
         }
     }
+
+    // Edited here or on another device. Only messages on screen are updated.
+    private fun onLiveEdit(event: JSONObject) {
+        val id = event.optLong("id")
+        val old = messages.find { it.id == id } ?: return
+        replaceMessage(old.copy(text = event.optString("text"), edited = event.optBoolean("edited")))
+    }
+
+    // Telegram names the chat only for channels and supergroups. Without a chat_id the
+    // ids belong to private chats or basic groups, where message ids are unique across
+    // the whole account, but they could clash with a channel's own numbering.
+    private fun onLiveDelete(event: JSONObject) {
+        val inThisChat = if (event.isNull("chat_id")) !isChannel() else event.optLong("chat_id") == chatId
+        if (!inThisChat) return
+        val ids = event.optJSONArray("ids") ?: return
+        removeMessages(List(ids.length()) { ids.getLong(it) }.toSet())
+    }
+
+    // Telegram ("marked") ids of channels and supergroups start at -1000000000000
+    private fun isChannel() = chatId <= -1_000_000_000_000L
 
     // The server sends topic_id null for ordinary chats and for a forum's General topic
     private fun isInThisTopic(event: JSONObject): Boolean {
@@ -302,15 +334,47 @@ class ChatActivity : AppCompatActivity() {
         messages.add(message)
         messageAdapter.add(formatMessage(message))
         if (follow) messageList.setSelection(messageAdapter.count - 1)
-        // Keep the saved copy current; save a snapshot, since the list keeps changing
-        val snapshot = messages.toList()
-        lifecycleScope.launch(Dispatchers.IO) { cache.saveMessages(chatId, topicId, snapshot) }
+        saveMessages()
         return true
     }
 
+    private fun replaceMessage(updated: Message) {
+        val index = messages.indexOfFirst { it.id == updated.id }
+        if (index < 0) return
+        messages[index] = updated
+        refreshRows()  // also refreshes replies quoting it
+        saveMessages()
+    }
+
+    private fun removeMessages(ids: Set<Long>) {
+        if (messages.none { it.id in ids }) return
+        messages.removeAll { it.id in ids }
+        if (replyingTo?.id in ids || editing?.id in ids) cancelCompose()
+        refreshRows()
+        saveMessages()
+    }
+
+    // Rebuilds every row; the list keeps the highlight on the same position
+    private fun refreshRows() {
+        messageAdapter.clear()
+        messageAdapter.addAll(messages.map(::formatMessage))
+    }
+
+    // Keeps the saved copy current; saves a snapshot, since the list keeps changing
+    private fun saveMessages() {
+        val snapshot = messages.toList()
+        lifecycleScope.launch(Dispatchers.IO) { cache.saveMessages(chatId, topicId, snapshot) }
+    }
+
+    // OK in the box: saves the edit, or sends a new message (maybe as a reply)
     private fun sendCurrentText() {
         val text = messageInput.text.toString().trim()
         if (text.isEmpty() || sending) return
+        val editing = editing
+        if (editing != null) {
+            saveEdit(editing, text)
+            return
+        }
 
         sending = true
         showStatus(getString(R.string.sending))
@@ -319,7 +383,7 @@ class ChatActivity : AppCompatActivity() {
             try {
                 val id = withContext(Dispatchers.IO) { api.sendMessage(chatId, topicId, text, replyToId) }
                 messageInput.text.clear()
-                cancelReply()
+                cancelCompose()
                 status.visibility = View.GONE
                 val sent = Message(id, text, out = true, date = serverDate.format(Date()), replyToId = replyToId)
                 addMessage(sent, follow = true)
@@ -332,26 +396,139 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    private fun saveEdit(message: Message, text: String) {
+        sending = true
+        showStatus(getString(R.string.saving_edit))
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.editMessage(chatId, message.id, text) }
+                cancelCompose()
+                status.visibility = View.GONE
+                // The live "edited" event will confirm this; showing it now feels instant
+                replaceMessage(message.copy(text = text, edited = true))
+            } catch (e: IOException) {
+                // Text stays in the box: fix it and OK again, or Back to give up
+                showStatus(getString(R.string.error_edit))
+            } finally {
+                sending = false
+            }
+        }
+    }
+
     // From the message menu: the next message sent from the box replies to this one
     private fun startReply(message: Message) {
+        cancelCompose()
         replyingTo = message
-        replyBar.text = getString(R.string.replying_to, snippet(message))
-        replyBar.visibility = View.VISIBLE
-        cancelReplyOnBack.isEnabled = true
+        showComposeBar(getString(R.string.replying_to, snippet(message)))
+    }
+
+    // From the message menu: the box gets the message's text; OK saves the change
+    private fun startEdit(message: Message) {
+        cancelCompose()
+        editing = message
+        messageInput.setText(message.text)
+        messageInput.setSelection(messageInput.text.length)  // cursor at the end
+        showComposeBar(getString(R.string.editing, snippet(message)))
+    }
+
+    private fun showComposeBar(text: String) {
+        composeBar.text = text
+        composeBar.visibility = View.VISIBLE
+        cancelComposeOnBack.isEnabled = true
         // On the next frame: the menu dialog is still closing now and could take focus back
         messageInput.post { messageInput.requestFocus() }
     }
 
-    private fun cancelReply() {
+    private fun cancelCompose() {
+        if (editing != null) messageInput.text.clear()  // it held the old text, not a draft
         replyingTo = null
-        replyBar.visibility = View.GONE
-        cancelReplyOnBack.isEnabled = false
+        editing = null
+        composeBar.visibility = View.GONE
+        cancelComposeOnBack.isEnabled = false
     }
 
-    // A reply gets a first line quoting the start of the original, if it is loaded
+    // From the message menu: pick a chat from the list, then forward there
+    private fun startForward(message: Message) {
+        lifecycleScope.launch {
+            // Fresh list if the server answers, otherwise the saved one
+            val targets = withContext(Dispatchers.IO) {
+                try {
+                    api.getChats()
+                } catch (e: IOException) {
+                    cache.loadChats()
+                }
+            }.orEmpty()
+            if (targets.isEmpty()) {
+                showStatus(getString(R.string.error_no_server))
+                return@launch
+            }
+            MessageMenu.choose(this@ChatActivity, getString(R.string.forward_title), targets.map { it.name }) {
+                forward(message, targets[it])
+            }
+        }
+    }
+
+    // Into a topic group, Telegram puts it in General
+    private fun forward(message: Message, target: Chat) {
+        showStatus(getString(R.string.forwarding))
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.forwardMessage(chatId, message.id, target.id) }
+                val done = getString(R.string.forwarded_to, target.name)
+                showStatus(done)
+                hideStatusLater(done)
+            } catch (e: IOException) {
+                showStatus(getString(R.string.error_forward))
+            }
+        }
+    }
+
+    // From the message menu: ask the server which deletes Telegram allows, then offer
+    // only those. Nothing is deleted until one is picked; Back cancels.
+    private fun startDelete(message: Message) {
+        showStatus(getString(R.string.checking_delete))
+        lifecycleScope.launch {
+            val options = try {
+                withContext(Dispatchers.IO) { api.getDeleteOptions(chatId, message.id) }
+            } catch (e: IOException) {
+                showStatus(getString(R.string.error_delete))
+                return@launch
+            }
+            status.visibility = View.GONE
+            val choices = buildList {
+                if (options.forMe) add(R.string.delete_for_me to false)
+                if (options.forEveryone) add(R.string.delete_for_everyone to true)
+            }
+            if (choices.isEmpty()) {
+                showStatus(getString(R.string.cant_delete))
+                return@launch
+            }
+            MessageMenu.choose(this@ChatActivity, getString(R.string.delete_title), choices.map { getString(it.first) }) {
+                delete(message, forEveryone = choices[it].second)
+            }
+        }
+    }
+
+    private fun delete(message: Message, forEveryone: Boolean) {
+        showStatus(getString(R.string.deleting))
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.deleteMessage(chatId, message.id, forEveryone) }
+                removeMessages(setOf(message.id))
+                val done = getString(R.string.deleted)
+                showStatus(done)
+                hideStatusLater(done)
+            } catch (e: IOException) {
+                showStatus(getString(R.string.error_delete))
+            }
+        }
+    }
+
+    // A reply gets a first line quoting the start of the original, if it is loaded.
+    // Edited messages get "(edited)" after the time.
     private fun formatMessage(message: Message): String {
         val text = message.text.ifEmpty { getString(R.string.media) }
-        val time = formatDate(message.date)
+        val time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
         val line = if (message.out) "$time ${getString(R.string.you)}: $text" else "$time $text"
         val replyToId = message.replyToId ?: return line
         val quoted = messages.find { it.id == replyToId }?.let(::snippet) ?: "…"

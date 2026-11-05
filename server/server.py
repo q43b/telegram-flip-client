@@ -56,6 +56,29 @@ def reply_of(message):
     return r.reply_to_msg_id
 
 
+def is_edited(message):
+    """Whether to show "(edited)". edit_hide marks edits Telegram says not to show."""
+    return message.edit_date is not None and not message.edit_hide
+
+
+# Telegram's server settings, including how long messages can be edited and deleted
+# for everyone. Asked once; they rarely change.
+telegram_config = None
+
+
+async def get_telegram_config():
+    global telegram_config
+    if telegram_config is None:
+        telegram_config = await client(functions.help.GetConfigRequest())
+    return telegram_config
+
+
+def can_delete_others(entity):
+    """Creator, or an admin allowed to delete other people's messages."""
+    rights = getattr(entity, "admin_rights", None)
+    return bool(getattr(entity, "creator", False) or (rights and rights.delete_messages))
+
+
 async def topic_messages(chat_id, topic_id, limit):
     """Newest first. topic_id None = the whole chat (ordinary chats)."""
     if topic_id is None:
@@ -127,7 +150,26 @@ async def on_new_message(event):
         "text": event.raw_text or "",
         "out": event.out,
         "date": event.date.isoformat(),
+        "edited": is_edited(event.message),
     })
+
+
+@client.on(events.MessageEdited)
+async def on_edited(event):
+    await broadcast({
+        "type": "edited",
+        "id": event.id,
+        "chat_id": event.chat_id,
+        "text": event.raw_text or "",
+        "edited": is_edited(event.message),
+    })
+
+
+@client.on(events.MessageDeleted)
+async def on_deleted(event):
+    # Telegram names the chat only for channels and supergroups; elsewhere chat_id is
+    # None, but there message ids are unique across all of the account's chats
+    await broadcast({"type": "deleted", "chat_id": event.chat_id, "ids": event.deleted_ids})
 
 
 @client.on(events.MessageRead(inbox=True))
@@ -248,6 +290,24 @@ class SendBody(BaseModel):
     reply_to_id: Optional[int] = None
 
 
+class EditBody(BaseModel):
+    chat_id: int
+    message_id: int
+    text: str
+
+
+class DeleteBody(BaseModel):
+    chat_id: int
+    message_id: int
+    revoke: bool  # True = for everyone
+
+
+class ForwardBody(BaseModel):
+    from_chat_id: int
+    message_id: int
+    to_chat_id: int
+
+
 @api.get("/chats")
 @recovering
 async def get_chats(limit: int = 20):
@@ -286,7 +346,7 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
         bad_request(e)
     msgs = [
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
-         "reply_to_id": reply_of(m)}
+         "reply_to_id": reply_of(m), "edited": is_edited(m)}
         for m in found
     ]
     return list(reversed(msgs))
@@ -327,6 +387,79 @@ async def mark_read(chat_id: int, topic_id: Optional[int] = None):
         bad_request(e)
     forget_forum_unread(chat_id)  # after the read, so the next count sees it
     return {"ok": True}
+
+
+@api.get("/delete_options/{chat_id}/{message_id}")
+@recovering
+async def delete_options(chat_id: int, message_id: int):
+    """Which deletes Telegram allows for this message: {for_me, for_everyone}.
+
+    Limits come from Telegram's config (seconds):
+    - private chats: revoke_pm_time_limit; the other person's messages too only
+      if revoke_pm_inbox is set
+    - basic groups: revoke_time_limit for own messages; admins any time
+    - supergroups/channels: deletion is always for everyone (channels.deleteMessages
+      has no "for me" option); own messages, or anyone's for admins
+    """
+    try:
+        entity = await client.get_entity(chat_id)
+        msg = await client.get_messages(entity, ids=message_id)
+        config = await get_telegram_config()
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    if msg is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+    age = time.time() - msg.date.timestamp()
+
+    if isinstance(entity, types.User):
+        if entity.is_self:  # Saved Messages: nobody else to delete it for
+            return {"for_me": True, "for_everyone": False}
+        everyone = age < config.revoke_pm_time_limit and (msg.out or bool(config.revoke_pm_inbox))
+        return {"for_me": True, "for_everyone": everyone}
+    if isinstance(entity, types.Chat):  # basic group
+        everyone = (msg.out and age < config.revoke_time_limit) or can_delete_others(entity)
+        return {"for_me": True, "for_everyone": everyone}
+    return {"for_me": False, "for_everyone": msg.out or can_delete_others(entity)}
+
+
+@api.post("/delete")
+@recovering
+async def delete(body: DeleteBody):
+    try:
+        await client.delete_messages(body.chat_id, [body.message_id], revoke=body.revoke)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    return {"ok": True}
+
+
+@api.post("/edit")
+@recovering
+async def edit(body: EditBody):
+    try:
+        await client.edit_message(body.chat_id, body.message_id, body.text)
+    except errors.MessageNotModifiedError:
+        pass  # same text as before: nothing to do, not a failure
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)  # e.g. MESSAGE_EDIT_TIME_EXPIRED: too old to edit
+    return {"ok": True}
+
+
+@api.post("/forward")
+@recovering
+async def forward(body: ForwardBody):
+    try:
+        msg = await client.forward_messages(body.to_chat_id, body.message_id, from_peer=body.from_chat_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    return {"id": msg.id}
 
 app.include_router(api)
 

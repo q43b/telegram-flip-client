@@ -15,15 +15,20 @@ class MessageAction(
 )
 
 object MessageMenu {
-    // A plain list dialog: Up/Down to choose, OK to run, Back to close
     fun show(context: Context, title: String, message: Message, actions: List<MessageAction>) {
         val available = actions.filter { it.isAvailable(message) }
         if (available.isEmpty()) return
+        choose(context, title, available.map { context.getString(it.label) }) { which ->
+            available[which].perform(message)
+        }
+    }
+
+    // A plain list dialog: Up/Down to choose, OK to pick, Back to close without picking.
+    // Also used for follow-up choices, like where to forward or how to delete.
+    fun choose(context: Context, title: String, items: List<String>, onPick: (Int) -> Unit) {
         AlertDialog.Builder(context)
             .setTitle(title)
-            .setItems(available.map { context.getString(it.label) }.toTypedArray()) { _, which ->
-                available[which].perform(message)
-            }
+            .setItems(items.toTypedArray()) { _, which -> onPick(which) }
             .show()
     }
 }
