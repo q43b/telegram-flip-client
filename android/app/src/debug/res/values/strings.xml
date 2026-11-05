@@ -1,0 +1,4 @@
+<resources>
+    <!-- Dev builds show a different name, so they are easy to tell apart from the release -->
+    <string name="app_name">TG Flip (dev)</string>
+</resources>

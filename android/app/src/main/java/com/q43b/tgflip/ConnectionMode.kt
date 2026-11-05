@@ -20,7 +20,7 @@ enum class ConnectionMode(
     val defaultHost: String,
     val defaultPort: Int,
 ) {
-    LOCAL("local", R.string.mode_local, R.string.mode_local_short, "http", "192.168.31.24", 8000),
+    LOCAL("local", R.string.mode_local, R.string.mode_local_short, "http", "", 8000),
     VPN("vpn", R.string.mode_vpn, R.string.mode_vpn_short, "http", "", 8000),
     PUBLIC("public", R.string.mode_public, R.string.mode_public_short, "https", "", 443);
 

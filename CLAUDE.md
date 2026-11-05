@@ -15,6 +15,7 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 - Backend milestones 1-8 done: chats, messages, send, mark-as-read, live updates, error handling.
 - Server resilience: the MTProxy sometimes leaves Telethon connected but answering MTPROTO_CLUSTER_INVALID to everything. `connect_telegram()` retries from a clean disconnect at startup; at runtime, endpoints wrapped in `@recovering` reconnect and retry once, and a watchdog checks every 2 minutes.
 - Android project created here (Kotlin, Empty Views Activity; build.gradle.kts has minSdk 24).
+- Builds: dev builds (`installDebug`, what Claude installs for testing) are a separate app, `com.q43b.tgflip.debug`, named "TG Flip (dev)", so they sit next to the release. Release builds (`assembleRelease`) are signed with the owner's key via `android/keystore.properties` (git-ignored; template `keystore.properties.example`); without that file they come out unsigned. Never read, print or commit the keystore or its passwords.
 - The WebView proof of concept (commit a685194) was replaced by native screens. Do not bring it back.
 - Native chat list works on the phone: `ListView` + OkHttp (`ApiClient.kt`), address and token in SharedPreferences (`ServerSettings.kt`). No d-pad double-move in the native list.
 - Live connection: `LiveConnection.kt` keeps the WebSocket open (reconnect with backoff), drives a status bar at the top, and refetches chats on events and after reconnects.

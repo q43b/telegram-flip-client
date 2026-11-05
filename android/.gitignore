@@ -13,3 +13,5 @@
 .externalNativeBuild
 .cxx
 local.properties
+# Release signing: key passwords and path, never committed (see keystore.properties.example)
+keystore.properties

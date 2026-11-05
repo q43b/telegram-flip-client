@@ -4,6 +4,12 @@
 # For more details, see
 #   https://d.android.com/r/tools/r8/keep-rules
 
+# No renaming or moving of classes. With it, the release crashed at start on the phone:
+# R8 moved a class into another package than its package-private parent
+# (IllegalAccessError: kotlin.sequences.d extended by class oq is inaccessible).
+# Unused code is still removed, and crash logs keep readable class names.
+-dontobfuscate
+
 # If your project uses WebView with JS, uncomment the following
 # and specify the fully qualified class name to the JavaScript interface
 # class:
