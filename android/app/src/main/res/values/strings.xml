@@ -73,6 +73,19 @@
     <string name="setting_voice_compatible">Voice for Android 7–9: %1$s</string>
     <string name="voice_compatible_on">Saved. Voice messages will play in a format for Android 7–9 once a later version adds it; until then they don\'t play. Leave this off on Android 10 and newer.</string>
     <string name="voice_compatible_later">The Android 7–9 voice format comes in a later version. To play voice messages now (Android 10+), turn off Settings > Voice for Android 7–9.</string>
+    <string name="menu_record_voice">🎤 Record voice message</string>
+    <string name="voice_recording_title">🎤 Recording</string>
+    <string name="voice_recording">%1$s\nOK = send · Back = discard</string>
+    <string name="voice_limit_reached">Stopped at the limit (%1$s)\nOK = send · Back = discard</string>
+    <string name="voice_send">Send</string>
+    <string name="voice_discard">Discard</string>
+    <string name="voice_too_short">Too short, not sent</string>
+    <string name="voice_record_failed">Couldn\'t start recording (is the microphone in use?)</string>
+    <string name="voice_record_needs_10">Recording voice messages needs Android 10 or newer</string>
+    <string name="voice_no_microphone">No microphone access: allow it in the phone\'s settings to record</string>
+    <string name="voice_sending">Sending voice message…</string>
+    <string name="voice_send_failed">Couldn\'t send the voice message.</string>
+    <string name="voice_retry">Try again</string>
     <string name="action_play">▶ Play</string>
     <string name="action_stop">■ Stop</string>
     <string name="incoming_call">☎ Incoming call</string>

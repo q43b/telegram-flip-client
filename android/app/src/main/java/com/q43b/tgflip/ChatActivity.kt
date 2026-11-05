@@ -1,7 +1,9 @@
 package com.q43b.tgflip
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.media.AudioManager
 import android.os.Bundle
@@ -18,6 +20,8 @@ import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -29,6 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 
 // Shows one chat's latest messages and adds new ones live.
@@ -79,6 +84,12 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var api: ApiClient
     private lateinit var cache: LocalCache
     private lateinit var voice: VoicePlayer
+    private lateinit var recorder: VoiceRecorder
+
+    // Android asks the user once; after a yes, recording starts right away
+    private val askMicrophone = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) recorder.start() else showStatus(getString(R.string.voice_no_microphone))
+    }
     private var chatId = 0L
     private var topicId: Long? = null  // set when this is one topic of a forum group
     private var live: LiveConnection? = null
@@ -105,6 +116,7 @@ class ChatActivity : AppCompatActivity() {
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         if (intent.hasExtra(EXTRA_TOPIC_ID)) topicId = intent.getLongExtra(EXTRA_TOPIC_ID, 0)
         voice = VoicePlayer(this, lifecycleScope, ::refreshRow).also { it.api = api }
+        recorder = VoiceRecorder(this, ::sendVoice)
         volumeControlStream = AudioManager.STREAM_MUSIC  // the volume keys set how loud voice messages play
 
         connection = findViewById(R.id.connection)
@@ -170,6 +182,7 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onStop() {
         voice.stop()
+        recorder.cancel()
         live?.stop()
         live = null
         super.onStop()
@@ -226,15 +239,63 @@ class ChatActivity : AppCompatActivity() {
 
     // F2: Media and Stickers are placeholders for version 2; Quick phrases works
     private fun showSoftKeyMenu() {
-        val items = listOf(R.string.quick_phrases, R.string.menu_stickers, R.string.menu_media)
+        val items = listOf(R.string.quick_phrases, R.string.menu_record_voice, R.string.menu_stickers, R.string.menu_media)
         MessageMenu.choose(this, getString(R.string.soft_key_menu), items.map(::getString)) { which ->
             when (items[which]) {
                 R.string.quick_phrases -> showQuickPhrases()
+                R.string.menu_record_voice -> startRecording()
                 else -> {
                     val text = getString(R.string.coming_later)
                     showStatus(text)
                     hideStatusLater(text)
                 }
+            }
+        }
+    }
+
+    private fun startRecording() {
+        if (!recorder.isSupported) {
+            showStatus(getString(R.string.voice_record_needs_10))
+            return
+        }
+        voice.stop()
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            recorder.start()
+        } else {
+            askMicrophone.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    // Sends the recording, as a reply if one is being written. If that fails, a dialog
+    // offers to try again, so a recording is not lost to a bad connection.
+    private fun sendVoice(file: File, seconds: Int) {
+        sending = true
+        showStatus(getString(R.string.voice_sending))
+        val replyToId = replyingTo?.id
+        lifecycleScope.launch {
+            try {
+                val id = withContext(Dispatchers.IO) {
+                    val id = api.sendVoice(chatId, topicId, file.readBytes(), seconds, replyToId)
+                    // Keep it as the saved copy of the new message, so playing it needs no download
+                    val saved = File(MediaCache.folder(this@ChatActivity, "voice").also { it.mkdirs() }, "${chatId}_$id.ogg")
+                    if (!file.renameTo(saved)) file.delete()
+                    id
+                }
+                if (replyToId != null) cancelCompose()
+                status.visibility = View.GONE
+                val sent = Message(id, "", out = true, date = MessageFormat.now(), replyToId = replyToId,
+                    voice = VoiceInfo(seconds))
+                addMessage(sent, follow = true)
+            } catch (e: IOException) {
+                status.visibility = View.GONE
+                AlertDialog.Builder(this@ChatActivity)
+                    .setMessage(R.string.voice_send_failed)
+                    .setPositiveButton(R.string.voice_retry) { _, _ -> sendVoice(file, seconds) }
+                    .setNegativeButton(R.string.voice_discard) { _, _ -> file.delete() }
+                    .setCancelable(false)
+                    .show()
+            } finally {
+                sending = false
             }
         }
     }

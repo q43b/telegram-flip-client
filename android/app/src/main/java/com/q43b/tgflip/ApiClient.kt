@@ -76,6 +76,21 @@ class ApiClient(baseUrl: String?, val token: String) {
         return JSONObject(call(request)).getLong("id")
     }
 
+    // Sends a recording (OGG/Opus bytes) as a voice message; returns its id
+    fun sendVoice(chatId: Long, topicId: Long?, audio: ByteArray, seconds: Int, replyToId: Long? = null): Long {
+        var url = endpoint("/send_voice?chat_id=$chatId&duration=$seconds") + topicParam(topicId, "&")
+        if (replyToId != null) url += "&reply_to_id=$replyToId"
+        val request = Request.Builder().url(url).post(audio.toRequestBody(OGG)).header("x-token", token).build()
+        // Telegram takes a few seconds to accept a file through the proxy
+        uploads.newCall(request).execute().use { response ->
+            if (response.code == 401) throw BadTokenException()
+            if (!response.isSuccessful) throw IOException("Server error ${response.code}")
+            return JSONObject(response.body!!.string()).getLong("id")
+        }
+    }
+
+    private val uploads by lazy { http.newBuilder().readTimeout(60, TimeUnit.SECONDS).build() }
+
     // Sends a read receipt to the other side, so only call it on a deliberate key press
     fun markRead(chatId: Long, topicId: Long?) {
         val url = endpoint("/read/$chatId") + topicParam(topicId, "?")
@@ -146,6 +161,7 @@ class ApiClient(baseUrl: String?, val token: String) {
 
     private companion object {
         val JSON = "application/json".toMediaType()
+        val OGG = "audio/ogg".toMediaType()
     }
 }
 

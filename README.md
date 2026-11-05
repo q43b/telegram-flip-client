@@ -16,7 +16,7 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Folders of your own on the phone: a total unread counter, and a folder can hide its chats from the main list (an alternative to archiving)
 - Forum groups (groups split into topics): a topic list, and each topic as its own chat
 - Read and send messages; "Load older messages" for history
-- Voice messages: play them from the message menu, with a running time on the message line; they are kept on the phone like photos, and listening does not tell the sender
+- Voice messages: play them from the message menu, with a running time on the message line, and record your own from the F2 menu (up to 5 minutes; OK sends, Back discards). They are kept on the phone like photos, and listening does not tell the sender
 - Message menu on OK: play a voice message, reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone"), view the writer's profile, and in groups message them privately
 - Profiles: photo, name, and username and phone number where the person lets you see them
 - Group info: photo, member count and the member list with photos and admin marks (where Telegram shows it)
@@ -70,7 +70,7 @@ Later runs just start. Settings and the login stay next to the exe (`.env`, `tg_
 | Right | Open Settings | Group info (groups and channels) | |
 | Left | | | Close Settings, a profile or group info |
 | F1 (left soft key) | | Mark as read | |
-| F2 (right soft key) | Open a forum's General topic | Menu: quick phrases (media and stickers to come) | |
+| F2 (right soft key) | Open a forum's General topic | Menu: quick phrases, record a voice message (media and stickers to come) | |
 | Back | | Cancel a reply or edit, otherwise leave | Go back |
 
 ## Building from source
@@ -135,7 +135,7 @@ PROJECT_BRIEF.md           Goals, decisions, milestones
 ## Known limitations and roadmap
 
 - **Home network only for now.** The home connection is behind carrier-grade NAT, and the remote-access options tried (Tailscale, tunnels, a rented server) are blocked or ruled out where I live. The app's VPN and Public modes are ready for when a route exists.
-- **Text and voice only in chats:** photos, stickers and other media show as "[media]". Voice messages can be listened to but not yet recorded, and they play on Android 10 and newer (Settings already has a switch for Android 7–9, for a compatible format that comes later).
+- **Text and voice only in chats:** photos, stickers and other media show as "[media]". Voice messages play and record on Android 10 and newer (Settings already has a switch for Android 7–9, for a compatible format that comes later).
 - The packaged server is Windows-only.
 - Planned for version 2: reactions, stickers and media.
 

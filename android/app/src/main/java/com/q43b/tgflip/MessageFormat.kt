@@ -66,7 +66,7 @@ object MessageFormat {
         !out && (call.reason == "missed" || call.reason == "busy")
 
     // 2:31, or 1:02:31 for an hour or more
-    private fun duration(seconds: Int): String {
+    fun duration(seconds: Int): String {
         val h = seconds / 3600
         val m = seconds % 3600 / 60
         val s = seconds % 60
