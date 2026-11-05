@@ -193,6 +193,8 @@ async def forum_unread(dialog):
     try:
         topics = await get_forum_topics(dialog.input_entity, 100)
     except errors.RPCError as e:
+        if is_cluster_error(e):
+            raise  # a broken connection: let @recovering on /chats reconnect and retry
         print(f"Could not count topics of {dialog.id}: {e}")
         return 0
     total = sum(t.unread_count for t in topics)
