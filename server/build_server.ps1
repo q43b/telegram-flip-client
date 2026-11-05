@@ -1,7 +1,7 @@
 # Builds the packaged server: dist\tgflip-server-<version>-win64.zip
 # Run from anywhere:  powershell -ExecutionPolicy Bypass -File server\build_server.ps1
 # Needs the venv with requirements.txt and requirements-build.txt installed.
-param([string]$Version = "0.3.0-alpha")
+param([string]$Version = "0.4.0-alpha")
 $ErrorActionPreference = "Stop"
 
 $server = $PSScriptRoot

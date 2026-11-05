@@ -26,6 +26,7 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 - Mark as read: F2 / SOFT_RIGHT in the chat screen posts to /read. A soft key label "Mark as read (N)" shows only while the chat has unread messages; F2 does nothing otherwise. The count comes from the list, +1 per live incoming message, and is refetched from /chats (or /topics) on open, reconnect and "read" events.
 - Message menu (`MessageMenu.kt`): OK on a message opens a list of `MessageAction`s (label, isAvailable, perform), declared in `ChatActivity.messageActions`. Now: Reply, Edit (own text messages), Forward (pick a chat), Delete (asks the server which of "for me" / "for everyone" Telegram allows).
 - Version 1 is feature-complete for text. Reactions, stickers and media (left soft key F1) are planned for version 2; media transfer needs its own design (size, weak phone, slow proxy).
+- Calls show as their own italic line, "☎ Missed call" in red (someone's call I didn't take) or "☎ Incoming/Outgoing call · 2:31" in blue (`MessageFormat.call`); the chat list preview uses the same text. Their message menu only offers Delete.
 - Compose bar above the box: "Replying to" or "Editing"; Back cancels it. Replies show a "↪ quote" first line when the original is loaded; edited messages show "(edited)" after the time.
 - Settings (`SettingsActivity.kt`): d-pad Right in the chat list opens it (slides in from the left, like the official app's side menu); Left or Back closes it. A bottom tab bar (`tab_bar.xml`, `TabBar.kt`) shows "Chats | Settings" with the active one highlighted. Rows: Server (IP, port, token) via `ServerSettingsDialog.kt`, the same dialog the chat list shows on first launch and connection errors.
 - Settings also has Theme (Follow phone / Light / Dark; `ThemeSetting.kt`, applied at start by `TGFlipApp.kt`).
@@ -53,7 +54,7 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
 - `POST /send` with JSON `{chat_id, text, topic_id?, reply_to_id?}` -> `{id}`
 - `POST /read/{chat_id}[?topic_id=N]` -> `{ok: true}` (this sends a read receipt, so it must stay a deliberate user action)
 - Without `topic_id`, every endpoint works on the whole chat, as before.
-- Messages also carry `edited` (true = show "(edited)"; from Telegram's edit_date, unless edit_hide).
+- Messages also carry `edited` (true = show "(edited)"; from Telegram's edit_date, unless edit_hide) and `call` (null, or `{video, reason, duration}` for call records: reason missed/busy/hangup/disconnect/null, duration seconds or null). Calls are service messages; Telethon's NewMessage skips those, so `on_call_record` (events.Raw UpdateNewMessage) broadcasts them live. `/chats` `last` has `kind: "call"` plus `call` for them.
 - `POST /edit` `{chat_id, message_id, text}` -> `{ok}` (400 when too old: Telegram's edit_time_limit)
 - `GET /delete_options/{chat_id}/{message_id}` -> `{for_me, for_everyone}`, worked out from chat type, message age and owner, admin rights, and Telegram's config (revoke_pm_time_limit, revoke_pm_inbox, revoke_time_limit). Supergroups/channels have no "for me".
 - `POST /delete` `{chat_id, message_id, revoke}` -> `{ok}` (`revoke` = for everyone)
@@ -63,6 +64,7 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
   - `{type: "read", chat_id}` (read state changed in another client; refetch `/chats`)
   - `{type: "edited", id, chat_id, text, edited}`
   - `{type: "deleted", chat_id, ids}` (`chat_id` is null outside channels/supergroups; there ids are unique per account)
+  - `{type: "call_ringing", call_id, chat_id, name, video}` (someone is calling now; from UpdatePhoneCall/PhoneCallRequested) and `{type: "call_ended", call_id}` (it stopped ringing: accepted, answered elsewhere or discarded). The app's `IncomingCallAlert` shows a dialog (no vibration: the owner doesn't want it) on the open screen (not Settings, which has no live connection) and closes it on call_ended. Only while the app is open.
 - After a WebSocket reconnect, refetch current state (chats and the open chat's messages).
 
 ## Constraints and decisions

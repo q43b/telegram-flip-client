@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from typing import Optional
 
 from pydantic import BaseModel
-from telethon import TelegramClient, connection, errors, events, functions, types
+from telethon import TelegramClient, connection, errors, events, functions, types, utils
 
 load_dotenv()
 
@@ -75,20 +75,47 @@ def is_edited(message):
     return message.edit_date is not None and not message.edit_hide
 
 
+# Why a call ended; Telegram stores calls as service messages with a MessageActionPhoneCall
+CALL_REASONS = {
+    types.PhoneCallDiscardReasonMissed: "missed",
+    types.PhoneCallDiscardReasonBusy: "busy",
+    types.PhoneCallDiscardReasonHangup: "hangup",
+    types.PhoneCallDiscardReasonDisconnect: "disconnect",
+}
+
+
+def call_of(message):
+    """For a call record: {video, reason, duration}; for anything else None.
+    reason: missed / busy / hangup / disconnect, or None if unknown.
+    duration: seconds talked, or None if the call was never answered."""
+    action = getattr(message, "action", None)
+    if not isinstance(action, types.MessageActionPhoneCall):
+        return None
+    return {
+        "video": bool(action.video),
+        "reason": CALL_REASONS.get(type(action.reason)),
+        "duration": action.duration,
+    }
+
+
 PREVIEW_LENGTH = 100  # the phone shows far less; no need to send whole messages
 
 
 def last_message_preview(message):
-    """The chat list's preview line: {text, out, date, sender, kind}, or None.
+    """The chat list's preview line: {text, out, date, sender, kind, call}, or None.
 
     It comes with the chat list itself (each dialog's last message, in a forum group the
     newest of any topic), so it costs no extra requests. kind: "text", "media" (no text,
-    e.g. a photo or sticker) or "event" (joined, pinned, ...). sender: who wrote it, only
-    for other people's messages in groups; None in private chats and channel posts.
+    e.g. a photo or sticker), "call" (details in call, see call_of) or "event" (joined,
+    pinned, ...). sender: who wrote it, only for other people's messages in groups;
+    None in private chats and channel posts.
     """
     if message is None:
         return None
-    if isinstance(message, types.MessageService):
+    call = call_of(message)
+    if call is not None:
+        text, kind = "", "call"
+    elif isinstance(message, types.MessageService):
         text, kind = "", "event"
     else:
         text = message.raw_text or ""
@@ -103,6 +130,7 @@ def last_message_preview(message):
         "date": message.date.isoformat(),
         "sender": sender,
         "kind": kind,
+        "call": call,
     }
 
 
@@ -197,7 +225,58 @@ async def on_new_message(event):
         "out": event.out,
         "date": event.date.isoformat(),
         "edited": is_edited(event.message),
+        "call": None,
     })
+
+
+# Telethon's NewMessage skips service messages, but call records are worth showing live.
+# Calls only happen in private chats, which arrive as UpdateNewMessage.
+@client.on(events.Raw(types.UpdateNewMessage))
+async def on_call_record(update):
+    message = update.message
+    call = call_of(message)
+    if call is None:
+        return
+    await broadcast({
+        "type": "message",
+        "id": message.id,
+        "chat_id": utils.get_peer_id(message.peer_id),
+        "topic_id": None,
+        "reply_to_id": None,
+        "text": "",
+        "out": message.out,
+        "date": message.date.isoformat(),
+        "edited": False,
+        "call": call,
+    })
+
+
+# While a call is ringing, Telegram sends call updates, not messages (the call record
+# message only appears once the call is over). PhoneCallRequested = someone is calling
+# me now; Accepted / PhoneCall (answered somewhere) / Discarded = it stopped ringing.
+@client.on(events.Raw(types.UpdatePhoneCall))
+async def on_phone_call(update):
+    call = update.phone_call
+    print(f"Call update: {type(call).__name__}")  # shows in the console when calls arrive
+    if isinstance(call, types.PhoneCallRequested):
+        await broadcast({
+            "type": "call_ringing",
+            "call_id": call.id,
+            "chat_id": call.admin_id,  # the caller; a private chat's id is the user's id
+            "name": await display_name(call.admin_id),
+            "video": bool(getattr(call, "video", False)),
+        })
+    elif isinstance(call, (types.PhoneCallAccepted, types.PhoneCall, types.PhoneCallDiscarded)):
+        await broadcast({"type": "call_ended", "call_id": call.id})
+
+
+async def display_name(user_id):
+    """A user's name for the incoming call alert; Telethon usually has them cached from
+    the update itself. Falls back to a placeholder rather than failing the alert."""
+    try:
+        return utils.get_display_name(await client.get_entity(user_id)) or "Someone"
+    except (ValueError, errors.RPCError):
+        return "Someone"
 
 
 @client.on(events.MessageEdited)
@@ -402,7 +481,7 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
         bad_request(e)
     msgs = [
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
-         "reply_to_id": reply_of(m), "edited": is_edited(m)}
+         "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
