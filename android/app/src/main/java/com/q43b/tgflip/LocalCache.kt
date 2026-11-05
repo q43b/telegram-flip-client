@@ -30,6 +30,11 @@ class LocalCache(context: Context) {
     fun saveMessages(chatId: Long, topicId: Long?, messages: List<Message>) =
         save(messagesName(chatId, topicId), messages.takeLast(MAX_MESSAGES).map(Message::toJson))
 
+    // Settings > Cache > Delete all saved data
+    fun clear() = synchronized(LOCK) {
+        dir.deleteRecursively()
+    }
+
     private fun messagesName(chatId: Long, topicId: Long?) =
         if (topicId == null) "messages_$chatId" else "messages_${chatId}_$topicId"
 

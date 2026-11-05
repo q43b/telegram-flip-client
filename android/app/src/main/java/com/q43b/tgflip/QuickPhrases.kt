@@ -75,5 +75,5 @@ object QuickPhrasesEditor {
     }
 
     private fun askText(activity: Activity, title: Int, initial: String, onDone: (String) -> Unit) =
-        MessageMenu.askText(activity, activity.getString(title), initial, onDone)
+        MessageMenu.askText(activity, activity.getString(title), initial, onDone = onDone)
 }

@@ -28,7 +28,8 @@ import kotlin.math.roundToInt
 // then asks the server, at most two at a time. drawable() never waits: until a photo
 // is there it returns a letter circle, and onLoaded runs when a photo arrives, so the
 // screen can redraw. Files are named <chat id>_<photo id>_<px>.jpg; a new photo id
-// means a new photo, and the chat's older files are removed.
+// means a new photo, and the chat's older files are removed. The folder is MediaCache's,
+// which also removes files by the limits set in Settings.
 // Only touched from the main thread (scope is the screen's).
 class PhotoLoader(
     private val context: Context,
@@ -43,7 +44,7 @@ class PhotoLoader(
             failed.clear()
         }
 
-    private val dir = File(context.cacheDir, "photos")
+    private val dir = MediaCache.folder(context, "photos")
     private val sizePx = (sizeDp * context.resources.displayMetrics.density).roundToInt().coerceIn(16, 160)
     private val memory = LruCache<String, Bitmap>(MEMORY_PHOTOS)
     private val loading = mutableSetOf<String>()
@@ -79,7 +80,9 @@ class PhotoLoader(
 
     private fun fromDisk(key: String): Bitmap? {
         val file = File(dir, "$key.jpg")
-        return if (file.exists()) BitmapFactory.decodeFile(file.path) else null
+        if (!file.exists()) return null
+        MediaCache.touch(file)  // used now: the cache limits remove it last
+        return BitmapFactory.decodeFile(file.path)
     }
 
     private suspend fun download(chatId: Long, photo: String, key: String): Bitmap? {

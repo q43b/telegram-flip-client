@@ -34,10 +34,16 @@ object MessageMenu {
             .show()
     }
 
-    // A one-field text dialog (a phrase, a folder name, ...); blank text is ignored
-    fun askText(context: Context, title: String, initial: String, onDone: (String) -> Unit) {
+    // A one-field text dialog (a phrase, a folder name, a number, ...); blank text is ignored
+    fun askText(
+        context: Context,
+        title: String,
+        initial: String,
+        inputType: Int = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES,
+        onDone: (String) -> Unit,
+    ) {
         val input = EditText(context)
-        input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        input.inputType = inputType
         input.setText(initial)
         input.setSelection(input.text.length)
         AlertDialog.Builder(context)
