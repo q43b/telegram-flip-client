@@ -1,12 +1,13 @@
 package com.q43b.tgflip
 
+import android.content.Context
 import android.text.format.DateUtils
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// Time and text formatting shared by the chat list and the chat screen.
+// Time, text and call formatting shared by the chat list and the chat screen.
 // Main thread only (SimpleDateFormat is not thread-safe).
 object MessageFormat {
     // The server's date format (ISO 8601 with a time zone), e.g. 2026-11-05T14:05:00+00:00
@@ -33,5 +34,35 @@ object MessageFormat {
     fun snippet(text: String, length: Int): String {
         val line = text.replace('\n', ' ')
         return if (line.length > length) line.take(length) + "…" else line
+    }
+
+    // "☎ Missed call", "☎ Outgoing video call · 2:31", ... out = I made the call
+    fun call(context: Context, call: CallInfo, out: Boolean): String {
+        val what = context.getString(if (call.video) R.string.call_video else R.string.call_voice)
+        val duration = call.duration
+        val text = when {
+            duration != null && duration > 0 -> context.getString(
+                if (out) R.string.call_outgoing else R.string.call_incoming, what
+            ) + " · " + duration(duration)
+            call.reason == "missed" ->
+                context.getString(if (out) R.string.call_cancelled else R.string.call_missed, what)
+            call.reason == "busy" ->
+                context.getString(if (out) R.string.call_not_answered else R.string.call_declined, what)
+            else -> context.getString(if (out) R.string.call_outgoing else R.string.call_incoming, what)
+        }
+        return "☎ $text"
+    }
+
+    // A call someone made to me that I didn't take: shown in red instead of blue
+    fun isUnanswered(call: CallInfo, out: Boolean) =
+        !out && (call.reason == "missed" || call.reason == "busy")
+
+    // 2:31, or 1:02:31 for an hour or more
+    private fun duration(seconds: Int): String {
+        val h = seconds / 3600
+        val m = seconds % 3600 / 60
+        val s = seconds % 60
+        return if (h > 0) String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s)
+        else String.format(Locale.ROOT, "%d:%02d", m, s)
     }
 }

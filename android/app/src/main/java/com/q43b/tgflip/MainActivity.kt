@@ -223,12 +223,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun previewLine(last: LastMessage): String {
-        val body = when (last.kind) {
-            "media" -> getString(R.string.media)
-            "event" -> getString(R.string.event)
+        val call = last.call
+        val body = when {
+            last.kind == "call" && call != null -> MessageFormat.call(this, call, last.out)
+            last.kind == "media" -> getString(R.string.media)
+            last.kind == "event" -> getString(R.string.event)
             else -> MessageFormat.snippet(last.text, PREVIEW_LENGTH)
         }
+        // A call line already says who called ("Incoming" / "Outgoing")
         val who = when {
+            last.kind == "call" -> ""
             last.out -> "${getString(R.string.you)}: "
             last.sender != null -> "${MessageFormat.snippet(last.sender, SENDER_LENGTH)}: "
             else -> ""
@@ -247,6 +251,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onServerEvent(event: JSONObject) {
+        if (IncomingCallAlert.handle(this, event)) return
         // A new message or a read elsewhere changes unread counts and order;
         // edits and deletes can change the newest message shown in the preview
         when (event.optString("type")) {

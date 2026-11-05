@@ -135,6 +135,7 @@ class TopicsActivity : AppCompatActivity() {
     }
 
     private fun onServerEvent(event: JSONObject) {
+        if (IncomingCallAlert.handle(this, event)) return
         // A new message or a read in this group changes the topics' counts and order
         if (event.optLong("chat_id") != chat.id) return
         when (event.optString("type")) {

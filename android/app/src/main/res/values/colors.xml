@@ -9,4 +9,7 @@
     <color name="tab_bar">#FF212121</color>
     <color name="tab_active">#FF1565C0</color>
     <color name="tab_inactive">#FF9E9E9E</color>
+    <!-- Call records in a chat; both readable on light and dark backgrounds -->
+    <color name="call_answered">#FF1E88E5</color>
+    <color name="call_unanswered">#FFE53935</color>
 </resources>

@@ -2,7 +2,11 @@ package com.q43b.tgflip
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -13,6 +17,7 @@ import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
@@ -30,7 +35,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var connection: TextView
     private lateinit var status: TextView
     private lateinit var messageList: OkListView
-    private lateinit var messageAdapter: ArrayAdapter<String>
+    private lateinit var messageAdapter: ArrayAdapter<CharSequence>
     private lateinit var messageInput: EditText
     private lateinit var readKey: TextView
     private val messages = mutableListOf<Message>()
@@ -42,10 +47,11 @@ class ChatActivity : AppCompatActivity() {
 
     // Entries of the menu that OK on a message opens. New message features go here.
     private val messageActions = listOf(
-        MessageAction(R.string.action_reply, perform = ::startReply),
+        // Call records can only be deleted: Telegram refuses replies to them and forwarding them
+        MessageAction(R.string.action_reply, isAvailable = { it.call == null }, perform = ::startReply),
         // Own text messages only; Telegram itself refuses edits after its time limit
         MessageAction(R.string.action_edit, isAvailable = { it.out && it.text.isNotEmpty() }, perform = ::startEdit),
-        MessageAction(R.string.action_forward, perform = ::startForward),
+        MessageAction(R.string.action_forward, isAvailable = { it.call == null }, perform = ::startForward),
         MessageAction(R.string.action_delete, perform = ::startDelete),
     )
 
@@ -284,6 +290,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun onServerEvent(event: JSONObject) {
+        if (IncomingCallAlert.handle(this, event)) return
         val type = event.optString("type")
         if (type == "deleted") {
             onLiveDelete(event)  // may come without a chat_id
@@ -538,8 +545,10 @@ class ChatActivity : AppCompatActivity() {
     }
 
     // A reply gets a first line quoting the start of the original, if it is loaded.
-    // Edited messages get "(edited)" after the time.
-    private fun formatMessage(message: Message): String {
+    // Edited messages get "(edited)" after the time. Calls get their own colored line.
+    private fun formatMessage(message: Message): CharSequence {
+        val call = message.call
+        if (call != null) return formatCall(message, call)
         val text = message.text.ifEmpty { getString(R.string.media) }
         val time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
         val line = if (message.out) "$time ${getString(R.string.you)}: $text" else "$time $text"
@@ -548,9 +557,22 @@ class ChatActivity : AppCompatActivity() {
         return "↪ $quoted\n$line"
     }
 
+    // "14:05 ☎ Missed call" in italics: red when someone's call went unanswered, else blue
+    private fun formatCall(message: Message, call: CallInfo): CharSequence {
+        val line = SpannableString("${formatDate(message.date)} ${MessageFormat.call(this, call, message.out)}")
+        val color = if (MessageFormat.isUnanswered(call, message.out)) R.color.call_unanswered else R.color.call_answered
+        line.setSpan(ForegroundColorSpan(ContextCompat.getColor(this, color)), 0, line.length, 0)
+        line.setSpan(StyleSpan(Typeface.ITALIC), 0, line.length, 0)
+        return line
+    }
+
     // The start of a message on one line, for quotes, the reply bar and menu titles
-    private fun snippet(message: Message): String =
-        MessageFormat.snippet(message.text.ifEmpty { getString(R.string.media) }, SNIPPET_LENGTH)
+    private fun snippet(message: Message): String {
+        val call = message.call
+        val text = if (call != null) MessageFormat.call(this, call, message.out)
+        else message.text.ifEmpty { getString(R.string.media) }
+        return MessageFormat.snippet(text, SNIPPET_LENGTH)
+    }
 
     private fun formatDate(date: String) = MessageFormat.time(date)
 
