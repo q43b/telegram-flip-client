@@ -39,8 +39,8 @@ class SettingsActivity : AppCompatActivity() {
         list.requestFocus()
 
         // versionName from build.gradle.kts (dev builds add "-dev")
-        val version = packageManager.getPackageInfo(packageName, 0).versionName
-        findViewById<TextView>(R.id.app_version).text = getString(R.string.app_version, version)
+        findViewById<TextView>(R.id.app_version).text =
+            getString(R.string.app_version, BuildConfig.VERSION_NAME)
 
         setUpTabBar(Tab.SETTINGS) { finish() }
     }

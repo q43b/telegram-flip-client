@@ -55,6 +55,9 @@ android {
             versionNameSuffix = "-dev"
         }
     }
+    buildFeatures {
+        buildConfig = true  // BuildConfig.VERSION_NAME, sent to the server
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11

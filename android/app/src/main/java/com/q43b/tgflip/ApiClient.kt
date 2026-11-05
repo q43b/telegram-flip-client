@@ -31,8 +31,11 @@ class ApiClient(baseUrl: String?, val token: String) {
         .build()
 
     // Opens /ws. The listener must send the token as the first message.
+    // The version header lets the server print which app version connected.
     fun openSocket(listener: WebSocketListener): WebSocket {
-        val request = Request.Builder().url(endpoint("/ws")).build()
+        val request = Request.Builder().url(endpoint("/ws"))
+            .header("x-app-version", BuildConfig.VERSION_NAME)
+            .build()
         return http.newWebSocket(request, listener)
     }
 

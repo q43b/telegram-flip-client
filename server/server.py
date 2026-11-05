@@ -20,6 +20,9 @@ from telethon.tl import custom
 
 load_dotenv()
 
+# Printed at startup; build_server.ps1 also names the zip after it
+VERSION = "0.7.1-alpha"
+
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
     proxy_args = dict(
@@ -421,6 +424,7 @@ async def lifespan(app: FastAPI):
     if await connect_telegram() is None:
         raise RuntimeError("Not logged in. Run list_chats.py once first.")
     checker = asyncio.create_task(watchdog())
+    print(f"TG Flip server {VERSION} started successfully")
     yield
     checker.cancel()
     await client.disconnect()
@@ -656,6 +660,20 @@ async def forward(body: ForwardBody):
 
 app.include_router(api)
 
+seen_apps = set()  # (address, app version) already printed, so reconnects don't repeat it
+
+
+def log_app(ws: WebSocket):
+    # Apps from 0.7.1 on send x-app-version when they open the live connection
+    version = ws.headers.get("x-app-version")
+    host = ws.client.host if ws.client else "?"
+    if (host, version) in seen_apps:
+        return
+    seen_apps.add((host, version))
+    name = f"TG Flip {version}" if version else "an app older than 0.7.1"
+    print(f"App connected from {host}: {name}")
+
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
@@ -665,6 +683,7 @@ async def ws_endpoint(ws: WebSocket):
         if not secrets.compare_digest(first.encode(), os.environ["API_TOKEN"].encode()):
             await ws.close(code=1008)
             return
+        log_app(ws)
         ws_clients.add(ws)
         while True:
             await ws.receive_text()  # keeps the connection open

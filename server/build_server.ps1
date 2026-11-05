@@ -1,10 +1,15 @@
 # Builds the packaged server: dist\tgflip-server-<version>-win64.zip
 # Run from anywhere:  powershell -ExecutionPolicy Bypass -File server\build_server.ps1
 # Needs the venv with requirements.txt and requirements-build.txt installed.
-param([string]$Version = "0.7.1-alpha")
+param([string]$Version)  # default: VERSION in server.py
 $ErrorActionPreference = "Stop"
 
 $server = $PSScriptRoot
+if (-not $Version) {
+    $line = Select-String -Path (Join-Path $server "server.py") -Pattern '^VERSION = "(.+)"' | Select-Object -First 1
+    if (-not $line) { throw "VERSION not found in server.py" }
+    $Version = $line.Matches[0].Groups[1].Value
+}
 $root = Split-Path $server
 $python = Join-Path $root "venv\Scripts\python.exe"
 $work = Join-Path $root "build\server"   # PyInstaller's working files (git-ignored)
