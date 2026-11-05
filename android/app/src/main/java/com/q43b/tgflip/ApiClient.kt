@@ -107,6 +107,13 @@ class ApiClient(baseUrl: String?, val token: String) {
         return JSONObject(call(request)).getLong("id")
     }
 
+    fun getProfile(userId: Long): Profile =
+        Profile.fromJson(JSONObject(call(Request.Builder().url(endpoint("/profile/$userId")))))
+
+    // A group's info with its first `members` members
+    fun getGroup(chatId: Long, members: Int): Group =
+        Group.fromJson(JSONObject(call(Request.Builder().url(endpoint("/group/$chatId?members=$members")))))
+
     // A chat's profile photo as size×size JPEG bytes, or null when it has none.
     // photoId (from /chats) lets the server answer from its own saved copy.
     fun getPhoto(chatId: Long, photoId: String, size: Int): ByteArray? {

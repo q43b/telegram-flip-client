@@ -22,16 +22,18 @@ import java.io.File
 import java.io.IOException
 import kotlin.math.roundToInt
 
-// Chats' profile photos, as round drawables for the list rows.
+// Profile photos of chats and people (a person's id is also their private chat's id),
+// as round drawables sizeDp across: 32 in the chat list, bigger on the profile screen.
 // Looks in memory, then on disk (the app's cache folder, so they show offline too),
 // then asks the server, at most two at a time. drawable() never waits: until a photo
 // is there it returns a letter circle, and onLoaded runs when a photo arrives, so the
-// list can redraw. Files are named <chat id>_<photo id>.jpg; a new photo id means a
-// new photo, and the chat's older file is removed.
+// screen can redraw. Files are named <chat id>_<photo id>_<px>.jpg; a new photo id
+// means a new photo, and the chat's older files are removed.
 // Only touched from the main thread (scope is the screen's).
 class PhotoLoader(
     private val context: Context,
     private val scope: CoroutineScope,
+    sizeDp: Int = LIST_SIZE_DP,
     private val onLoaded: () -> Unit,
 ) {
     // A new server (or none): photos that failed may work now
@@ -42,25 +44,28 @@ class PhotoLoader(
         }
 
     private val dir = File(context.cacheDir, "photos")
-    private val sizePx = (SIZE_DP * context.resources.displayMetrics.density).roundToInt().coerceIn(16, 160)
+    private val sizePx = (sizeDp * context.resources.displayMetrics.density).roundToInt().coerceIn(16, 160)
     private val memory = LruCache<String, Bitmap>(MEMORY_PHOTOS)
     private val loading = mutableSetOf<String>()
     private val failed = mutableSetOf<String>()  // no photo, or no server: don't ask again for now
     private val downloads = Semaphore(MAX_DOWNLOADS)
 
-    fun drawable(chat: Chat): Drawable {
-        val bitmap = bitmap(chat) ?: return LetterAvatar(chat)
+    fun drawable(chat: Chat): Drawable = drawable(chat.id, chat.name, chat.photo)
+
+    // photo = the photo id from the server, null for no photo (or not known yet)
+    fun drawable(id: Long, name: String, photo: String?): Drawable {
+        val bitmap = bitmap(id, photo) ?: return LetterAvatar(id, name)
         return RoundedBitmapDrawableFactory.create(context.resources, bitmap).apply { isCircular = true }
     }
 
-    private fun bitmap(chat: Chat): Bitmap? {
-        val photo = chat.photo ?: return null
-        val key = "${chat.id}_$photo"
+    private fun bitmap(id: Long, photo: String?): Bitmap? {
+        photo ?: return null
+        val key = "${id}_${photo}_$sizePx"
         memory.get(key)?.let { return it }
         if (key in loading || key in failed) return null
         loading += key
         scope.launch {
-            val bitmap = withContext(Dispatchers.IO) { fromDisk(key) ?: download(chat.id, photo, key) }
+            val bitmap = withContext(Dispatchers.IO) { fromDisk(key) ?: download(id, photo, key) }
             loading -= key
             if (bitmap == null) {
                 failed += key
@@ -87,7 +92,9 @@ class PhotoLoader(
         val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
         try {
             dir.mkdirs()
-            dir.listFiles { f -> f.name.startsWith("${chatId}_") }?.forEach { it.delete() }
+            // This chat's older photos; other sizes of this one stay
+            dir.listFiles { f -> f.name.startsWith("${chatId}_") && !f.name.startsWith("${chatId}_${photo}_") }
+                ?.forEach { it.delete() }
             val file = AtomicFile(File(dir, "$key.jpg"))
             val out = file.startWrite()
             try {
@@ -102,19 +109,21 @@ class PhotoLoader(
         return bitmap
     }
 
-    private companion object {
-        const val SIZE_DP = 32  // as in chat_row.xml
-        const val MEMORY_PHOTOS = 200  // at 48×48 px about 9 KB each
-        const val MAX_DOWNLOADS = 2
+    companion object {
+        const val LIST_SIZE_DP = 32  // as in chat_row.xml
+        const val PROFILE_SIZE_DP = 96  // as in activity_profile.xml
+        private const val MEMORY_PHOTOS = 200  // at 48×48 px about 9 KB each
+        private const val MAX_DOWNLOADS = 2
     }
 }
 
 // The stand-in while a photo loads, or for chats without one: a colored circle with
-// the chat's first letter, like the official app. The color follows the chat id.
-class LetterAvatar(chat: Chat) : Drawable() {
-    private val letter = chat.name.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?"
+// the first letter of the name, like the official app. The color follows the id, so a
+// person has the same color in the list and on their profile.
+class LetterAvatar(id: Long, name: String) : Drawable() {
+    private val letter = name.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?"
     private val circle = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = COLORS[(chat.id % COLORS.size).toInt().let { if (it < 0) -it else it }]
+        color = COLORS[(id % COLORS.size).toInt().let { if (it < 0) -it else it }]
     }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE

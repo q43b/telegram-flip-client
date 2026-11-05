@@ -55,6 +55,10 @@ class ChatActivity : AppCompatActivity() {
         MessageAction(R.string.action_edit, isAvailable = { it.out && it.text.isNotEmpty() }, perform = ::startEdit),
         MessageAction(R.string.action_forward, isAvailable = { it.call == null }, perform = ::startForward),
         MessageAction(R.string.action_delete, perform = ::startDelete),
+        // Other people's messages: in groups senderId says whose, in a private chat it's the chat's person
+        MessageAction(R.string.action_view_profile, isAvailable = { senderOf(it) != null }, perform = ::viewSenderProfile),
+        // Groups only: a private chat is already that
+        MessageAction(R.string.action_message_privately, isAvailable = { it.senderId != null }, perform = ::messageSender),
     )
 
     // What the message box does next: a plain message, a reply, or an edit.
@@ -174,7 +178,40 @@ class ChatActivity : AppCompatActivity() {
             if (event.action == KeyEvent.ACTION_UP) showSoftKeyMenu()
             return true
         }
+        // D-pad Right in a group (or channel, or one of its topics) opens the group info.
+        // Only from the messages: in the text box Right keeps moving the cursor.
+        if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && !isPrivateChat() && !messageInput.hasFocus()) {
+            if (event.action == KeyEvent.ACTION_UP) {
+                GroupInfoActivity.start(this, chatId, intent.getStringExtra(EXTRA_CHAT_NAME).orEmpty())
+            }
+            return true
+        }
         return super.dispatchKeyEvent(event)
+    }
+
+    // People's ids are positive, groups' and channels' negative (Telethon's peer ids)
+    private fun isPrivateChat() = chatId > 0
+
+    // Whose profile "View profile" opens: the sender in a group, the other person in a
+    // private chat; null for my own messages and channel posts
+    private fun senderOf(message: Message): Long? = when {
+        message.senderId != null -> message.senderId
+        isPrivateChat() && !message.out -> chatId
+        else -> null
+    }
+
+    private fun viewSenderProfile(message: Message) {
+        val id = senderOf(message) ?: return
+        // In a private chat, the name is the chat's; "Send message" only from groups
+        val name = message.sender ?: intent.getStringExtra(EXTRA_CHAT_NAME).orEmpty()
+        ProfileActivity.start(this, id, name, canMessage = !isPrivateChat())
+    }
+
+    // Opens the private chat with the sender; if there is none yet, Telegram creates it
+    // with the first message sent there
+    private fun messageSender(message: Message) {
+        val id = message.senderId ?: return
+        start(this, Chat(id, message.sender.orEmpty(), unread = 0, forum = false))
     }
 
     // F2: Media and Stickers are placeholders for version 2; Quick phrases works
@@ -673,6 +710,7 @@ class ChatActivity : AppCompatActivity() {
         private const val EXTRA_CHAT_ID = "chat_id"
         private const val EXTRA_TOPIC_ID = "topic_id"
         private const val EXTRA_TITLE = "title"
+        private const val EXTRA_CHAT_NAME = "chat_name"  // without the topic
         private const val EXTRA_UNREAD = "unread"
         private const val SNIPPET_LENGTH = 30
         private const val SENDER_LENGTH = 16
@@ -683,6 +721,7 @@ class ChatActivity : AppCompatActivity() {
         fun start(context: Context, chat: Chat, topic: Topic? = null) {
             val intent = Intent(context, ChatActivity::class.java)
             intent.putExtra(EXTRA_CHAT_ID, chat.id)
+            intent.putExtra(EXTRA_CHAT_NAME, chat.name)
             if (topic == null) {
                 intent.putExtra(EXTRA_TITLE, chat.name)
                 intent.putExtra(EXTRA_UNREAD, chat.unread)

@@ -88,6 +88,25 @@
     <string name="action_edit">Edit</string>
     <string name="action_forward">Forward</string>
     <string name="action_delete">Delete</string>
+    <string name="action_view_profile">View profile</string>
+    <string name="action_message_privately">Message privately</string>
+    <string name="profile_loading">Loading profile…</string>
+    <string name="profile_not_loaded">Could not load the profile</string>
+    <string name="profile_username">Username: %1$s</string>
+    <string name="profile_no_username">none</string>
+    <string name="profile_phone">Phone: %1$s</string>
+    <string name="profile_hidden">hidden</string>
+    <string name="profile_send_message">✉ Send message</string>
+    <string name="group_loading">Loading group info…</string>
+    <string name="group_not_loaded">Could not load the group info</string>
+    <string name="group_members">%1$,d members</string>
+    <string name="group_subscribers">%1$,d subscribers</string>
+    <string name="group_members_hidden">the list is hidden</string>
+    <string name="group_members_partial">only some members are visible</string>
+    <string name="group_more_members">Show more members…</string>
+    <string name="member_owner">owner</string>
+    <string name="member_admin">admin</string>
+    <string name="member_bot">bot</string>
     <string name="editing">✎ Editing: %1$s (Back = cancel)</string>
     <string name="edited">(edited)</string>
     <string name="saving_edit">Saving…</string>

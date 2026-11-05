@@ -16,7 +16,9 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Folders of your own on the phone: a total unread counter, and a folder can hide its chats from the main list (an alternative to archiving)
 - Forum groups (groups split into topics): a topic list, and each topic as its own chat
 - Read and send messages; "Load older messages" for history
-- Message menu on OK: reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone")
+- Message menu on OK: reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone"), view the writer's profile, and in groups message them privately
+- Profiles: photo, name, and username and phone number where the person lets you see them
+- Group info: photo, member count and the member list with photos and admin marks (where Telegram shows it)
 - Replies show a quote of the original; edited messages show "(edited)"
 - Live updates over a WebSocket (new, edited and deleted messages), with automatic reconnect and a resync afterwards
 - "Mark as read" as a deliberate action on the F1 soft key, so read receipts are never sent by accident; a soft key label shows when there is something to mark
@@ -63,8 +65,8 @@ Later runs just start. Settings and the login stay next to the exe (`.env`, `tg_
 |---|---|---|---|
 | Up / Down | Move through chats | Move through messages | Move through lists |
 | OK | Open chat (or topic list) | Message menu; in the text box: send | Choose |
-| Right | Open Settings | | |
-| Left | | | Close Settings |
+| Right | Open Settings | Group info (groups and channels) | |
+| Left | | | Close Settings, a profile or group info |
 | F1 (left soft key) | | Mark as read | |
 | F2 (right soft key) | Open a forum's General topic | Menu: quick phrases (media and stickers to come) | |
 | Back | | Cancel a reply or edit, otherwise leave | Go back |

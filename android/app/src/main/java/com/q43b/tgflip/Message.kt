@@ -5,7 +5,8 @@ import org.json.JSONObject
 // One message, from GET /messages or a live {type: "message"} event (same fields).
 // replyToId = the message this one replies to, if any. edited = show "(edited)".
 // call = set when this is a call record instead of a text message.
-// sender = who wrote it, only for other people's messages in groups.
+// sender = who wrote it, only for other people's messages in groups; senderId = their user
+// id (null for channels posting into a group), for their profile or a private chat.
 data class Message(
     val id: Long,
     val text: String,
@@ -15,6 +16,7 @@ data class Message(
     val edited: Boolean = false,
     val call: CallInfo? = null,
     val sender: String? = null,
+    val senderId: Long? = null,
 ) {
     // Same keys as the server sends, so saved messages read back with fromJson
     fun toJson(): JSONObject = JSONObject()
@@ -23,6 +25,7 @@ data class Message(
         .put("edited", edited)
         .put("call", call?.toJson() ?: JSONObject.NULL)
         .put("sender", sender ?: JSONObject.NULL)
+        .put("sender_id", senderId ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = Message(
@@ -35,6 +38,7 @@ data class Message(
             edited = json.optBoolean("edited"),
             call = json.optJSONObject("call")?.let(CallInfo::fromJson),
             sender = if (json.isNull("sender")) null else json.getString("sender"),
+            senderId = if (json.isNull("sender_id")) null else json.getLong("sender_id"),
         )
     }
 }
