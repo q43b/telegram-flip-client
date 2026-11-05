@@ -23,7 +23,7 @@ from telethon.tl import custom
 load_dotenv()
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.9.1-alpha"
+VERSION = "0.10.0-alpha"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -113,6 +113,14 @@ def call_of(message):
     }
 
 
+def voice_of(message):
+    """For a voice message: {duration} in seconds; for anything else None. The file itself
+    comes from GET /voice (Telegram keeps voice messages as OGG/Opus)."""
+    if getattr(message, "voice", None) is None:
+        return None
+    return {"duration": int(message.file.duration or 0)}
+
+
 def sender_name(message, sender=None):
     """Who wrote a message, shown in groups: their first name (or a channel's title when a
     channel posts into a group). None for my own messages, private chats and channel posts,
@@ -141,15 +149,19 @@ def last_message_preview(message):
 
     It comes with the chat list itself (each dialog's last message, in a forum group the
     newest of any topic), so it costs no extra requests. kind: "text", "media" (no text,
-    e.g. a photo or sticker), "call" (details in call, see call_of) or "event" (joined,
+    e.g. a photo or sticker), "voice" (details in voice, see voice_of), "call" (details in
+    call, see call_of) or "event" (joined,
     pinned, ...). sender: who wrote it, only for other people's messages in groups;
     None in private chats and channel posts.
     """
     if message is None:
         return None
     call = call_of(message)
+    voice = voice_of(message)
     if call is not None:
         text, kind = "", "call"
+    elif voice is not None:
+        text, kind = message.raw_text or "", "voice"
     elif isinstance(message, types.MessageService):
         text, kind = "", "event"
     else:
@@ -162,6 +174,7 @@ def last_message_preview(message):
         "sender": sender_name(message),
         "kind": kind,
         "call": call,
+        "voice": voice,
     }
 
 
@@ -263,6 +276,7 @@ async def on_new_message(event):
         "date": event.date.isoformat(),
         "edited": is_edited(event.message),
         "call": None,
+        "voice": voice_of(event.message),
         "sender": sender_name(event.message, sender),
         "sender_id": sender_id_of(event.message, sender),
     })
@@ -684,6 +698,26 @@ async def get_photo(chat_id: int, size: int = 48, photo_id: Optional[str] = None
         return Response(f.read(), media_type="image/jpeg", headers=headers)
 
 
+# The voice message's OGG/Opus file as Telegram keeps it (about 100-250 KB a minute).
+# Not saved on the server: the phone keeps its own copy.
+@api.get("/voice/{chat_id}/{message_id}")
+@recovering
+async def get_voice(chat_id: int, message_id: int):
+    try:
+        message = await client.get_messages(chat_id, ids=message_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    if message is None or voice_of(message) is None:
+        raise HTTPException(status_code=404, detail="No such voice message")
+    try:
+        data = await client.download_media(message, file=bytes)
+    except errors.RPCError as e:
+        bad_request(e)
+    return Response(data, media_type="audio/ogg", headers={"Cache-Control": "private, max-age=86400"})
+
+
 @api.get("/topics/{chat_id}")
 @recovering
 async def get_topics(chat_id: int, limit: int = 50):
@@ -708,7 +742,7 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
     msgs = [
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
-         "sender": sender_name(m), "sender_id": sender_id_of(m)}
+         "voice": voice_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
