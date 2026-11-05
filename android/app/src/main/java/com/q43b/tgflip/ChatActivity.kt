@@ -39,6 +39,8 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var messageInput: EditText
     private lateinit var readKey: TextView
     private val messages = mutableListOf<Message>()
+    private var messageLimit = PAGE_SIZE  // grows by a page with each "Load older messages"
+    private var hasOlder = false  // the "Load older messages" row is shown
     private var unread = 0
     private var sending = false
     private var markingRead = false
@@ -100,10 +102,8 @@ class ChatActivity : AppCompatActivity() {
         messageList.adapter = messageAdapter
         // OK on a message opens its menu (OkListView takes OK before the keyboard app);
         // the click listener covers touch taps
-        messageList.onOk = { position -> messages.getOrNull(position)?.let(::showMessageMenu) }
-        messageList.setOnItemClickListener { _, _, position, _ ->
-            messages.getOrNull(position)?.let(::showMessageMenu)
-        }
+        messageList.onOk = ::onRowChosen
+        messageList.setOnItemClickListener { _, _, position, _ -> onRowChosen(position) }
         composeBar = findViewById(R.id.compose_bar)
         onBackPressedDispatcher.addCallback(this, cancelComposeOnBack)
 
@@ -223,14 +223,31 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadMessages(quiet: Boolean) {
+    // The "Load older messages" row, when shown, sits above the messages and shifts them by one
+    private val headerRows get() = if (hasOlder) 1 else 0
+
+    private fun messageAt(position: Int) = messages.getOrNull(position - headerRows)
+
+    private fun onRowChosen(position: Int) {
+        if (hasOlder && position == 0) loadOlder() else messageAt(position)?.let(::showMessageMenu)
+    }
+
+    // Asks for one more page, then keeps the highlight on the message that was at the top,
+    // so Up continues into the newly loaded older ones
+    private fun loadOlder() {
+        messageLimit += PAGE_SIZE
+        loadMessages(quiet = false, keepId = messages.firstOrNull()?.id)
+    }
+
+    // keepId: the message to highlight afterwards; null = the newest, at the bottom
+    private fun loadMessages(quiet: Boolean, keepId: Long? = null) {
         if (!quiet) showStatus(getString(R.string.loading_messages))
         lifecycleScope.launch {
             try {
                 val loaded = withContext(Dispatchers.IO) {
-                    api.getMessages(chatId, topicId).also { cache.saveMessages(chatId, topicId, it) }
+                    api.getMessages(chatId, topicId, messageLimit).also { cache.saveMessages(chatId, topicId, it) }
                 }
-                showMessages(loaded)
+                showMessages(loaded, keepId)
             } catch (e: BadTokenException) {
                 showStatus(getString(R.string.error_bad_token))
             } catch (e: NoServerException) {
@@ -244,14 +261,16 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun showMessages(loaded: List<Message>) {
+    private fun showMessages(loaded: List<Message>, keepId: Long? = null) {
         messages.clear()
         messages.addAll(loaded)
-        messageAdapter.clear()
-        messageAdapter.addAll(loaded.map(::formatMessage))
+        // A full page means the chat may go further back
+        hasOlder = loaded.size >= messageLimit
+        refreshRows()
         if (loaded.isEmpty()) showStatus(getString(R.string.no_messages)) else status.visibility = View.GONE
-        // Newest message is at the bottom; start there
-        messageList.setSelection(messageAdapter.count - 1)
+        // Newest message is at the bottom; start there, unless asked to keep a message in view
+        val keepIndex = messages.indexOfFirst { it.id == keepId }
+        messageList.setSelection(if (keepIndex >= 0) keepIndex + headerRows else messageAdapter.count - 1)
         messageList.requestFocus()
     }
 
@@ -358,6 +377,7 @@ class ChatActivity : AppCompatActivity() {
     // Rebuilds every row; the list keeps the highlight on the same position
     private fun refreshRows() {
         messageAdapter.clear()
+        if (hasOlder) messageAdapter.add(getString(R.string.load_older))
         messageAdapter.addAll(messages.map(::formatMessage))
     }
 
@@ -559,6 +579,7 @@ class ChatActivity : AppCompatActivity() {
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_UNREAD = "unread"
         private const val SNIPPET_LENGTH = 30
+        private const val PAGE_SIZE = 20
 
         // topic = null for an ordinary chat; otherwise one topic of a forum group
         fun start(context: Context, chat: Chat, topic: Topic? = null) {

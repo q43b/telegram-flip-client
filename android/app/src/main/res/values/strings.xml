@@ -38,6 +38,7 @@
     <string name="error_bad_address">Invalid server address</string>
     <string name="loading_messages">Loading messages…</string>
     <string name="no_messages">No messages</string>
+    <string name="load_older">Load older messages…</string>
     <string name="media">[media]</string>
     <string name="you">You</string>
     <string name="message_hint">Message</string>
