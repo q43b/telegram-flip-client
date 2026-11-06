@@ -1,9 +1,13 @@
 import os
+import re
+import sys
+import logging
 import secrets
 import asyncio
 import functools
 import itertools
 import time
+from collections import deque
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from io import BytesIO
@@ -22,8 +26,82 @@ from telethon.tl import custom
 
 load_dotenv()
 
+# The server's own console output, kept for the app's "under the hood" screen (WebSocket
+# /logs): the last LOG_KEEP lines, with the time. Everything printed goes through LogTee on
+# its way to the console. Sending lines to the app writes nothing to the log itself, so
+# watching it can't make it grow.
+LOG_KEEP = 500
+log_lines = deque(maxlen=LOG_KEEP)
+log_listeners = set()  # one asyncio.Queue per open /logs connection
+log_loop = None        # the server's event loop, set at startup
+ANSI_COLORS = re.compile(r"\x1b\[[0-9;]*m")  # uvicorn colors its words in a terminal
+
+
+def record_log(text):
+    line = f"{time.strftime('%H:%M:%S')} {ANSI_COLORS.sub('', text).rstrip()}"
+    log_lines.append(line)
+    if log_loop is not None and log_listeners:
+        log_loop.call_soon_threadsafe(notify_log_listeners, line)  # safe from any thread
+
+
+def notify_log_listeners(line):
+    for queue in list(log_listeners):
+        try:
+            queue.put_nowait(line)
+        except asyncio.QueueFull:
+            pass  # that viewer is far behind; it misses a line rather than holding up the server
+
+
+class LogTee:
+    """Passes console output on unchanged and records each finished line."""
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.partial = ""
+
+    def write(self, text):
+        self.stream.write(text)
+        self.partial += text
+        while "\n" in self.partial:
+            line, self.partial = self.partial.split("\n", 1)
+            if line.strip():
+                record_log(line)
+        return len(text)
+
+    def flush(self):
+        self.stream.flush()
+
+    def __getattr__(self, name):  # encoding, isatty, ... as the real console
+        return getattr(self.stream, name)
+
+
+class LogRecorder(logging.Handler):
+    """For uvicorn's loggers when they write to the console directly (see start_log_capture)."""
+
+    def emit(self, record):
+        record_log(f"{record.levelname}: {record.getMessage()}")
+
+
+if sys.stdout is not None:
+    sys.stdout = LogTee(sys.stdout)
+if sys.stderr is not None:
+    sys.stderr = LogTee(sys.stderr)
+
+
+def start_log_capture():
+    """Called at startup. run_server.py sets up uvicorn after importing this file, so uvicorn
+    already writes through LogTee; `uvicorn server:app` sets up its logging first, with the
+    real console, so its loggers get a LogRecorder instead (never both: no doubled lines)."""
+    global log_loop
+    log_loop = asyncio.get_running_loop()
+    for name in ("uvicorn", "uvicorn.access"):
+        logger = logging.getLogger(name)
+        if not any(isinstance(getattr(h, "stream", None), LogTee) for h in logger.handlers):
+            logger.addHandler(LogRecorder())
+
+
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.3.1-beta"
+VERSION = "0.4.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -478,6 +556,7 @@ async def watchdog():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    start_log_capture()
     if await connect_telegram() is None:
         raise RuntimeError("Not logged in. Run list_chats.py once first.")
     checker = asyncio.create_task(watchdog())
@@ -1025,10 +1104,7 @@ def log_app(ws: WebSocket):
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     try:
-        # The first message must be the token (see notes below)
-        first = await asyncio.wait_for(ws.receive_text(), timeout=5)
-        if not secrets.compare_digest(first.encode(), os.environ["API_TOKEN"].encode()):
-            await ws.close(code=1008)
+        if not await ws_token_ok(ws):
             return
         log_app(ws)
         ws_clients.add(ws)
@@ -1038,6 +1114,54 @@ async def ws_endpoint(ws: WebSocket):
         pass
     finally:
         ws_clients.discard(ws)
+
+
+def client_host(ws):
+    return ws.client.host if ws.client else "an app"
+
+
+async def ws_token_ok(ws):
+    """The first message must be the token, within 5 seconds (it is not sent in the URL, so it
+    never ends up in logs). Closes the connection when it is wrong."""
+    first = await asyncio.wait_for(ws.receive_text(), timeout=5)
+    if secrets.compare_digest(first.encode(), os.environ["API_TOKEN"].encode()):
+        return True
+    await ws.close(code=1008)
+    return False
+
+
+# The app's "under the hood" screen: first the kept lines (one JSON list), then each new line
+# as it is printed (a list of one). Nothing is logged per line sent; opening and closing the
+# screen each leave one line ("Started/Stopped live sharing the log"), so every viewing shows
+# as a pair in the log.
+@app.websocket("/logs")
+async def logs_endpoint(ws: WebSocket):
+    await ws.accept()
+    queue = asyncio.Queue(maxsize=1000)
+    sender = None
+    try:
+        if not await ws_token_ok(ws):
+            return
+        # Printed before this viewer listens, so it arrives once, as the last kept line
+        print(f"Started live sharing the log with {client_host(ws)}")
+        log_listeners.add(queue)
+        await ws.send_json(list(log_lines))
+
+        async def send_new_lines():
+            while True:
+                await ws.send_json([await queue.get()])
+
+        sender = asyncio.create_task(send_new_lines())
+        while True:
+            await ws.receive_text()  # only to notice when the app closes the screen
+    except (WebSocketDisconnect, asyncio.TimeoutError):
+        pass
+    finally:
+        if queue in log_listeners:
+            log_listeners.discard(queue)
+            print(f"Stopped live sharing the log with {client_host(ws)}")
+        if sender is not None:
+            sender.cancel()
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
