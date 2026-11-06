@@ -75,6 +75,7 @@ class ChatActivity : AppCompatActivity() {
         MessageAction(R.string.action_stop, isAvailable = { voice.currentId == it.id }) { voice.stop() },
         // Call records can only be deleted: Telegram refuses replies to them and forwarding them
         MessageAction(R.string.action_reply, isAvailable = { it.call == null }, perform = ::startReply),
+        MessageAction(R.string.action_react, isAvailable = { it.call == null }, perform = ::startReact),
         MessageAction(R.string.action_go_to_original, isAvailable = { it.replyToId != null }, perform = ::goToOriginal),
         // Own text messages only; Telegram itself refuses edits after its time limit
         MessageAction(R.string.action_edit, isAvailable = { it.out && it.text.isNotEmpty() }, perform = ::startEdit),
@@ -113,6 +114,7 @@ class ChatActivity : AppCompatActivity() {
         result.data?.data?.let(::chooseHowToSendVideo)
     }
     private var chatId = 0L
+    private var chatReactions: List<String>? = null  // what this chat allows, asked once per screen
     private var topicId: Long? = null  // set when this is one topic of a forum group
     private var live: LiveConnection? = null
     private var wasConnected = false
@@ -689,13 +691,56 @@ class ChatActivity : AppCompatActivity() {
     }
 
     // Someone reacted (or took a reaction back): only that message's line changes
-    private fun onLiveReactions(event: JSONObject) {
-        val id = event.optLong("id")
-        val index = messages.indexOfFirst { it.id == id }
+    private fun onLiveReactions(event: JSONObject) =
+        updateReactions(event.optLong("id"), Reaction.listFromJson(event.optJSONArray("reactions")))
+
+    private fun updateReactions(messageId: Long, reactions: List<Reaction>) {
+        val index = messages.indexOfFirst { it.id == messageId }
         if (index < 0) return
-        messages[index] = messages[index].copy(reactions = Reaction.listFromJson(event.optJSONArray("reactions")))
-        refreshRow(id)
+        messages[index] = messages[index].copy(reactions = reactions)
+        refreshRow(messageId)
         saveMessages()
+    }
+
+    // React…: the chat's allowed reactions (my most used first), mine marked "✓"; choosing
+    // mine again, or "Remove my reaction", takes it back. One reaction of mine at a time.
+    private fun startReact(message: Message) {
+        lifecycleScope.launch {
+            val allowed = chatReactions ?: try {
+                withContext(Dispatchers.IO) { api.getReactions(chatId) }.also { chatReactions = it }
+            } catch (e: IOException) {
+                showStatus(getString(R.string.error_react))
+                return@launch
+            }
+            if (allowed.isEmpty()) {
+                showStatus(getString(R.string.reactions_off))
+                return@launch
+            }
+            val mine = message.reactions.filter { it.mine }.map { it.emoji }.toSet()
+            val options: List<String?> = (if (mine.isEmpty()) emptyList() else listOf(null)) + allowed
+            val labels = options.map {
+                when (it) {
+                    null -> getString(R.string.remove_reaction)
+                    in mine -> "$it ✓"
+                    else -> it
+                }
+            }
+            MessageMenu.choose(this@ChatActivity, getString(R.string.react_title), labels) { which ->
+                val emoji = options[which]
+                setReaction(message, if (emoji in mine) null else emoji)
+            }
+        }
+    }
+
+    private fun setReaction(message: Message, emoji: String?) {
+        lifecycleScope.launch {
+            try {
+                val reactions = withContext(Dispatchers.IO) { api.react(chatId, message.id, emoji) }
+                if (reactions != null) updateReactions(message.id, reactions)
+            } catch (e: IOException) {
+                showStatus(getString(R.string.error_react))
+            }
+        }
     }
 
     // Telegram names the chat only for channels and supergroups. Without a chat_id the

@@ -23,8 +23,8 @@ android {
         targetSdk = 37
         // versionCode must go up with every release, or Android won't install it as an update.
         // versionName matches the git tag, without the "v" (tag v0.1.0-alpha).
-        versionCode = 29
-        versionName = "0.8.1-beta"
+        versionCode = 30
+        versionName = "0.9.0-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

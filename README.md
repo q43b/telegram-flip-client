@@ -20,10 +20,10 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Videos: play them from the message menu. The phone downloads the whole video first (up to 100 MB), then plays it smoothly from its own copy; OK pauses, Left/Right jump 10 seconds. Send your own from the F2 menu (Send media > Send video, up to 100 MB), optimized on the phone (480 px, about 8 MB a minute, much quicker through a slow proxy) or as the original, with the length and a preview picture so it shows properly in other Telegram apps
 - Round video messages: played like videos, under a round mask so they look round
 - Voice messages: play them from the message menu, with a running time on the message line, and record your own from the F2 menu (up to 5 minutes; OK sends, Back discards). They are kept on the phone like photos, and listening does not tell the sender
-- Message menu on OK: view a photo, play a video, play a voice message, reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone"), view the writer's profile, and in groups message them privately
+- Message menu on OK: view a photo, play a video, play a voice message, reply, react, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone"), view the writer's profile, and in groups message them privately
 - Profiles: photo, name, and username and phone number where the person lets you see them
 - Group info: photo, member count and the member list with photos and admin marks (where Telegram shows it)
-- Replies show a quote of the original; edited messages show "(edited)"; reactions show in a small line under the message (yours in bold) and update live
+- Replies show a quote of the original; edited messages show "(edited)"; reactions show in a small line under the message (yours in bold) and update live; add your own from the message menu (React…), with your most used ones first
 - Live updates over a WebSocket (new, edited and deleted messages), with automatic reconnect and a resync afterwards
 - "Mark as read" as a deliberate action on the F1 soft key, so read receipts are never sent by accident; a soft key label shows when there is something to mark
 - Quick phrases: saved phrases (set up in Settings) you drop into the message box from the F2 soft key menu, since typing on a keypad is slow

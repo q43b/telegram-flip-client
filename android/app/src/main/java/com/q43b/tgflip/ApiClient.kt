@@ -154,6 +154,21 @@ class ApiClient(baseUrl: String?, val token: String) {
         call(Request.Builder().url(endpoint("/delete")).post(body.toString().toRequestBody(JSON)))
     }
 
+    // The plain emoji reactions I can choose in this chat, my most used first; empty when the
+    // chat turned reactions off
+    fun getReactions(chatId: Long): List<String> {
+        val json = JSONObject(call(Request.Builder().url(endpoint("/reactions/$chatId")))).getJSONArray("reactions")
+        return List(json.length()) { json.getString(it) }
+    }
+
+    // Sets my reaction (replacing any I had), or takes it back with emoji = null. Returns the
+    // message's reactions as they are now, or null when Telegram didn't say (the live event will).
+    fun react(chatId: Long, messageId: Long, emoji: String?): List<Reaction>? {
+        val body = JSONObject().put("chat_id", chatId).put("message_id", messageId).put("emoji", emoji ?: JSONObject.NULL)
+        val json = JSONObject(call(Request.Builder().url(endpoint("/react")).post(body.toString().toRequestBody(JSON))))
+        return if (json.isNull("reactions")) null else Reaction.listFromJson(json.getJSONArray("reactions"))
+    }
+
     // Returns the forwarded copy's id
     fun forwardMessage(fromChatId: Long, messageId: Long, toChatId: Long): Long {
         val body = JSONObject().put("from_chat_id", fromChatId).put("message_id", messageId)
