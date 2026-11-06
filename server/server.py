@@ -103,7 +103,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.6.2-beta"
+VERSION = "0.7.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -235,6 +235,16 @@ def video_of(message):
     return {"duration": int(attr.duration or 0), "w": attr.w, "h": attr.h, "size": document.size}
 
 
+def round_of(message):
+    """For a round video ("video message"): {duration, size} (seconds, bytes); None for
+    anything else. Square videos with a round flag; the file comes from GET /video too."""
+    document = getattr(message, "video_note", None)
+    if document is None:
+        return None
+    attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeVideo)), None)
+    return {"duration": int(attr.duration or 0) if attr else 0, "size": document.size}
+
+
 def sender_name(message, sender=None):
     """Who wrote a message, shown in groups: their first name (or a channel's title when a
     channel posts into a group). None for my own messages, private chats and channel posts,
@@ -263,8 +273,8 @@ def last_message_preview(message):
 
     It comes with the chat list itself (each dialog's last message, in a forum group the
     newest of any topic), so it costs no extra requests. kind: "text", "media" (no text,
-    e.g. a sticker), "photo" and "video" (text is the caption), "voice" (details in voice,
-    see voice_of), "call" (details in
+    e.g. a sticker), "photo" and "video" (text is the caption), "round" (a round video
+    message), "voice" (details in voice, see voice_of), "call" (details in
     call, see call_of) or "event" (joined,
     pinned, ...). sender: who wrote it, only for other people's messages in groups;
     None in private chats and channel posts.
@@ -281,6 +291,8 @@ def last_message_preview(message):
         text, kind = message.raw_text or "", "photo"
     elif video_of(message) is not None:
         text, kind = message.raw_text or "", "video"
+    elif round_of(message) is not None:
+        text, kind = "", "round"
     elif isinstance(message, types.MessageService):
         text, kind = "", "event"
     else:
@@ -398,6 +410,7 @@ async def on_new_message(event):
         "voice": voice_of(event.message),
         "image": image_of(event.message),
         "video": video_of(event.message),
+        "round": round_of(event.message),
         "sender": sender_name(event.message, sender),
         "sender_id": sender_id_of(event.message, sender),
     })
@@ -907,7 +920,7 @@ async def download_video(chat_id, message_id, path):
         message = await client.get_messages(chat_id, ids=message_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Chat not found")
-    info = video_of(message) if message is not None else None
+    info = (video_of(message) or round_of(message)) if message is not None else None
     if info is None:
         raise HTTPException(status_code=404, detail="No such video")
     if info["size"] > MAX_VIDEO_BYTES:
@@ -917,7 +930,7 @@ async def download_video(chat_id, message_id, path):
     os.replace(part, path)
 
 
-# A video, as Telegram keeps it (no converting yet). Downloaded once from Telegram into
+# A video or round video message, as Telegram keeps it (no converting yet). Downloaded once from Telegram into
 # video_cache/ and then sent from there; the answer starts only when that download is done.
 @api.get("/video/{chat_id}/{message_id}")
 @recovering
@@ -980,7 +993,8 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
     msgs = [
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
-         "voice": voice_of(m), "image": image_of(m), "video": video_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
+         "voice": voice_of(m), "image": image_of(m), "video": video_of(m),
+         "round": round_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
