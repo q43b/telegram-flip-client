@@ -1,6 +1,6 @@
 # Plan: one server, several Telegram accounts
 
-Status: planned, not started (written 2026-11-06, at v0.4.0-beta). The owner wants it
+Status: step 1 done in v0.12.0-beta (the Account object, still one account; checked endpoint by endpoint against the old server, and with two apps on one account). Steps 2-5 are 0.13.0-beta "Almost Liquid". (Planned 2026-11-06 at v0.4.0-beta.) The owner wants it
 after video, stickers and reactions. To pick it up, ask: "let's do the multi-account plan
 from docs/multi-account-plan.md".
 
@@ -27,7 +27,11 @@ can't do yet.
 
 ## Steps
 
-### 1. Account object, still one account (pure refactor)
+### 1. Account object, still one account (pure refactor) - done in 0.12.0-beta
+
+Built with a "current account" context variable instead of an `acc` parameter everywhere: see
+CLAUDE.md (Accounts). Adding accounts = more entries in `ACCOUNTS`.
+
 
 - An `Account` class holding everything per account: its `TelegramClient`, `ws_clients`,
   caches, Telegram config, watchdog, reconnect logic.

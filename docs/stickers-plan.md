@@ -70,18 +70,35 @@ the pack list arrives with sticker sending, which needs it anyway.
 - Custom emoji: same loader at text size; spans replaced when loaded, row redrawn.
 - Mode and pack setting in `SettingsGroupActivity` (Media and Cache rows).
 
-## Animated mode (the expensive one: its own step)
+## Animated mode: an optional server add-on (owner's design, 2026-11-06, for 0.12.0)
 
-- Recommended: the server turns animated and video stickers into **animated WebP**, and the
-  phone plays them with Android's own `AnimatedImageDrawable` (Android 9+; on 7-8 it falls
-  back to still). No big library in the app.
-  - TGS (Lottie) on the server: `rlottie-python` (small wheel with Windows builds).
-  - WebM video stickers: need a video decoder on the server: PyAV (bundles ffmpeg libraries,
-    roughly +30 MB to the server zip) or ffmpeg. Decide when we get there; until then video
-    stickers stay still in mode 3.
-- Weak phone: animate stickers in the chat only while visible, at most a few at once;
-  custom emoji inside text stay still even in mode 3 unless that proves cheap enough.
-- Alternative kept in mind: Lottie on the phone (lottie-android, about +0.5 MB, heavy CPU).
+"I don't need it, I don't install it": animation is an **add-on to the server**, not part
+of it. Weaker phones, or owners who don't care, never download it; the app works the same,
+with still pictures. The app learns from the server whether the add-on is there.
+
+- **What it is:** PyAV (ffmpeg's libraries, with libvpx-vp9, which keeps video stickers'
+  transparency) for video stickers and rlottie-python for Lottie (TGS) ones. Checked: both
+  have Windows wheels for the server's Python, about 70 MB unpacked (~28 MB zipped), almost
+  all of it ffmpeg.
+- **Packaged server:** a separate release file, `tgflip-animated-addon-<version>-win64.zip`
+  (+ its `.sha256`), unpacked into `addons/animated/` next to the exe; the server adds that
+  folder to its import path at startup when it's there. Installed:
+  - at first-run setup: "Install the optional animated stickers add-on? (~28 MB) [y/N]";
+  - or any time with `tgflip-server.exe --maintenancemode`: a small menu to install, update
+    or remove the add-on (then start the server or quit).
+  It downloads the add-on of the server's own version from the GitHub release and checks it
+  against the published SHA-256; with no internet, a downloaded add-on zip placed next to the
+  exe is used instead. Removing deletes `addons/animated/`.
+- **Development server (venv):** `pip install -r server/requirements-animated.txt`.
+- **Server side:** `GET /server_info` -> `{version, animated}`; `/sticker/{id}?variant=animated`
+  turns animated and video stickers into **animated WebP** (rlottie for TGS, PyAV decoding
+  with libvpx-vp9 for WebM, Pillow writing the WebP), cached as `<id>_anim_<size>.webp`.
+  Without the add-on, or for static stickers, it answers with the still picture.
+- **App side:** Settings > Stickers "Animated" becomes choosable when the server says it has
+  the add-on (otherwise it says "needs the server's animated stickers add-on"). Played with
+  Android's own `AnimatedImageDrawable` (Android 9+; older phones stay still): only rows on
+  screen play (stopped when a row scrolls away), in the chat, in the sticker grid and in the
+  viewer. Custom emoji stay still in text; animating them in reaction lines is a later step.
 
 ## Steps
 
@@ -101,6 +118,6 @@ the pack list arrives with sticker sending, which needs it anyway.
      same F2 menu. Built: kept on the server in local_favorites.json (with each sticker's pack, to
      reload it after a restart).
    - Later: per-pack "chosen" ticks (makes "Only chosen packs" work), "download whole pack".
-4. **0.12.0 animated mode** (moved after sending at the owner's request; the owner will
-   choose the approach then): e.g. server conversion to animated WebP (TGS with
-   rlottie-python, a 0.4 MB wheel; video stickers with PyAV, 27 MB), phone playback.
+4. **0.12.0 animated mode as an optional server add-on** (see above): the add-on build and
+   install (setup, --maintenancemode), /server_info, animated WebP conversion, the app's
+   Animated mode for stickers. **0.12.1**: animated custom emoji in reaction lines.

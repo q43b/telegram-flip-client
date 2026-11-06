@@ -32,6 +32,7 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Cache settings: how long media is kept and how much space it may take (presets or your own numbers), clearing it, an optional separate cache for stickers with its own limits, and deleting all saved data for a fresh start
 - Soft key labels in the phone's own soft key boxes on Japanese Android flip phones (NextFP, like my Kyocera); other phones get the app's own label bar. A Settings switch picks which one shows
 - On the version line in Settings: F2 opens that version's release notes, Right ("under the hood") shows the server's log, live
+- Several phones can use the same account on one server at the same time
 - Connection status bar on every screen
 - Settings: server address per connection mode (local network, VPN, public internet over HTTPS), app token, theme (light, dark, follow phone)
 - Built for the d-pad: every action works with Up/Down, OK, Left/Right, Back and the soft keys
