@@ -27,7 +27,7 @@ import java.io.IOException
 // downloaded first (GET /video; the server first gets it from Telegram), into the media
 // cache's "videos" folder, then played from there: smooth on a weak phone, instant to
 // replay, works offline. OK = pause/play, Left/Right = back/forward 10 s, the volume keys
-// set the loudness, Back closes.
+// set the loudness, Back closes. Round video messages play here too, under a round mask.
 class VideoActivity : AppCompatActivity() {
     private lateinit var video: VideoView
     private lateinit var status: TextView
@@ -47,6 +47,20 @@ class VideoActivity : AppCompatActivity() {
         }
         video = findViewById(R.id.video)
         status = findViewById(R.id.status)
+        if (intent.getBooleanExtra(EXTRA_ROUND, false)) {
+            // The mask always covers exactly the video: same place (both centered), same size
+            val mask = findViewById<View>(R.id.round_mask)
+            mask.background = RoundMaskDrawable()
+            video.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                if (mask.layoutParams.width != v.width || mask.layoutParams.height != v.height) {
+                    mask.layoutParams = mask.layoutParams.apply {
+                        width = v.width
+                        height = v.height
+                    }
+                }
+                mask.visibility = if (v.width > 0) View.VISIBLE else View.GONE
+            }
+        }
         time = findViewById(R.id.time)
         SoftKeyBar(this).apply {  // nothing on the soft keys here: keep the phone's boxes empty
             setLeft(null)
@@ -175,13 +189,16 @@ class VideoActivity : AppCompatActivity() {
     companion object {
         private const val EXTRA_CHAT_ID = "chat_id"
         private const val EXTRA_MESSAGE_ID = "message_id"
+        private const val EXTRA_ROUND = "round"
         private const val SEEK_MS = 10_000
 
-        fun start(activity: Activity, chatId: Long, messageId: Long) {
+        // round = a round video message: shown under a round mask
+        fun start(activity: Activity, chatId: Long, messageId: Long, round: Boolean = false) {
             activity.startActivity(
                 Intent(activity, VideoActivity::class.java)
                     .putExtra(EXTRA_CHAT_ID, chatId)
                     .putExtra(EXTRA_MESSAGE_ID, messageId)
+                    .putExtra(EXTRA_ROUND, round)
             )
         }
     }

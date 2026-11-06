@@ -67,6 +67,8 @@
     <string name="media">[media]</string>
     <string name="event">[event]</string>
     <string name="video">Video</string>
+    <string name="round_message">Video message</string>
+    <string name="action_play_round">▶ Play video message</string>
     <string name="action_play_video">▶ Play video</string>
     <string name="video_server_fetching">The server is getting the video from Telegram…</string>
     <string name="video_downloading">Downloading %1$s of %2$s…</string>

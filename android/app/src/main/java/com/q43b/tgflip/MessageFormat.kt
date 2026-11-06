@@ -69,6 +69,12 @@ object MessageFormat {
         return if (caption.isEmpty()) label else "$label: $caption"
     }
 
+    // "⭕ Video message 0:15"; in the chat list only "⭕ Video message"
+    fun round(context: Context, round: RoundInfo?): String {
+        val label = "⭕ ${context.getString(R.string.round_message)}"
+        return if (round == null) label else "$label ${duration(round.duration)}"
+    }
+
     // "🎤 Voice message 0:12"
     fun voice(context: Context, voice: VoiceInfo) =
         "🎤 ${context.getString(R.string.voice_message)} ${duration(voice.duration)}"

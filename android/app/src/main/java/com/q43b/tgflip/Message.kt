@@ -7,6 +7,7 @@ import org.json.JSONObject
 // call = set when this is a call record instead of a text message.
 // voice = set for a voice message (text is then its caption, usually empty).
 // image = set for a photo, video = set for a video (text is then the caption).
+// round = set for a round video message.
 // sender = who wrote it, only for other people's messages in groups; senderId = their user
 // id (null for channels posting into a group), for their profile or a private chat.
 data class Message(
@@ -22,6 +23,7 @@ data class Message(
     val voice: VoiceInfo? = null,
     val image: ImageInfo? = null,
     val video: VideoInfo? = null,
+    val round: RoundInfo? = null,
 ) {
     // Same keys as the server sends, so saved messages read back with fromJson
     fun toJson(): JSONObject = JSONObject()
@@ -34,6 +36,7 @@ data class Message(
         .put("voice", voice?.toJson() ?: JSONObject.NULL)
         .put("image", image?.toJson() ?: JSONObject.NULL)
         .put("video", video?.toJson() ?: JSONObject.NULL)
+        .put("round", round?.toJson() ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = Message(
@@ -50,6 +53,7 @@ data class Message(
             voice = json.optJSONObject("voice")?.let(VoiceInfo::fromJson),
             image = json.optJSONObject("image")?.let(ImageInfo::fromJson),
             video = json.optJSONObject("video")?.let(VideoInfo::fromJson),
+            round = json.optJSONObject("round")?.let(RoundInfo::fromJson),
         )
     }
 }
@@ -102,5 +106,14 @@ data class VideoInfo(val duration: Int, val width: Int, val height: Int, val siz
             height = json.optInt("h"),
             size = json.optLong("size"),
         )
+    }
+}
+
+// A round video message: its length in seconds and file size in bytes. Played from GET /video.
+data class RoundInfo(val duration: Int, val size: Long) {
+    fun toJson(): JSONObject = JSONObject().put("duration", duration).put("size", size)
+
+    companion object {
+        fun fromJson(json: JSONObject) = RoundInfo(duration = json.optInt("duration"), size = json.optLong("size"))
     }
 }
