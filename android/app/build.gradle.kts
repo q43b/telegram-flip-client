@@ -23,8 +23,8 @@ android {
         targetSdk = 37
         // versionCode must go up with every release, or Android won't install it as an update.
         // versionName matches the git tag, without the "v" (tag v0.1.0-alpha).
-        versionCode = 25
-        versionName = "0.6.1-beta"
+        versionCode = 26
+        versionName = "0.6.2-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -71,6 +71,10 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
     implementation(libs.okhttp)
+    // Shrinking videos on the phone before sending (VideoOptimizer), with its video chip
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.effect)
+    implementation(libs.media3.common)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)

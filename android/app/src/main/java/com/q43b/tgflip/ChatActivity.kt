@@ -106,7 +106,7 @@ class ChatActivity : AppCompatActivity() {
         result.data?.data?.let(::chooseHowToSend)
     }
     private val pickVideo = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        result.data?.data?.let(::sendVideo)
+        result.data?.data?.let(::chooseHowToSendVideo)
     }
     private var chatId = 0L
     private var topicId: Long? = null  // set when this is one topic of a forum group
@@ -316,11 +316,40 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // Sends the video unchanged, as a reply if one is being written; text in the message box
+    private fun chooseHowToSendVideo(uri: Uri) {
+        val items = listOf(R.string.video_send_optimized, R.string.video_send_original)
+        MessageMenu.choose(this, getString(R.string.video_send_title), items.map(::getString)) { which ->
+            if (which == 0) optimizeAndSend(uri) else sendVideo(uri)
+        }
+    }
+
+    // Shrinks the video on the phone first (VideoOptimizer, into a file in cacheDir that is
+    // deleted once sent or given up), then sends that
+    private fun optimizeAndSend(uri: Uri) {
+        if (sending) return
+        sending = true
+        showStatus(getString(R.string.video_optimizing, 0))
+        val optimized = File(cacheDir, "optimized.mp4")
+        lifecycleScope.launch {
+            try {
+                VideoOptimizer.optimize(this@ChatActivity, uri, optimized) { percent ->
+                    showStatus(getString(R.string.video_optimizing, percent))
+                }
+                sending = false
+                sendVideo(Uri.fromFile(optimized), cleanup = optimized)
+            } catch (e: IOException) {
+                sending = false
+                optimized.delete()
+                showStatus(getString(R.string.video_optimize_failed))
+            }
+        }
+    }
+
+    // Sends the video file, as a reply if one is being written; text in the message box
     // becomes its caption. The status line counts the upload to the server, then says the
     // server is passing it on to Telegram (the long part). If sending fails, a dialog offers
-    // to try again.
-    private fun sendVideo(uri: Uri) {
+    // to try again. cleanup: a temporary file (an optimized copy) to delete when done.
+    private fun sendVideo(uri: Uri, cleanup: File? = null) {
         if (sending) return
         sending = true
         showStatus(getString(R.string.video_preparing))
@@ -349,6 +378,7 @@ class ChatActivity : AppCompatActivity() {
                     VideoSender.keepCopy(this@ChatActivity, uri, chatId, id)
                     id to video
                 }
+                cleanup?.delete()
                 if (caption.isNotEmpty()) messageInput.text.clear()
                 if (replyToId != null) cancelCompose()
                 status.visibility = View.GONE
@@ -356,15 +386,18 @@ class ChatActivity : AppCompatActivity() {
                     video = VideoInfo(video.seconds, video.width, video.height, video.size))
                 addMessage(sent, follow = true)
             } catch (e: VideoSender.TooLargeException) {
+                cleanup?.delete()
                 showStatus(getString(R.string.video_send_too_big))
             } catch (e: ApiClient.TooBigException) {
+                cleanup?.delete()
                 showStatus(getString(R.string.video_send_too_big))
             } catch (e: IOException) {
                 status.visibility = View.GONE
                 AlertDialog.Builder(this@ChatActivity)
                     .setMessage(R.string.video_send_failed)
-                    .setPositiveButton(R.string.voice_retry) { _, _ -> sendVideo(uri) }
-                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.voice_retry) { _, _ -> sendVideo(uri, cleanup) }
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> cleanup?.delete() }
+                    .setCancelable(false)
                     .show()
             } finally {
                 sending = false
