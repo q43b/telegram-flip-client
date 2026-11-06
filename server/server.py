@@ -23,7 +23,7 @@ from telethon.tl import custom
 load_dotenv()
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.2.1-beta"
+VERSION = "0.3.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -838,6 +838,8 @@ async def send(body: SendBody):
 
 
 MAX_VOICE_BYTES = 10 * 1024 * 1024  # about 40 minutes of the phone's recordings
+MAX_PHOTO_BYTES = 10 * 1024 * 1024  # Telegram's own limit for photos
+PHOTO_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
 
 # The body is the recording itself (OGG/Opus, as the phone's recorder makes it), so no
@@ -856,6 +858,28 @@ async def send_voice(request: Request, chat_id: int, duration: int,
             chat_id, file, voice_note=True,
             attributes=[types.DocumentAttributeAudio(duration=duration, voice=True)],
             reply_to=reply_target(topic_id, reply_to_id))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    return {"id": msg.id}
+
+
+# The body is the picture itself (JPEG, PNG or WebP; Content-Type says which), the rest
+# comes in the query, like /send_voice. Sent as a photo, so Telegram makes its own sizes.
+@api.post("/send_photo")
+@recovering
+async def send_photo(request: Request, chat_id: int, caption: str = "",
+                     topic_id: Optional[int] = None, reply_to_id: Optional[int] = None):
+    data = await request.body()
+    if not data or len(data) > MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=400, detail="Empty or too large (at most 10 MB)")
+    content_type = request.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+    file = BytesIO(data)
+    file.name = "photo." + PHOTO_TYPES.get(content_type, "jpg")  # tells Telethon the type
+    try:
+        msg = await client.send_file(chat_id, file, caption=caption or None, force_document=False,
+                                     reply_to=reply_target(topic_id, reply_to_id))
     except ValueError:
         raise HTTPException(status_code=404, detail="Chat not found")
     except errors.RPCError as e:
