@@ -76,6 +76,7 @@ def first_run_setup():
 async def serve(server, port):
     import uvicorn
 
+    server.use_account(server.ACCOUNTS[0])  # today's single account (more in 0.13.0)
     me = await server.connect_telegram()
     if me is None:
         # Only on the first run, or after logging out: asks for phone, code, 2FA password

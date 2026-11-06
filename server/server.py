@@ -9,7 +9,9 @@ import itertools
 import time
 import tempfile
 import json
+import copy
 from collections import deque
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from io import BytesIO
@@ -104,7 +106,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.11.3-beta"
+VERSION = "0.12.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -119,17 +121,79 @@ if os.environ.get("PROXY_HOST"):
 else:
     proxy_args = {}
 
-client = TelegramClient(
-    "tg_session",
-    int(os.environ["API_ID"]),
-    os.environ["API_HASH"],
-    **proxy_args,
-)
+class Account:
+    """One Telegram account the server works for: its Telegram connection and everything that
+    belongs to that account alone. 0.12.0 has exactly one, from .env; 0.13.0 reads several
+    (docs/multi-account-plan.md). Code working for an account gets it with account(), and
+    `client` below is always the current account's TelegramClient."""
+
+    def __init__(self, name, token, session, local_favorites):
+        self.name = name
+        self.token = token  # the app token that means this account
+        self.client = TelegramClient(session, int(os.environ["API_ID"]), os.environ["API_HASH"], **proxy_args)
+        self.ws_clients = set()  # its apps' live connections (several phones can share one account)
+        self.telegram_config = None  # Telegram's settings as this account gets them
+        self.forum_unread_cache = {}  # chat_id -> (time counted, total unread), see forum_unread
+        self.sticker_documents = {}  # sticker id -> document (file references are per account)
+        self.sticker_sets = {}  # pack id -> InputStickerSetID
+        self.video_downloads = {}  # file path -> running download, see get_video
+        self.local_favorites = local_favorites  # its local favourite stickers' file
+        self.reconnect_lock = asyncio.Lock()
+        self.last_recovery = 0.0
+        self.watchdog = None  # its watchdog task, while running
+
+
+# The account the code is running for right now: set for each request by its token
+# (current_account), for each live connection, and for each Telegram update (on). A context
+# variable, so every request and task keeps its own, like a web framework's current request.
+_current_account = ContextVar("account")
+
+
+def account():
+    return _current_account.get()
+
+
+def use_account(acc):
+    _current_account.set(acc)
+
+
+class CurrentClient:
+    """`client` everywhere: the current account's TelegramClient."""
+
+    def __getattr__(self, name):
+        return getattr(account().client, name)
+
+    def __call__(self, *args, **kwargs):
+        return account().client(*args, **kwargs)
+
+
+client = CurrentClient()
+
+# Only today's single account, from .env, with the session and local favourites files it always
+# had (0.13.0 adds accounts.json)
+ACCOUNTS = [Account("main", os.environ["API_TOKEN"], "tg_session", "local_favorites.json")]
+
+# Telegram update handlers (@on below), registered on every account's client at startup;
+# each runs as that account
+event_handlers = []
+
+
+def on(event):
+    def register(handler):
+        event_handlers.append((event, handler))
+        return handler
+    return register
+
+
+def register_handlers(acc):
+    for event, handler in event_handlers:
+        async def run_as_account(update, handler=handler):
+            use_account(acc)
+            await handler(update)
+        acc.client.add_event_handler(run_as_account, copy.copy(event))  # a builder per client
 
 # The web page lives next to this file, also inside the packaged server
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-
-ws_clients = set()  # currently connected browsers
 
 # Profile photos, shrunk to the size the app asked for, saved as
 # <chat id>_<photo id>_<size>.jpg so each is fetched from Telegram only once.
@@ -273,7 +337,9 @@ async def learn_custom_emoji(ids):
                 raise
             return
         for document in documents:
-            sticker_documents[document.id] = document  # /sticker can draw it now
+            if not isinstance(document, types.Document):
+                continue  # DocumentEmpty: an id Telegram doesn't know
+            account().sticker_documents[document.id] = document  # /sticker can draw it now
             alt = next((a.alt for a in document.attributes
                         if isinstance(a, types.DocumentAttributeCustomEmoji)), None)
             if alt:
@@ -312,15 +378,15 @@ def reactions_of(message):
 
 STICKER_KINDS = {"image/webp": "static", "application/x-tgsticker": "animated", "video/webm": "video"}
 
-# Sticker documents seen so far, by id: downloading one later needs its document (with the
-# file reference Telegram gave alongside it), not just the id. See docs/stickers-plan.md.
-sticker_documents = {}
+# Sticker documents seen so far are kept per account (Account.sticker_documents): downloading
+# one later needs its document (with the file reference Telegram gave alongside it), not just
+# the id. See docs/stickers-plan.md.
 
 
 def sticker_json(document):
     """{id, emoji, kind} (kind static / animated / video) for a sticker document, which is
     remembered for GET /sticker (the picture) and POST /send_sticker."""
-    sticker_documents[document.id] = document
+    account().sticker_documents[document.id] = document
     attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeSticker)), None)
     return {
         "id": document.id,
@@ -411,15 +477,12 @@ def last_message_preview(message):
 
 
 # Telegram's server settings, including how long messages can be edited and deleted
-# for everyone. Asked once; they rarely change.
-telegram_config = None
-
-
+# for everyone. Asked once per account; they rarely change.
 async def get_telegram_config():
-    global telegram_config
-    if telegram_config is None:
-        telegram_config = await client(functions.help.GetConfigRequest())
-    return telegram_config
+    acc = account()
+    if acc.telegram_config is None:
+        acc.telegram_config = await client(functions.help.GetConfigRequest())
+    return acc.telegram_config
 
 
 def can_delete_others(entity):
@@ -459,11 +522,10 @@ async def get_forum_topics(peer, limit):
 # That costs a request per forum, so remember totals and recount only after activity
 # in that group (see forget_forum_unread) or after FORUM_UNREAD_TTL seconds.
 FORUM_UNREAD_TTL = 60
-forum_unread_cache = {}  # chat_id -> (time counted, total unread)
 
 
 async def forum_unread(dialog):
-    cached = forum_unread_cache.get(dialog.id)
+    cached = account().forum_unread_cache.get(dialog.id)
     if cached and time.monotonic() - cached[0] < FORUM_UNREAD_TTL:
         return cached[1]
     try:
@@ -474,23 +536,25 @@ async def forum_unread(dialog):
         print(f"Could not count topics of {dialog.id}: {e}")
         return 0
     total = sum(t.unread_count for t in topics)
-    forum_unread_cache[dialog.id] = (time.monotonic(), total)
+    account().forum_unread_cache[dialog.id] = (time.monotonic(), total)
     return total
 
 
 def forget_forum_unread(chat_id):
-    forum_unread_cache.pop(chat_id, None)
+    account().forum_unread_cache.pop(chat_id, None)
 
 
 async def broadcast(data):
-    for ws in list(ws_clients):
+    """To all of the current account's apps (each phone keeps its own live connection)."""
+    clients = account().ws_clients
+    for ws in list(clients):
         try:
             await ws.send_json(data)
         except Exception:
-            ws_clients.discard(ws)
+            clients.discard(ws)
 
 
-@client.on(events.NewMessage)
+@on(events.NewMessage)
 async def on_new_message(event):
     forget_forum_unread(event.chat_id)
     await learn_live_custom_emoji(getattr(event.message, "reactions", None))
@@ -523,7 +587,7 @@ async def on_new_message(event):
 
 # Telethon's NewMessage skips service messages, but call records are worth showing live.
 # Calls only happen in private chats, which arrive as UpdateNewMessage.
-@client.on(events.Raw(types.UpdateNewMessage))
+@on(events.Raw(types.UpdateNewMessage))
 async def on_call_record(update):
     message = update.message
     call = call_of(message)
@@ -546,7 +610,7 @@ async def on_call_record(update):
 # While a call is ringing, Telegram sends call updates, not messages (the call record
 # message only appears once the call is over). PhoneCallRequested = someone is calling
 # me now; Accepted / PhoneCall (answered somewhere) / Discarded = it stopped ringing.
-@client.on(events.Raw(types.UpdatePhoneCall))
+@on(events.Raw(types.UpdatePhoneCall))
 async def on_phone_call(update):
     call = update.phone_call
     print(f"Call update: {type(call).__name__}")  # shows in the console when calls arrive
@@ -571,7 +635,7 @@ async def display_name(user_id):
         return "Someone"
 
 
-@client.on(events.MessageEdited)
+@on(events.MessageEdited)
 async def on_edited(event):
     await learn_live_custom_emoji(getattr(event.message, "reactions", None))
     await broadcast({
@@ -594,7 +658,7 @@ async def learn_live_custom_emoji(reactions):
 
 
 # Reactions added or taken back, by anyone: Telegram sends these as their own update
-@client.on(events.Raw(types.UpdateMessageReactions))
+@on(events.Raw(types.UpdateMessageReactions))
 async def on_reactions(update):
     await learn_live_custom_emoji(update.reactions)
     await broadcast({
@@ -605,14 +669,14 @@ async def on_reactions(update):
     })
 
 
-@client.on(events.MessageDeleted)
+@on(events.MessageDeleted)
 async def on_deleted(event):
     # Telegram names the chat only for channels and supergroups; elsewhere chat_id is
     # None, but there message ids are unique across all of the account's chats
     await broadcast({"type": "deleted", "chat_id": event.chat_id, "ids": event.deleted_ids})
 
 
-@client.on(events.MessageRead(inbox=True))
+@on(events.MessageRead(inbox=True))
 async def on_read(event):
     forget_forum_unread(event.chat_id)
     await broadcast({"type": "read", "chat_id": event.chat_id})
@@ -645,20 +709,17 @@ def is_cluster_error(e):
     return "MTPROTO_CLUSTER_INVALID" in str(e)
 
 
-reconnect_lock = asyncio.Lock()
-last_recovery = 0.0
-
-
 async def recover():
-    """Reconnects from scratch. Several requests failing at once trigger one reconnect."""
-    global last_recovery
-    async with reconnect_lock:
-        if time.monotonic() - last_recovery < 10:
+    """Reconnects the current account from scratch. Several requests failing at once trigger
+    one reconnect."""
+    acc = account()
+    async with acc.reconnect_lock:
+        if time.monotonic() - acc.last_recovery < 10:
             return  # another request just did it
         print("Telegram connection is broken (MTPROTO_CLUSTER_INVALID); reconnecting")
         await client.disconnect()
         await connect_telegram()
-        last_recovery = time.monotonic()
+        acc.last_recovery = time.monotonic()
         print("Reconnected to Telegram")
 
 
@@ -716,22 +777,41 @@ async def watchdog():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     start_log_capture()
-    if await connect_telegram() is None:
-        raise RuntimeError("Not logged in. Run list_chats.py once first.")
-    checker = asyncio.create_task(watchdog())
+    for acc in ACCOUNTS:
+        use_account(acc)  # the tasks started here keep it (they copy the context)
+        register_handlers(acc)
+        if await connect_telegram() is None:
+            raise RuntimeError("Not logged in. Run list_chats.py once first.")
+        acc.watchdog = asyncio.create_task(watchdog())
     print(f"TG Flip server {VERSION} started successfully")
     yield
-    checker.cancel()
-    await client.disconnect()
+    for acc in ACCOUNTS:
+        acc.watchdog.cancel()
+        await acc.client.disconnect()
 
 
-def check_token(x_token: str = Header(default="")):
-    if not secrets.compare_digest(x_token.encode(), os.environ["API_TOKEN"].encode()):
+def account_with_token(token):
+    """The account this app token means, or None. Compared with every account's token."""
+    found = None
+    for acc in ACCOUNTS:
+        if secrets.compare_digest(token.encode(), acc.token.encode()):
+            found = acc
+    return found
+
+
+async def current_account(x_token: str = Header(default="")):
+    """Every request's first step: the token says which account it is for (401 if none), which
+    is then the current account for the rest of the request. async, so it runs in the
+    request's own context (a plain def would run in another thread and the choice would be lost)."""
+    acc = account_with_token(x_token)
+    if acc is None:
         raise HTTPException(status_code=401, detail="Bad token")
+    use_account(acc)
+    return acc
 
 
 app = FastAPI(lifespan=lifespan)
-api = APIRouter(dependencies=[Depends(check_token)])  # token required on these
+api = APIRouter(dependencies=[Depends(current_account)])  # token required on these
 
 
 class SendBody(BaseModel):
@@ -1063,11 +1143,12 @@ async def sticker_document(document_id, chat_id, message_id):
         message = await client.get_messages(chat_id, ids=message_id)
         if message is not None and sticker_of(message) is not None and message.sticker.id == document_id:
             return message.sticker
-        return sticker_documents.get(document_id)
+        return account().sticker_documents.get(document_id)
     documents = await client(functions.messages.GetCustomEmojiDocumentsRequest(document_id=[document_id]))
     for document in documents:
-        sticker_documents[document.id] = document
-    return sticker_documents.get(document_id)
+        if isinstance(document, types.Document):  # an unknown id comes back as DocumentEmpty
+            account().sticker_documents[document.id] = document
+    return account().sticker_documents.get(document_id)
 
 
 def still_sticker(data, size):
@@ -1096,7 +1177,7 @@ async def get_sticker(document_id: int, size: int = 128, chat_id: Optional[int] 
     headers = {"Cache-Control": "private, max-age=604800"}  # a sticker never changes
     path = cache_path(STICKER_CACHE, f"{document_id}_still_{size}.png")
     if not os.path.exists(path):
-        document = sticker_documents.get(document_id)
+        document = account().sticker_documents.get(document_id)
         try:
             if document is None:
                 document = await sticker_document(document_id, chat_id, message_id)
@@ -1125,7 +1206,6 @@ async def get_sticker(document_id: int, size: int = 128, chat_id: Optional[int] 
 
 # Downloads still running, by file: a second request for the same video waits for the first
 # download instead of starting its own
-video_downloads = {}
 
 
 async def download_video(chat_id, message_id, path):
@@ -1150,11 +1230,11 @@ async def download_video(chat_id, message_id, path):
 async def get_video(chat_id: int, message_id: int):
     path = cache_path(VIDEO_CACHE, f"{chat_id}_{message_id}.mp4")
     if not os.path.exists(path):
-        task = video_downloads.get(path)
+        task = account().video_downloads.get(path)
         if task is None:
             task = asyncio.create_task(download_video(chat_id, message_id, path))
-            video_downloads[path] = task
-            task.add_done_callback(lambda _: video_downloads.pop(path, None))
+            account().video_downloads[path] = task
+            task.add_done_callback(lambda _: account().video_downloads.pop(path, None))
         try:
             await asyncio.shield(task)  # the phone giving up must not stop a shared download
         except errors.RPCError as e:
@@ -1417,14 +1497,14 @@ async def edit(body: EditBody):
     return {"ok": True}
 
 
-# My installed sticker packs, by id: opening one needs its access hash too
-sticker_sets = {}
+# My installed sticker packs are kept per account (Account.sticker_sets), by id: opening one
+# needs its access hash too
 
 
 async def installed_sticker_sets():
     found = await client(functions.messages.GetAllStickersRequest(hash=0))
     for pack in found.sets:
-        sticker_sets[pack.id] = types.InputStickerSetID(id=pack.id, access_hash=pack.access_hash)
+        account().sticker_sets[pack.id] = types.InputStickerSetID(id=pack.id, access_hash=pack.access_hash)
     return found.sets
 
 
@@ -1444,23 +1524,24 @@ async def get_sticker_sets():
 # allow 5 without Premium), never sent to Telegram. Kept in this file next to .env, newest
 # first, as {id, set_id, set_hash}: the pack each came from, so the server can load the
 # sticker again after a restart (drawing and sending need its full document).
-# Per account later (docs/multi-account-plan.md).
+# One file per account (Account.local_favorites; today's single account uses this one).
 LOCAL_FAVORITES = "local_favorites.json"
 
 
 def load_local_favorites():
     try:
-        with open(LOCAL_FAVORITES, encoding="utf-8") as f:
+        with open(account().local_favorites, encoding="utf-8") as f:
             return json.load(f)
     except (OSError, ValueError):
         return []
 
 
 def save_local_favorites(entries):
-    part = LOCAL_FAVORITES + ".part"  # replaced in one step, so a crash never leaves half a file
+    path = account().local_favorites
+    part = path + ".part"  # replaced in one step, so a crash never leaves half a file
     with open(part, "w", encoding="utf-8") as f:
         json.dump(entries, f)
-    os.replace(part, LOCAL_FAVORITES)
+    os.replace(part, path)
 
 
 async def local_favorite_documents():
@@ -1487,7 +1568,7 @@ async def local_favorite_documents():
 async def local_favorite(sticker_id: int, remove: bool = False):
     entries = [e for e in load_local_favorites() if e["id"] != sticker_id]
     if not remove:
-        document = sticker_documents.get(sticker_id)
+        document = account().sticker_documents.get(sticker_id)
         if document is None:
             raise HTTPException(status_code=404, detail="Unknown sticker: open its pack again")
         attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeSticker)), None)
@@ -1516,11 +1597,11 @@ async def get_sticker_set(pack: str):
                 pack_id = int(pack)
             except ValueError:
                 raise HTTPException(status_code=404, detail="No such pack")
-            if pack_id not in sticker_sets:
+            if pack_id not in account().sticker_sets:
                 await installed_sticker_sets()
-            if pack_id not in sticker_sets:
+            if pack_id not in account().sticker_sets:
                 raise HTTPException(status_code=404, detail="No such pack")
-            found = await client(functions.messages.GetStickerSetRequest(stickerset=sticker_sets[pack_id], hash=0))
+            found = await client(functions.messages.GetStickerSetRequest(stickerset=account().sticker_sets[pack_id], hash=0))
             documents = found.documents
     except errors.RPCError as e:
         bad_request(e)
@@ -1534,7 +1615,7 @@ async def get_sticker_set(pack: str):
 @recovering
 async def get_sticker_set_of(sticker_id: int, chat_id: Optional[int] = None, message_id: Optional[int] = None):
     try:
-        document = sticker_documents.get(sticker_id) or await sticker_document(sticker_id, chat_id, message_id)
+        document = account().sticker_documents.get(sticker_id) or await sticker_document(sticker_id, chat_id, message_id)
         attr = None if document is None else next(
             (a for a in document.attributes if isinstance(a, types.DocumentAttributeSticker)), None)
         if attr is None or not isinstance(attr.stickerset, types.InputStickerSetID):
@@ -1545,7 +1626,7 @@ async def get_sticker_set_of(sticker_id: int, chat_id: Optional[int] = None, mes
     except errors.RPCError as e:
         bad_request(e)
     pack = found.set
-    sticker_sets[pack.id] = types.InputStickerSetID(id=pack.id, access_hash=pack.access_hash)
+    account().sticker_sets[pack.id] = types.InputStickerSetID(id=pack.id, access_hash=pack.access_hash)
     return {
         "pack": {"id": pack.id, "title": pack.title, "count": pack.count,
                  "installed": pack.installed_date is not None and not pack.archived},
@@ -1558,7 +1639,7 @@ async def get_sticker_set_of(sticker_id: int, chat_id: Optional[int] = None, mes
 @api.post("/sticker/{sticker_id}/fave")
 @recovering
 async def fave_sticker(sticker_id: int, unfave: bool = False):
-    document = sticker_documents.get(sticker_id)
+    document = account().sticker_documents.get(sticker_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Unknown sticker: open its pack again")
     try:
@@ -1573,10 +1654,10 @@ async def fave_sticker(sticker_id: int, unfave: bool = False):
 @api.post("/sticker_set/{pack_id}/install")
 @recovering
 async def install_sticker_set(pack_id: int):
-    if pack_id not in sticker_sets:
+    if pack_id not in account().sticker_sets:
         raise HTTPException(status_code=404, detail="Unknown pack: open it again")
     try:
-        await client(functions.messages.InstallStickerSetRequest(stickerset=sticker_sets[pack_id], archived=False))
+        await client(functions.messages.InstallStickerSetRequest(stickerset=account().sticker_sets[pack_id], archived=False))
     except errors.RPCError as e:
         bad_request(e)
     return {"ok": True}
@@ -1587,7 +1668,7 @@ async def install_sticker_set(pack_id: int):
 @api.post("/send_sticker")
 @recovering
 async def send_sticker(body: SendStickerBody):
-    document = sticker_documents.get(body.sticker_id)
+    document = account().sticker_documents.get(body.sticker_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Unknown sticker: open its pack again")
     try:
@@ -1726,13 +1807,15 @@ async def ws_endpoint(ws: WebSocket):
         if not await ws_token_ok(ws):
             return
         log_app(ws)
-        ws_clients.add(ws)
+        account().ws_clients.add(ws)
         while True:
             await ws.receive_text()  # keeps the connection open
     except (WebSocketDisconnect, asyncio.TimeoutError):
         pass
     finally:
-        ws_clients.discard(ws)
+        acc = _current_account.get(None)
+        if acc is not None:
+            acc.ws_clients.discard(ws)
 
 
 def client_host(ws):
@@ -1741,9 +1824,12 @@ def client_host(ws):
 
 async def ws_token_ok(ws):
     """The first message must be the token, within 5 seconds (it is not sent in the URL, so it
-    never ends up in logs). Closes the connection when it is wrong."""
+    never ends up in logs); its account becomes the connection's current account. Closes the
+    connection when it is wrong."""
     first = await asyncio.wait_for(ws.receive_text(), timeout=5)
-    if secrets.compare_digest(first.encode(), os.environ["API_TOKEN"].encode()):
+    acc = account_with_token(first)
+    if acc is not None:
+        use_account(acc)
         return True
     await ws.close(code=1008)
     return False
