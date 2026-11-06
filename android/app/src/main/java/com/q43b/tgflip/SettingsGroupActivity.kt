@@ -42,6 +42,7 @@ class SettingsGroupActivity : AppCompatActivity() {
     private lateinit var adapter: ArrayAdapter<String>
     private var rows = emptyList<SettingRow>()
     private var cacheBytes = 0L  // the media cache's size, for "Clear media cache (size)"
+    private var stickerBytes = 0L  // the sticker cache's, while it is separate
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,6 +82,7 @@ class SettingsGroupActivity : AppCompatActivity() {
         if (group == Group.MEDIA_CACHE) {
             lifecycleScope.launch {
                 cacheBytes = withContext(Dispatchers.IO) { MediaCache.sizeBytes(this@SettingsGroupActivity) }
+                stickerBytes = withContext(Dispatchers.IO) { MediaCache.stickerBytes(this@SettingsGroupActivity) }
                 showRows()
             }
         }
@@ -90,7 +92,7 @@ class SettingsGroupActivity : AppCompatActivity() {
         rows = when (group) {
             Group.NETWORK -> networkRows()
             Group.APPEARANCE -> appearanceRows()
-            Group.MEDIA_CACHE -> stickerRows() + CacheMenu.rows(this, cacheBytes, ::refresh)
+            Group.MEDIA_CACHE -> stickerRows() + CacheMenu.rows(this, cacheBytes, stickerBytes, ::refresh)
             Group.QOL -> qolRows()
             Group.ADVANCED -> advancedRows()
         }

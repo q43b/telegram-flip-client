@@ -120,6 +120,9 @@ class ChatActivity : AppCompatActivity() {
     private val pickPhoto = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         result.data?.data?.let(::chooseHowToSend)
     }
+    private val pickSticker = registerForActivityResult(StickerPickerActivity.Pick()) { sticker ->
+        sticker?.let(::sendSticker)
+    }
     private val pickVideo = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         result.data?.data?.let(::chooseHowToSendVideo)
     }
@@ -291,6 +294,7 @@ class ChatActivity : AppCompatActivity() {
                 R.string.quick_phrases -> showQuickPhrases()
                 R.string.menu_record_voice -> startRecording()
                 R.string.menu_media -> showMediaMenu()
+                R.string.menu_stickers -> pickSticker.launch(Unit)
                 else -> showComingLater()
             }
         }
@@ -436,6 +440,27 @@ class ChatActivity : AppCompatActivity() {
         val items = listOf(R.string.photo_send_optimized, R.string.photo_send_original)
         MessageMenu.choose(this, getString(R.string.photo_send_title), items.map(::getString)) { which ->
             sendPhoto(uri, optimized = which == 0)
+        }
+    }
+
+    // Sends a sticker chosen in the picker, as a reply if one is being written
+    private fun sendSticker(sticker: StickerInfo) {
+        if (sending) return
+        sending = true
+        showStatus(getString(R.string.sending))
+        val replyToId = replyingTo?.id
+        lifecycleScope.launch {
+            try {
+                val id = withContext(Dispatchers.IO) { api.sendSticker(chatId, topicId, sticker.id, replyToId) }
+                if (replyToId != null) cancelCompose()
+                status.visibility = View.GONE
+                addMessage(Message(id, "", out = true, date = MessageFormat.now(), replyToId = replyToId, sticker = sticker),
+                    follow = true)
+            } catch (e: IOException) {
+                showStatus(getString(R.string.sticker_send_failed))
+            } finally {
+                sending = false
+            }
         }
     }
 

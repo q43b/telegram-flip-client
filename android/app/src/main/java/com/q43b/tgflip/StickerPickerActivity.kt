@@ -1,0 +1,190 @@
+package com.q43b.tgflip
+
+import android.app.Activity
+import android.content.Intent
+import android.os.Bundle
+import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.BaseAdapter
+import android.widget.GridView
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContract
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.IOException
+
+// F2 > Stickers in a chat: "🕘 Recent" and "★ Favorites", then my sticker packs; OK on one
+// shows its stickers as a grid (all four arrows move), OK on a sticker picks it and goes back
+// to the chat, which sends it. Back (or Left) in the grid returns to the packs. The grid's
+// pictures are the chat's (same StickerLoader size and files); in data saver mode, or while
+// a picture loads, the sticker's emoji shows instead.
+class StickerPickerActivity : AppCompatActivity() {
+    private lateinit var api: ApiClient
+    private lateinit var title: TextView
+    private lateinit var status: TextView
+    private lateinit var packList: WrapListView
+    private lateinit var grid: GridView
+    private lateinit var loader: StickerLoader
+    private var packs = emptyList<StickerPack>()
+    private var stickers = emptyList<StickerInfo>()
+
+    // Back in the grid goes back to the packs
+    private val backToPacks = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = showPacks()
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContentView(R.layout.activity_sticker_picker)
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            insets
+        }
+        val settings = ServerSettings(this)
+        api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        title = findViewById(R.id.picker_title)
+        status = findViewById(R.id.status)
+        packList = findViewById(R.id.pack_list)
+        grid = findViewById(R.id.sticker_grid)
+        loader = StickerLoader(this, lifecycleScope) { (grid.adapter as? BaseAdapter)?.notifyDataSetChanged() }
+            .also { it.api = api }
+        onBackPressedDispatcher.addCallback(this, backToPacks)
+        packList.setOnItemClickListener { _, _, position, _ -> openPack(packs[position]) }
+        grid.setOnItemClickListener { _, _, position, _ -> pick(stickers[position]) }
+        loadPacks()
+    }
+
+    // Left closes the grid like Back; in the pack list it closes the screen
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && packList.visibility == View.VISIBLE) {
+            if (event.action == KeyEvent.ACTION_UP) finish()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun loadPacks() {
+        title.setText(R.string.stickers_picker_title)
+        showStatus(getString(R.string.stickers_loading))
+        lifecycleScope.launch {
+            val mine = try {
+                withContext(Dispatchers.IO) { api.getStickerPacks() }
+            } catch (e: IOException) {
+                showStatus(getString(R.string.stickers_not_loaded))
+                return@launch
+            }
+            packs = listOf(
+                StickerPack(RECENT, getString(R.string.stickers_recent), 0),
+                StickerPack(FAVED, getString(R.string.stickers_faved), 0),
+            ) + mine
+            packList.adapter = ArrayAdapter(this@StickerPickerActivity, android.R.layout.simple_list_item_1,
+                packs.map { if (it.count > 0) "${it.title} (${it.count})" else it.title })
+            status.visibility = View.GONE
+            packList.requestFocus()
+        }
+    }
+
+    private fun openPack(pack: StickerPack) {
+        title.text = pack.title
+        showStatus(getString(R.string.stickers_loading))
+        lifecycleScope.launch {
+            val found = try {
+                withContext(Dispatchers.IO) { api.getStickerPack(pack.id) }
+            } catch (e: IOException) {
+                showStatus(getString(R.string.stickers_not_loaded))
+                return@launch
+            }
+            if (found.isEmpty()) {
+                showStatus(getString(R.string.stickers_empty))
+                return@launch
+            }
+            stickers = found
+            status.visibility = View.GONE
+            grid.adapter = StickerGridAdapter()
+            packList.visibility = View.GONE
+            grid.visibility = View.VISIBLE
+            backToPacks.isEnabled = true
+            grid.requestFocus()
+            grid.setSelection(0)
+        }
+    }
+
+    private fun showPacks() {
+        backToPacks.isEnabled = false
+        grid.visibility = View.GONE
+        grid.adapter = null
+        status.visibility = View.GONE
+        packList.visibility = View.VISIBLE
+        title.setText(R.string.stickers_picker_title)
+        packList.requestFocus()
+    }
+
+    private fun pick(sticker: StickerInfo) {
+        setResult(Activity.RESULT_OK, Intent()
+            .putExtra(EXTRA_ID, sticker.id).putExtra(EXTRA_EMOJI, sticker.emoji).putExtra(EXTRA_KIND, sticker.kind))
+        finish()
+    }
+
+    private fun showStatus(text: String) {
+        status.text = text
+        status.visibility = View.VISIBLE
+    }
+
+    private inner class StickerGridAdapter : BaseAdapter() {
+        private val pictures = StickerSetting.showsPictures(this@StickerPickerActivity)
+
+        override fun getCount() = stickers.size
+        override fun getItem(position: Int) = stickers[position]
+        override fun getItemId(position: Int) = stickers[position].id
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val cell = convertView ?: layoutInflater.inflate(R.layout.sticker_cell, parent, false)
+            val sticker = stickers[position]
+            val picture = if (pictures) loader.drawable(sticker.id, null, null) else null
+            cell.findViewById<ImageView>(R.id.picture).setImageDrawable(picture)
+            cell.findViewById<TextView>(R.id.emoji).apply {
+                text = sticker.emoji.ifEmpty { "🏷" }
+                visibility = if (picture == null) View.VISIBLE else View.INVISIBLE
+            }
+            return cell
+        }
+    }
+
+    // How the chat screen opens this and gets the chosen sticker back (null = nothing chosen)
+    class Pick : ActivityResultContract<Unit, StickerInfo?>() {
+        override fun createIntent(context: android.content.Context, input: Unit) =
+            Intent(context, StickerPickerActivity::class.java)
+
+        override fun parseResult(resultCode: Int, intent: Intent?): StickerInfo? {
+            if (resultCode != Activity.RESULT_OK || intent == null) return null
+            return StickerInfo(
+                intent.getLongExtra(EXTRA_ID, 0),
+                intent.getStringExtra(EXTRA_EMOJI).orEmpty(),
+                intent.getStringExtra(EXTRA_KIND) ?: "static",
+            )
+        }
+    }
+
+    companion object {
+        private const val RECENT = "recent"
+        private const val FAVED = "faved"
+        private const val EXTRA_ID = "sticker_id"
+        private const val EXTRA_EMOJI = "emoji"
+        private const val EXTRA_KIND = "kind"
+    }
+}
+
+// A sticker pack in the picker: "recent", "faved", or an installed pack's id (as text)
+data class StickerPack(val id: String, val title: String, val count: Int)

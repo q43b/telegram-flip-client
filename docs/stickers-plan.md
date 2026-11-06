@@ -1,6 +1,6 @@
 # Plan: stickers and custom emoji
 
-Status: designed 2026-11-06 at v0.9.0-beta; step 1 built in 0.10.0-beta, step 2 in 0.10.1-beta. Roadmap: 0.10.0 lays the
+Status: designed 2026-11-06 at v0.9.0-beta; step 1 built in 0.10.0-beta, step 2 in 0.10.1-beta, sending in 0.11.0-beta (the rest of step 3 is split into 0.11.1-0.11.3, see below). Roadmap: 0.10.0 lays the
 foundation. To pick it up, ask: "let's continue the sticker plan from docs/stickers-plan.md".
 
 ## What they are
@@ -90,8 +90,14 @@ the pack list arrives with sticker sending, which needs it anyway.
    step 4, marked "coming"), pack switch (Only chosen marked "coming"), sticker rows with
    small pictures, "View sticker", data saver as text.
 2. **0.10.1**: custom emoji inside text and reactions as text-sized still pictures.
-3. **0.11.0 pack list and sending stickers** (F2 > Stickers): installed packs, per-pack
-   "chosen" ticks (makes "Only chosen packs" work), "download whole pack" for offline.
+3. **0.11.x stickers, step by step** (owner's split, 2026-11-06):
+   - 0.11.0 sending stickers: F2 > Stickers, Recent, Favorites, installed packs, a grid. Done.
+   - 0.11.1 from a sticker in a chat (message menu): view its pack, and add the pack to my packs.
+   - 0.11.2 in a pack's grid, F2 on a sticker: a menu to add it to / remove it from Favorites
+     (Telegram's, at most 5 on a free account).
+   - 0.11.3 "local favourites": the app's own favourites list (no limit), with add/remove in the
+     same F2 menu.
+   - Later: per-pack "chosen" ticks (makes "Only chosen packs" work), "download whole pack".
 4. **0.12.0 animated mode** (moved after sending at the owner's request; the owner will
    choose the approach then): e.g. server conversion to animated WebP (TGS with
    rlottie-python, a 0.4 MB wheel; video stickers with PyAV, 27 MB), phone playback.

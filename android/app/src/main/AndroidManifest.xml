@@ -58,6 +58,10 @@
             android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="false" />
         <activity
+            android:name=".StickerPickerActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation"
+            android:exported="false" />
+        <activity
             android:name=".VideoActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="false" />

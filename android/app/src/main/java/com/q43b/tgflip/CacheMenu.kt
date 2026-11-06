@@ -13,51 +13,76 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // The rows of Settings > Media and Cache: how long media is kept and how much space it may
-// take, clearing it, and "Delete all saved data" (also the saved chats and messages: a
-// fresh start for when something looks wrong). refresh redraws the rows after a change.
+// take, clearing it, the separate sticker cache (with its own limits and clearing while on),
+// and "Delete all saved data" (also the saved chats and messages: a fresh start for when
+// something looks wrong). refresh redraws the rows after a change.
 object CacheMenu {
-    fun rows(activity: AppCompatActivity, bytes: Long, refresh: () -> Unit) = listOf(
-        SettingRow(activity.getString(R.string.cache_keep, daysLabel(activity, MediaCache.keepDays(activity)))) {
-            pickDays(activity, refresh)
-        },
-        SettingRow(activity.getString(R.string.cache_max, mbLabel(activity, MediaCache.maxMb(activity)))) {
-            pickMb(activity, refresh)
-        },
-        SettingRow(activity.getString(R.string.cache_clear_media, Formatter.formatShortFileSize(activity, bytes))) {
-            confirm(activity, R.string.cache_clear_media_confirm) { clearMedia(activity, refresh) }
-        },
-        SettingRow(activity.getString(R.string.cache_clear_all)) {
+    fun rows(activity: AppCompatActivity, bytes: Long, stickerBytes: Long, refresh: () -> Unit): List<SettingRow> {
+        val separate = MediaCache.separateStickers(activity)
+        val media = listOf(
+            SettingRow(activity.getString(R.string.cache_keep, daysLabel(activity, MediaCache.keepDays(activity)))) {
+                pickDays(activity, R.string.cache_keep_title, MediaCache.keepDays(activity),
+                    { MediaCache.saveKeepDays(activity, it) }, refresh)
+            },
+            SettingRow(activity.getString(R.string.cache_max, mbLabel(activity, MediaCache.maxMb(activity)))) {
+                pickMb(activity, R.string.cache_max_title, MediaCache.maxMb(activity),
+                    { MediaCache.saveMaxMb(activity, it) }, refresh)
+            },
+            SettingRow(activity.getString(R.string.cache_clear_media, Formatter.formatShortFileSize(activity, bytes))) {
+                confirm(activity, R.string.cache_clear_media_confirm) { clearMedia(activity, refresh) }
+            },
+            SettingRow(activity.getString(R.string.cache_separate_stickers,
+                activity.getString(if (separate) R.string.on else R.string.off))) {
+                MediaCache.saveSeparateStickers(activity, !separate)
+                trimAndRefresh(activity, refresh)
+            },
+        )
+        val stickers = if (!separate) emptyList() else listOf(
+            SettingRow(activity.getString(R.string.cache_sticker_keep, daysLabel(activity, MediaCache.stickerKeepDays(activity)))) {
+                pickDays(activity, R.string.cache_sticker_keep_title, MediaCache.stickerKeepDays(activity),
+                    { MediaCache.saveStickerKeepDays(activity, it) }, refresh)
+            },
+            SettingRow(activity.getString(R.string.cache_sticker_max, mbLabel(activity, MediaCache.stickerMaxMb(activity)))) {
+                pickMb(activity, R.string.cache_sticker_max_title, MediaCache.stickerMaxMb(activity),
+                    { MediaCache.saveStickerMaxMb(activity, it) }, refresh)
+            },
+            SettingRow(activity.getString(R.string.cache_clear_stickers, Formatter.formatShortFileSize(activity, stickerBytes))) {
+                confirm(activity, R.string.cache_clear_stickers_confirm) { clearStickers(activity, refresh) }
+            },
+        )
+        val all = SettingRow(activity.getString(R.string.cache_clear_all)) {
             confirm(activity, R.string.cache_clear_all_confirm) { clearEverything(activity) }
-        },
-    )
+        }
+        return media + stickers + all
+    }
 
-    // The usual choices, then "Custom…" for any number of days
-    private fun pickDays(activity: AppCompatActivity, refresh: () -> Unit) {
+    // The usual choices, then "Custom…" for any number of days; save stores the choice
+    private fun pickDays(activity: AppCompatActivity, @StringRes title: Int, current: Int, save: (Int) -> Unit, refresh: () -> Unit) {
         val choices = MediaCache.dayChoices
         val labels = choices.map { daysLabel(activity, it) } + activity.getString(R.string.cache_custom)
-        MessageMenu.choose(activity, activity.getString(R.string.cache_keep_title), labels) {
+        MessageMenu.choose(activity, activity.getString(title), labels) {
             if (it < choices.size) {
-                MediaCache.saveKeepDays(activity, choices[it])
+                save(choices[it])
                 trimAndRefresh(activity, refresh)
             } else {
-                askNumber(activity, R.string.cache_custom_days, MediaCache.keepDays(activity)) { days ->
-                    MediaCache.saveKeepDays(activity, days)
+                askNumber(activity, R.string.cache_custom_days, current) { days ->
+                    save(days)
                     trimAndRefresh(activity, refresh)
                 }
             }
         }
     }
 
-    private fun pickMb(activity: AppCompatActivity, refresh: () -> Unit) {
+    private fun pickMb(activity: AppCompatActivity, @StringRes title: Int, current: Int, save: (Int) -> Unit, refresh: () -> Unit) {
         val choices = MediaCache.mbChoices
         val labels = choices.map { mbLabel(activity, it) } + activity.getString(R.string.cache_custom)
-        MessageMenu.choose(activity, activity.getString(R.string.cache_max_title), labels) {
+        MessageMenu.choose(activity, activity.getString(title), labels) {
             if (it < choices.size) {
-                MediaCache.saveMaxMb(activity, choices[it])
+                save(choices[it])
                 trimAndRefresh(activity, refresh)
             } else {
-                askNumber(activity, R.string.cache_custom_mb, MediaCache.maxMb(activity)) { mb ->
-                    MediaCache.saveMaxMb(activity, mb)
+                askNumber(activity, R.string.cache_custom_mb, current) { mb ->
+                    save(mb)
                     trimAndRefresh(activity, refresh)
                 }
             }
@@ -91,6 +116,14 @@ object CacheMenu {
         activity.lifecycleScope.launch {
             withContext(Dispatchers.IO) { MediaCache.clear(activity) }
             Toast.makeText(activity, R.string.cache_cleared, Toast.LENGTH_SHORT).show()
+            refresh()
+        }
+    }
+
+    private fun clearStickers(activity: AppCompatActivity, refresh: () -> Unit) {
+        activity.lifecycleScope.launch {
+            withContext(Dispatchers.IO) { MediaCache.clearStickers(activity) }
+            Toast.makeText(activity, R.string.cache_stickers_cleared, Toast.LENGTH_SHORT).show()
             refresh()
         }
     }

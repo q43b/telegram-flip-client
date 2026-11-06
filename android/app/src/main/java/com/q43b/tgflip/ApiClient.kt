@@ -169,6 +169,30 @@ class ApiClient(baseUrl: String?, val token: String) {
         return if (json.isNull("reactions")) null else Reaction.listFromJson(json.getJSONArray("reactions"))
     }
 
+    // My installed sticker packs (the picker adds Recent and Favorites itself)
+    fun getStickerPacks(): List<StickerPack> {
+        val json = JSONObject(call(Request.Builder().url(endpoint("/sticker_sets")))).getJSONArray("packs")
+        return List(json.length()) { i ->
+            val item = json.getJSONObject(i)
+            StickerPack(item.getLong("id").toString(), item.optString("title"), item.optInt("count"))
+        }
+    }
+
+    // One pack's stickers: "recent", "faved", or a pack's id
+    fun getStickerPack(pack: String): List<StickerInfo> {
+        val json = JSONObject(call(Request.Builder().url(endpoint("/sticker_set/$pack")))).getJSONArray("stickers")
+        return List(json.length()) { StickerInfo.fromJson(json.getJSONObject(it)) }
+    }
+
+    // Returns the new message's id. replyToId = the message being replied to, if any.
+    fun sendSticker(chatId: Long, topicId: Long?, stickerId: Long, replyToId: Long?): Long {
+        val body = JSONObject().put("chat_id", chatId).put("sticker_id", stickerId)
+        if (topicId != null) body.put("topic_id", topicId)
+        if (replyToId != null) body.put("reply_to_id", replyToId)
+        val request = Request.Builder().url(endpoint("/send_sticker")).post(body.toString().toRequestBody(JSON))
+        return JSONObject(call(request)).getLong("id")
+    }
+
     // Returns the forwarded copy's id
     fun forwardMessage(fromChatId: Long, messageId: Long, toChatId: Long): Long {
         val body = JSONObject().put("from_chat_id", fromChatId).put("message_id", messageId)

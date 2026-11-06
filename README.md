@@ -18,7 +18,7 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Read and send messages; "Load older messages" for history
 - Photos: open one from the message menu to see it full screen, then zoom, move around, rotate it or download the full-size original into the phone's Pictures/TG Flip folder from the F2 menu. The server shrinks it to the phone's screen size first (about 30–60 KB instead of several MB), and both sides keep a copy. Send your own from the F2 menu, picked in the phone's picture folder: optimized on the phone (about 1280 px, a few hundred KB, quick over a slow connection) or the original file; text in the message box becomes the caption
 - Videos: play them from the message menu. The phone downloads the whole video first (up to 100 MB), then plays it smoothly from its own copy; OK pauses, Left/Right jump 10 seconds. Send your own from the F2 menu (Send media > Send video, up to 100 MB), optimized on the phone (480 px, about 8 MB a minute, much quicker through a slow proxy) or as the original, with the length and a preview picture so it shows properly in other Telegram apps
-- Stickers: a small still picture right in the chat (animated and video stickers show their preview picture), View sticker for the full size, or text only in data saver mode (Settings > Media and Cache). Custom emoji show as small pictures inside text and reactions too
+- Stickers: a small still picture right in the chat (animated and video stickers show their preview picture), View sticker for the full size, or text only in data saver mode (Settings > Media and Cache). Custom emoji show as small pictures inside text and reactions too. Send stickers from the F2 menu: your recent and favorite stickers and your packs, picked from a grid
 - Round video messages: played like videos, under a round mask so they look round
 - Voice messages: play them from the message menu, with a running time on the message line, and record your own from the F2 menu (up to 5 minutes; OK sends, Back discards). They are kept on the phone like photos, and listening does not tell the sender
 - Message menu on OK: view a photo, play a video, play a voice message, reply, react, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone"), view the writer's profile, and in groups message them privately
@@ -29,7 +29,7 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - "Mark as read" as a deliberate action on the F1 soft key, so read receipts are never sent by accident; a soft key label shows when there is something to mark
 - Quick phrases: saved phrases (set up in Settings) you drop into the message box from the F2 soft key menu, since typing on a keypad is slow
 - Offline reading: the last chats, topics and messages are kept on the phone
-- Cache settings: how long media is kept and how much space it may take (presets or your own numbers), clearing it, and deleting all saved data for a fresh start
+- Cache settings: how long media is kept and how much space it may take (presets or your own numbers), clearing it, an optional separate cache for stickers with its own limits, and deleting all saved data for a fresh start
 - Soft key labels in the phone's own soft key boxes on Japanese Android flip phones (NextFP, like my Kyocera); other phones get the app's own label bar. A Settings switch picks which one shows
 - On the version line in Settings: F2 opens that version's release notes, Right ("under the hood") shows the server's log, live
 - Connection status bar on every screen
@@ -76,7 +76,7 @@ Later runs just start. Settings and the login stay next to the exe (`.env`, `tg_
 | Right | Open Settings | Group info (groups and channels) | |
 | Left | | | Close Settings, a profile, group info or a photo |
 | F1 (left soft key) | | Mark as read | |
-| F2 (right soft key) | Open a forum's General topic | Menu: quick phrases, send media (a photo or a video; stickers to come), record a voice message | |
+| F2 (right soft key) | Open a forum's General topic | Menu: quick phrases, stickers, send media (a photo or a video), record a voice message | |
 | Back | | Cancel a reply or edit, otherwise leave | Go back |
 
 ## Building from source
