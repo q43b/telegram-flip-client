@@ -1,0 +1,39 @@
+package com.q43b.tgflip
+
+import android.content.Context
+import androidx.annotation.StringRes
+
+// Settings > Media and Cache: how stickers (and later custom emoji) show, and from which
+// packs they may download. See docs/stickers-plan.md.
+// - DATA_SAVER: nothing downloads and saved pictures aren't used either; stickers are text.
+// - STILL: still pictures (the default).
+// - ANIMATED: stickers play; not built yet, so it is offered as "coming later".
+object StickerSetting {
+    enum class Mode(val key: String, @StringRes val label: Int) {
+        DATA_SAVER("off", R.string.stickers_data_saver),
+        STILL("still", R.string.stickers_still),
+        ANIMATED("animated", R.string.stickers_animated),
+    }
+
+    // CHOSEN (only packs ticked in a pack list) comes with sticker sending
+    enum class Packs(val key: String, @StringRes val label: Int) {
+        ANY("any", R.string.sticker_packs_any),
+        CHOSEN("chosen", R.string.sticker_packs_chosen),
+    }
+
+    private const val KEY_MODE = "sticker_mode"
+    private const val KEY_PACKS = "sticker_packs"
+
+    fun mode(context: Context): Mode =
+        Mode.entries.firstOrNull { it.key == prefs(context).getString(KEY_MODE, null) } ?: Mode.STILL
+
+    fun saveMode(context: Context, mode: Mode) = prefs(context).edit().putString(KEY_MODE, mode.key).apply()
+
+    fun packs(context: Context): Packs =
+        Packs.entries.firstOrNull { it.key == prefs(context).getString(KEY_PACKS, null) } ?: Packs.ANY
+
+    // Pictures are wanted (still now; animated will play later)
+    fun showsPictures(context: Context) = mode(context) != Mode.DATA_SAVER
+
+    private fun prefs(context: Context) = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+}

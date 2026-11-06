@@ -90,7 +90,7 @@ class SettingsGroupActivity : AppCompatActivity() {
         rows = when (group) {
             Group.NETWORK -> networkRows()
             Group.APPEARANCE -> appearanceRows()
-            Group.MEDIA_CACHE -> CacheMenu.rows(this, cacheBytes, ::refresh)
+            Group.MEDIA_CACHE -> stickerRows() + CacheMenu.rows(this, cacheBytes, ::refresh)
             Group.QOL -> qolRows()
             Group.ADVANCED -> advancedRows()
         }
@@ -133,6 +133,34 @@ class SettingsGroupActivity : AppCompatActivity() {
                 ThemeSetting.save(this, ThemeSetting.choices[which].first)
             }
         })
+    }
+
+    // How stickers show, and from which packs they may download (docs/stickers-plan.md).
+    // Animated and "only chosen packs" are listed but not built yet: choosing them says so.
+    private fun stickerRows(): List<SettingRow> {
+        val mode = StickerSetting.mode(this)
+        val packs = StickerSetting.packs(this)
+        return listOf(
+            SettingRow(getString(R.string.setting_stickers, getString(mode.label))) {
+                val modes = StickerSetting.Mode.entries
+                MessageMenu.choose(this, getString(R.string.stickers_title), modes.map { getString(it.label) }) { which ->
+                    if (modes[which] == StickerSetting.Mode.ANIMATED) {
+                        Toast.makeText(this, R.string.coming_later, Toast.LENGTH_SHORT).show()
+                    } else {
+                        StickerSetting.saveMode(this, modes[which])
+                        saved()
+                    }
+                }
+            },
+            SettingRow(getString(R.string.setting_sticker_packs, getString(packs.label))) {
+                val choices = StickerSetting.Packs.entries
+                MessageMenu.choose(this, getString(R.string.sticker_packs_title), choices.map { getString(it.label) }) { which ->
+                    if (choices[which] == StickerSetting.Packs.CHOSEN) {
+                        Toast.makeText(this, R.string.coming_later, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+        )
     }
 
     // Things that save keypresses: quick phrases for now

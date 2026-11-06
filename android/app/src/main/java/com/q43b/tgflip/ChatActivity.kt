@@ -69,6 +69,9 @@ class ChatActivity : AppCompatActivity() {
         MessageAction(R.string.action_play_round, isAvailable = { it.round != null }) {
             VideoActivity.start(this, chatId, it.id, round = true)
         },
+        MessageAction(R.string.action_view_sticker, isAvailable = { it.sticker != null && StickerSetting.showsPictures(this) }) {
+            ImageActivity.startSticker(this, chatId, it.id, it.sticker!!.id)
+        },
         MessageAction(R.string.action_play, isAvailable = { it.voice != null && voice.currentId != it.id }) {
             voice.play(chatId, it.id)
         },
@@ -99,6 +102,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var api: ApiClient
     private lateinit var cache: LocalCache
     private lateinit var voice: VoicePlayer
+    private lateinit var stickers: StickerLoader
     private lateinit var recorder: VoiceRecorder
 
     // Android asks the user once; after a yes, recording starts right away
@@ -140,6 +144,7 @@ class ChatActivity : AppCompatActivity() {
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         if (intent.hasExtra(EXTRA_TOPIC_ID)) topicId = intent.getLongExtra(EXTRA_TOPIC_ID, 0)
         voice = VoicePlayer(this, lifecycleScope, ::refreshRow).also { it.api = api }
+        stickers = StickerLoader(this, lifecycleScope) { messageAdapter.notifyDataSetChanged() }.also { it.api = api }
         recorder = VoiceRecorder(this, ::sendVoice)
         volumeControlStream = AudioManager.STREAM_MUSIC  // the volume keys set how loud voice messages play
 
@@ -148,7 +153,13 @@ class ChatActivity : AppCompatActivity() {
         messageList = findViewById(R.id.message_list)
         messageList.wrapsDown = false  // Down on the newest message goes to the message box
         findViewById<TextView>(R.id.chat_title).text = intent.getStringExtra(EXTRA_TITLE)
-        messageAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, rows)
+        // Sticker pictures under sticker messages, unless Settings says data saver
+        messageAdapter = MessageRowAdapter(this, rows) { position ->
+            val message = messageAt(position)
+            val sticker = message?.sticker
+            if (sticker == null || !StickerSetting.showsPictures(this)) null
+            else stickers.drawable(sticker, chatId, message.id)
+        }
         messageList.adapter = messageAdapter
         // OK on a message opens its menu (OkListView takes OK before the keyboard app);
         // the click listener covers touch taps
@@ -994,6 +1005,7 @@ class ChatActivity : AppCompatActivity() {
             ?: message.image?.let { MessageFormat.photo(this, message.text) }
             ?: message.video?.let { MessageFormat.video(this, it, message.text) }
             ?: message.round?.let { MessageFormat.round(this, it) }
+            ?: message.sticker?.let { MessageFormat.sticker(this, it.emoji) }
             ?: message.text.ifEmpty { getString(R.string.media) }
         val time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
         val line = SpannableStringBuilder("$time ")
@@ -1057,6 +1069,7 @@ class ChatActivity : AppCompatActivity() {
             ?: message.image?.let { MessageFormat.photo(this, message.text) }
             ?: message.video?.let { MessageFormat.video(this, it, message.text) }
             ?: message.round?.let { MessageFormat.round(this, it) }
+            ?: message.sticker?.let { MessageFormat.sticker(this, it.emoji) }
             ?: message.text.ifEmpty { getString(R.string.media) }
         return MessageFormat.snippet(text, SNIPPET_LENGTH)
     }

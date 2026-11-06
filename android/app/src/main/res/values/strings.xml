@@ -67,6 +67,17 @@
     <string name="media">[media]</string>
     <string name="event">[event]</string>
     <string name="video">Video</string>
+    <string name="sticker">Sticker</string>
+    <string name="action_view_sticker">🏷 View sticker</string>
+    <string name="setting_stickers">Stickers: %1$s</string>
+    <string name="stickers_title">Stickers and custom emoji</string>
+    <string name="stickers_data_saver">Data saver (as text)</string>
+    <string name="stickers_still">Still pictures</string>
+    <string name="stickers_animated">Animated (coming later)</string>
+    <string name="setting_sticker_packs">Sticker packs: %1$s</string>
+    <string name="sticker_packs_title">Download stickers from</string>
+    <string name="sticker_packs_any">Any pack</string>
+    <string name="sticker_packs_chosen">Only chosen packs (coming later)</string>
     <string name="round_message">Video message</string>
     <string name="action_play_round">▶ Play video message</string>
     <string name="action_play_video">▶ Play video</string>

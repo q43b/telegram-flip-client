@@ -497,6 +497,7 @@ class MainActivity : AppCompatActivity() {
             last.kind == "photo" -> MessageFormat.snippet(MessageFormat.photo(this, last.text), PREVIEW_LENGTH)
             last.kind == "video" -> MessageFormat.snippet(MessageFormat.video(this, null, last.text), PREVIEW_LENGTH)
             last.kind == "round" -> MessageFormat.round(this, null)
+            last.kind == "sticker" -> MessageFormat.sticker(this, last.text)
             last.kind == "media" -> getString(R.string.media)
             last.kind == "event" -> getString(R.string.event)
             else -> MessageFormat.snippet(last.text, PREVIEW_LENGTH)

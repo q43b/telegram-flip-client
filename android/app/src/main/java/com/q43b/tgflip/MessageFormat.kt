@@ -69,6 +69,12 @@ object MessageFormat {
         return if (caption.isEmpty()) label else "$label: $caption"
     }
 
+    // "🏷 Sticker 😂" (the emoji it stands for)
+    fun sticker(context: Context, emoji: String): String {
+        val label = "🏷 ${context.getString(R.string.sticker)}"
+        return if (emoji.isEmpty()) label else "$label $emoji"
+    }
+
     // "⭕ Video message 0:15"; in the chat list only "⭕ Video message"
     fun round(context: Context, round: RoundInfo?): String {
         val label = "⭕ ${context.getString(R.string.round_message)}"

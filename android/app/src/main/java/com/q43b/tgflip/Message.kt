@@ -8,7 +8,8 @@ import org.json.JSONObject
 // call = set when this is a call record instead of a text message.
 // voice = set for a voice message (text is then its caption, usually empty).
 // image = set for a photo, video = set for a video (text is then the caption).
-// round = set for a round video message. reactions = people's reactions, in Telegram's order.
+// round = set for a round video message. sticker = set for a sticker.
+// reactions = people's reactions, in Telegram's order.
 // sender = who wrote it, only for other people's messages in groups; senderId = their user
 // id (null for channels posting into a group), for their profile or a private chat.
 data class Message(
@@ -26,6 +27,7 @@ data class Message(
     val video: VideoInfo? = null,
     val round: RoundInfo? = null,
     val reactions: List<Reaction> = emptyList(),
+    val sticker: StickerInfo? = null,
 ) {
     // Same keys as the server sends, so saved messages read back with fromJson
     fun toJson(): JSONObject = JSONObject()
@@ -40,6 +42,7 @@ data class Message(
         .put("video", video?.toJson() ?: JSONObject.NULL)
         .put("round", round?.toJson() ?: JSONObject.NULL)
         .put("reactions", Reaction.toJson(reactions))
+        .put("sticker", sticker?.toJson() ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = Message(
@@ -58,6 +61,7 @@ data class Message(
             video = json.optJSONObject("video")?.let(VideoInfo::fromJson),
             round = json.optJSONObject("round")?.let(RoundInfo::fromJson),
             reactions = Reaction.listFromJson(json.optJSONArray("reactions")),
+            sticker = json.optJSONObject("sticker")?.let(StickerInfo::fromJson),
         )
     }
 }
@@ -138,5 +142,19 @@ data class Reaction(val emoji: String, val count: Int, val mine: Boolean) {
                 Reaction(item.optString("emoji"), item.optInt("count"), item.optBoolean("mine"))
             }
         }
+    }
+}
+
+// A sticker: its id (for GET /sticker), the emoji it stands for, and its kind: "static",
+// "animated" or "video"
+data class StickerInfo(val id: Long, val emoji: String, val kind: String) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("emoji", emoji).put("kind", kind)
+
+    companion object {
+        fun fromJson(json: JSONObject) = StickerInfo(
+            id = json.optLong("id"),
+            emoji = json.optString("emoji"),
+            kind = json.optString("kind", "static"),
+        )
     }
 }

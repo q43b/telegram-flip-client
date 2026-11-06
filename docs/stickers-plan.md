@@ -1,6 +1,6 @@
 # Plan: stickers and custom emoji
 
-Status: designed 2026-11-06 at v0.9.0-beta, not started. Roadmap: 0.10.0 lays the
+Status: designed 2026-11-06 at v0.9.0-beta; step 1 built in 0.10.0-beta. Roadmap: 0.10.0 lays the
 foundation. To pick it up, ask: "let's continue the sticker plan from docs/stickers-plan.md".
 
 ## What they are
@@ -29,8 +29,8 @@ the pack list arrives with sticker sending, which needs it anyway.
 
 ## Where they show (owner's choices)
 
-- **Stickers: a small picture right in the chat** (about 64 dp, in the message's row), like
-  official apps. A deliberate exception to the "no pictures inside chats" rule. In data saver
+- **Stickers: a small picture right in the chat** (96 dp on the right of the message's row,
+  the text wrapping left of it; built in 0.10.0), like official apps. A deliberate exception to the "no pictures inside chats" rule. In data saver
   the row shows the text line instead.
 - OK on a sticker: the message menu gets "View sticker", full size (reuses the photo
   viewer idea).

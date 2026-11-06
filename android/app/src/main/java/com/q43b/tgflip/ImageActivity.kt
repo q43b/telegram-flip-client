@@ -46,6 +46,7 @@ class ImageActivity : AppCompatActivity() {
     private lateinit var api: ApiClient
     private var chatId = 0L
     private var messageId = 0L
+    private var stickerId = 0L  // set when showing a sticker instead of a photo
     private var downloading = false
     private var bitmap: Bitmap? = null
     private var mode = Mode.NONE
@@ -70,6 +71,7 @@ class ImageActivity : AppCompatActivity() {
         }
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
+        stickerId = intent.getLongExtra(EXTRA_STICKER_ID, 0)
         image = findViewById(R.id.image)
         modeHint = findViewById(R.id.mode_hint)
         val status = findViewById<TextView>(R.id.status)
@@ -152,7 +154,9 @@ class ImageActivity : AppCompatActivity() {
 
     private fun showMenu() {
         if (bitmap == null) return
-        val items = listOf(R.string.image_zoom, R.string.image_move, R.string.image_rotate, R.string.image_download)
+        // A sticker has no full-size original to download
+        val items = listOf(R.string.image_zoom, R.string.image_move, R.string.image_rotate) +
+            if (stickerId == 0L) listOf(R.string.image_download) else emptyList()
         MessageMenu.choose(this, getString(R.string.photo), items.map(::getString)) { which ->
             when (items[which]) {
                 R.string.image_zoom -> setMode(Mode.ZOOM)
@@ -253,15 +257,18 @@ class ImageActivity : AppCompatActivity() {
         image.imageMatrix = matrix
     }
 
-    // The saved copy, or a fresh download that is then saved
+    // The saved copy, or a fresh download that is then saved. A sticker comes at its full
+    // 512 px from GET /sticker, into the stickers folder next to the chat-sized copies.
     private fun file(api: ApiClient, chatId: Long, messageId: Long): File {
-        val dir = MediaCache.folder(this, "images")
-        val file = File(dir, "${chatId}_$messageId.jpg")
+        val sticker = stickerId != 0L
+        val dir = MediaCache.folder(this, if (sticker) "stickers" else "images")
+        val file = File(dir, if (sticker) "${stickerId}_$STICKER_PX.png" else "${chatId}_$messageId.jpg")
         if (file.exists()) {
             MediaCache.touch(file)
             return file
         }
-        val bytes = api.getImage(chatId, messageId)
+        val bytes = if (sticker) api.getSticker(stickerId, STICKER_PX, chatId, messageId) ?: throw IOException("No picture")
+        else api.getImage(chatId, messageId)
         dir.mkdirs()
         val atomic = AtomicFile(file)
         val out = atomic.startWrite()
@@ -278,6 +285,8 @@ class ImageActivity : AppCompatActivity() {
     companion object {
         private const val EXTRA_CHAT_ID = "chat_id"
         private const val EXTRA_MESSAGE_ID = "message_id"
+        private const val EXTRA_STICKER_ID = "sticker_id"
+        private const val STICKER_PX = 512
         private const val SAVE_FOLDER = "TG Flip"
         private const val ZOOM_STEP = 1.25f
         private const val MAX_ZOOM = 6f
@@ -293,6 +302,16 @@ class ImageActivity : AppCompatActivity() {
                 Intent(activity, ImageActivity::class.java)
                     .putExtra(EXTRA_CHAT_ID, chatId)
                     .putExtra(EXTRA_MESSAGE_ID, messageId)
+            )
+        }
+
+        // "View sticker": the same viewer, with the sticker's still picture at full size
+        fun startSticker(activity: Activity, chatId: Long, messageId: Long, stickerId: Long) {
+            activity.startActivity(
+                Intent(activity, ImageActivity::class.java)
+                    .putExtra(EXTRA_CHAT_ID, chatId)
+                    .putExtra(EXTRA_MESSAGE_ID, messageId)
+                    .putExtra(EXTRA_STICKER_ID, stickerId)
             )
         }
     }
