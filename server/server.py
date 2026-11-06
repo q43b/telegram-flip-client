@@ -103,7 +103,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.10.0-beta"
+VERSION = "0.10.1-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -272,6 +272,7 @@ async def learn_custom_emoji(ids):
                 raise
             return
         for document in documents:
+            sticker_documents[document.id] = document  # /sticker can draw it now
             alt = next((a.alt for a in document.attributes
                         if isinstance(a, types.DocumentAttributeCustomEmoji)), None)
             if alt:
@@ -280,29 +281,27 @@ async def learn_custom_emoji(ids):
 
 def reactions_list(reactions):
     """[{emoji, count, mine}] from Telegram's MessageReactions (or None), in Telegram's order.
-    mine = I chose this reaction. Custom emoji show as their plain emoji when known (call
-    learn_custom_emoji first), else "✦"; paid stars as "⭐". Reactions that end up with the same
-    character (a custom laughing cat and a plain 😂) count together."""
+    mine = I chose this reaction. custom_id = the custom emoji's id (its picture comes from
+    /sticker), else None. Custom emoji show as their plain emoji when known (call
+    learn_custom_emoji first), else "✦"; paid stars as "⭐". Each custom emoji keeps its own
+    entry; the app adds up equal characters when it shows no pictures."""
     if reactions is None or not reactions.results:
         return []
     result = []
     for count in reactions.results:
         reaction = count.reaction
+        custom_id = None
         if isinstance(reaction, types.ReactionEmoji):
             emoji = reaction.emoticon
         elif isinstance(reaction, types.ReactionCustomEmoji):
             emoji = custom_emoji_alts.get(reaction.document_id, CUSTOM_EMOJI)
+            custom_id = reaction.document_id
         elif type(reaction).__name__ == "ReactionPaid":
             emoji = PAID_REACTION
         else:
             continue
-        mine = count.chosen_order is not None
-        same = next((r for r in result if r["emoji"] == emoji), None)
-        if same is not None:
-            same["count"] += count.count
-            same["mine"] = same["mine"] or mine
-        else:
-            result.append({"emoji": emoji, "count": count.count, "mine": mine})
+        result.append({"emoji": emoji, "count": count.count, "mine": count.chosen_order is not None,
+                       "custom_id": custom_id})
     return result
 
 
@@ -330,6 +329,15 @@ def sticker_of(message):
         "emoji": (attr.alt if attr else "") or "",
         "kind": STICKER_KINDS.get(document.mime_type, "static"),
     }
+
+
+def custom_emoji_of(message):
+    """[{offset, length, id}]: the custom emoji in the message's text (offset and length in
+    UTF-16 units, as Telegram counts and as Kotlin strings index; the text holds each one's
+    plain emoji there). Their pictures come from /sticker."""
+    return [{"offset": e.offset, "length": e.length, "id": e.document_id}
+            for e in (getattr(message, "entities", None) or [])
+            if isinstance(e, types.MessageEntityCustomEmoji)]
 
 
 def sender_name(message, sender=None):
@@ -503,6 +511,7 @@ async def on_new_message(event):
         "round": round_of(event.message),
         "reactions": reactions_of(event.message),
         "sticker": sticker_of(event.message),
+        "custom_emoji": custom_emoji_of(event.message),
         "sender": sender_name(event.message, sender),
         "sender_id": sender_id_of(event.message, sender),
     })
@@ -568,6 +577,7 @@ async def on_edited(event):
         "text": event.raw_text or "",
         "edited": is_edited(event.message),
         "reactions": reactions_of(event.message),  # some reaction changes arrive as edits
+        "custom_emoji": custom_emoji_of(event.message),
     })
 
 
@@ -1035,18 +1045,26 @@ STICKER_SIZES = range(32, 513)  # Telegram's stickers are 512 px
 
 
 async def sticker_document(document_id, chat_id, message_id):
-    """The sticker's document: remembered from an earlier message, or read again from the
-    message it came in (after a server restart, or when its file reference expired)."""
+    """The sticker's document, fresh: read again from the message it came in, or for a custom
+    emoji (no message given) asked by id alone. Used after a server restart, or when a
+    remembered document's file reference expired."""
     if chat_id is not None and message_id is not None:
         message = await client.get_messages(chat_id, ids=message_id)
         if message is not None and sticker_of(message) is not None and message.sticker.id == document_id:
             return message.sticker
+        return sticker_documents.get(document_id)
+    documents = await client(functions.messages.GetCustomEmojiDocumentsRequest(document_id=[document_id]))
+    for document in documents:
+        sticker_documents[document.id] = document
     return sticker_documents.get(document_id)
 
 
 def still_sticker(data, size):
-    """PNG bytes at most size×size, transparency kept."""
+    """PNG bytes at most size×size, transparency kept; None when the picture is empty (some
+    animated custom emoji only have an outline, no real still preview)."""
     image = Image.open(BytesIO(data)).convert("RGBA")
+    if image.getbbox() is None:  # fully transparent
+        return None
     image.thumbnail((size, size), Image.LANCZOS)
     out = BytesIO()
     image.save(out, "PNG", optimize=True)
@@ -1056,7 +1074,8 @@ def still_sticker(data, size):
 # A sticker as a still picture (PNG, at most size×size): a static sticker's own image; for
 # animated and video stickers, the still preview Telegram makes for every sticker. Cached in
 # sticker_cache/. chat_id and message_id say where it came from, in case the server has to
-# read the message again. 404 when there is nothing to show (the app then shows text).
+# read the message again; without them the id is taken as a custom emoji's (they can be
+# asked by id alone). 404 when there is nothing to show (the app then shows text).
 @api.get("/sticker/{document_id}")
 @recovering
 async def get_sticker(document_id: int, size: int = 128, chat_id: Optional[int] = None,
@@ -1084,10 +1103,11 @@ async def get_sticker(document_id: int, size: int = 128, chat_id: Optional[int] 
             raise HTTPException(status_code=404, detail="Chat not found")
         except errors.RPCError as e:
             bad_request(e)
-        if not data:
+        picture = still_sticker(data, size) if data else None
+        if picture is None:
             raise HTTPException(status_code=404, detail="No picture for this sticker")
         with open(path, "wb") as f:
-            f.write(still_sticker(data, size))
+            f.write(picture)
     with open(path, "rb") as f:
         return Response(f.read(), media_type="image/png", headers=headers)
 
@@ -1174,11 +1194,11 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
         bad_request(e)
     await learn_custom_emoji([i for m in found for i in custom_emoji_ids(getattr(m, "reactions", None))])
     msgs = [
-        {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
+        {"id": m.id, "text": m.raw_text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
          "voice": voice_of(m), "image": image_of(m), "video": video_of(m),
          "round": round_of(m), "reactions": reactions_of(m),
-         "sticker": sticker_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
+         "sticker": sticker_of(m), "custom_emoji": custom_emoji_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
