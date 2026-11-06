@@ -170,6 +170,50 @@ def toggle_admin(entries):
         print(f"\"{entry['name']}\" is no longer an admin.")
 
 
+def ask_cache():
+    """The server cache setting as SERVER_CACHE wants it: "forever", "off" or a number of days.
+    Also used by first-run setup."""
+    print("\nServer cache: the server keeps the media it fetched for the apps (profile photos,")
+    print("photos, videos, stickers), so they load fast next time. It can grow large with videos.")
+    print("  f) Keep them forever (default)")
+    print("  d) Keep them for some days since last used")
+    print("  o) Don't keep them (each file is deleted once sent)")
+    while True:
+        choice = ask("Choose (Enter = f)").lower()
+        if choice in ("", "f"):
+            return "forever"
+        if choice == "o":
+            return "off"
+        if choice == "d":
+            days = ask("How many days")
+            if days.isdigit() and 1 <= int(days) <= 100_000:
+                return str(int(days))
+            print("  A number of days, 1-100000, please.")
+
+
+def ask_cache_size(keep):
+    """SERVER_CACHE_MB: the most the whole cache may take ("" = no limit), shared equally by
+    the accounts. Not asked when nothing is kept. Also used by first-run setup."""
+    if keep == "off":
+        return ""
+    print("\nThe most the server cache may take on this PC, in MB. Each account gets an equal")
+    print("share; the least recently used files go first.")
+    while True:
+        mb = ask("Largest size in MB (Enter = no limit)")
+        if not mb or (mb.isdigit() and 1 <= int(mb) <= 10_000_000):
+            return str(int(mb)) if mb else ""
+        print("  A number of MB, 1-10000000, or Enter for no limit, please.")
+
+
+def change_cache(server):
+    keep = ask_cache()
+    mb = ask_cache_size(keep)
+    for key, value in (("SERVER_CACHE", keep), ("SERVER_CACHE_MB", mb)):
+        set_key(ENV_FILE, key, value, quote_mode="never")
+        os.environ[key] = value  # for the server started from this menu
+    print(f"Server cache: {server.describe_cache_setting()}. Older files are removed when the server starts.")
+
+
 def toggle_mode(server):
     shared = not server.shared_server()
     mode = "shared" if shared else "private"
@@ -192,6 +236,7 @@ async def menu(server):
         print("  n) Rename an account")
         print("  m) Give or take admin rights")
         print(f"  p) Private or shared server (now: {'shared' if server.shared_server() else 'private'})")
+        print(f"  c) Server cache (now: {server.describe_cache_setting()})")
         print("  s) Start the server")
         print("  q) Quit")
         choice = ask("Choose").lower()
@@ -205,6 +250,8 @@ async def menu(server):
             toggle_admin(entries)
         elif choice == "p":
             toggle_mode(server)
+        elif choice == "c":
+            change_cache(server)
         elif choice == "s":
             return True
         elif choice == "q":

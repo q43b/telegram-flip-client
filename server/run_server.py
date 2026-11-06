@@ -8,7 +8,7 @@ import asyncio
 import os
 import sys
 
-from maintenance import generate_token
+from maintenance import ask_cache, ask_cache_size, generate_token
 
 # Settings (.env) and the Telegram session live next to the program,
 # not in whatever folder it happened to be started from
@@ -56,6 +56,8 @@ def first_run_setup():
     print("several people, each with their own Telegram account (shared: the log stays on this PC,")
     print("except for accounts you make admins). Change it later in Maintenance mode.")
     shared = ask("Shared server? (y/N)", required=False).lower() in ("y", "yes")
+    cache = ask_cache()
+    cache_mb = ask_cache_size(cache)
 
     with open(ENV_FILE, "w", encoding="utf-8") as f:
         f.write(f"API_ID={api_id}\n")
@@ -66,6 +68,8 @@ def first_run_setup():
         f.write(f"PROXY_SECRET={proxy_secret}\n")
         f.write(f"PORT={DEFAULT_PORT}\n")
         f.write(f"SERVER_MODE={'shared' if shared else 'private'}\n")
+        f.write(f"SERVER_CACHE={cache}\n")
+        f.write(f"SERVER_CACHE_MB={cache_mb}\n")
 
     print(f"\nSaved to {ENV_FILE}. Edit that file to change these later.")
     if generated:

@@ -36,6 +36,9 @@ Its menu:
   p) Private or shared server: on a private server every app may see the live
      log ("Under the hood"); on a shared one only admin accounts may, since the
      log shows everyone's addresses and chats.
+  c) Server cache: keep the media fetched for the apps forever, for some days
+     since last used, or not at all, and the most space it may take in all
+     (each account gets an equal share; also asked at the first run).
   s) Start the server, q) Quit
 Each account has its own app token, Telegram login (tg_session*.session) and
 cached media. The list is in accounts.json.
@@ -44,7 +47,8 @@ The photo_cache folder holds small copies of chats' profile photos for the app,
 image_cache small copies of photos from messages, video_cache the videos the
 phone has played, and sticker_cache sticker pictures, each with one folder per
 account. All of them can be deleted at any time; files are fetched again when
-needed (video_cache can grow large).
+needed (video_cache can grow large). To keep them from growing, choose a number
+of days, a largest size, or no cache at all, in Maintenance mode (c).
 
 In the phone app
 ----------------

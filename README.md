@@ -61,7 +61,7 @@ Both downloads are on the [Releases](https://github.com/q43b/telegram-flip-clien
 
 Later runs just start. Settings and the logins stay next to the exe (`.env`, `accounts.json`, `tg_session*.session`).
 
-**More people on one server:** double-click `Maintenance mode.bat` (or run `tgflip-server.exe --maintenancemode`). Its menu adds an account (that person's phone number, the code Telegram sends them and their 2FA password, typed in on the PC, so the code never crosses the network), then prints the app token for their phone once. It also removes and renames accounts, switches between a private server (your apps may see the live log) and a shared one (only accounts you make admins may), and gives or takes admin rights. Then it starts the server.
+**More people on one server:** double-click `Maintenance mode.bat` (or run `tgflip-server.exe --maintenancemode`). Its menu adds an account (that person's phone number, the code Telegram sends them and their 2FA password, typed in on the PC, so the code never crosses the network), then prints the app token for their phone once. It also removes and renames accounts, switches between a private server (your apps may see the live log) and a shared one (only accounts you make admins may), gives or takes admin rights, and sets how long the server keeps the media it fetched for the apps (forever, some days since last used, or not at all) and the most space it may take, shared equally by the accounts. Then it starts the server.
 
 > **The phone can't connect although the server started?** Windows probably treats your home Wi-Fi as a "Public" network, where it blocks incoming connections. Set it to Private: Settings > Network & internet > Wi-Fi > (your network) > Network profile type > Private.
 
