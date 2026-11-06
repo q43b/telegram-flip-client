@@ -76,6 +76,10 @@ class ChatActivity : AppCompatActivity() {
         MessageAction(R.string.action_view_sticker, isAvailable = { it.sticker != null && StickerSetting.showsPictures(this) }) {
             ImageActivity.startSticker(this, chatId, it.id, it.sticker!!.id)
         },
+        // Its pack in the sticker screen: send from it, or add it to my packs
+        MessageAction(R.string.action_view_pack, isAvailable = { it.sticker != null }) {
+            pickSticker.launch(StickerPickerActivity.PackOf(it.sticker!!.id, chatId, it.id))
+        },
         MessageAction(R.string.action_play, isAvailable = { it.voice != null && voice.currentId != it.id }) {
             voice.play(chatId, it.id)
         },
@@ -294,7 +298,7 @@ class ChatActivity : AppCompatActivity() {
                 R.string.quick_phrases -> showQuickPhrases()
                 R.string.menu_record_voice -> startRecording()
                 R.string.menu_media -> showMediaMenu()
-                R.string.menu_stickers -> pickSticker.launch(Unit)
+                R.string.menu_stickers -> pickSticker.launch(null)
                 else -> showComingLater()
             }
         }

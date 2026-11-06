@@ -69,6 +69,11 @@
     <string name="video">Video</string>
     <string name="sticker">Sticker</string>
     <string name="action_view_sticker">🏷 View sticker</string>
+    <string name="action_view_pack">📦 View sticker pack</string>
+    <string name="soft_key_add_pack">Add pack</string>
+    <string name="pack_added">Added to your sticker packs</string>
+    <string name="pack_add_failed">Couldn\'t add the pack</string>
+    <string name="pack_not_loaded">Could not open this sticker\'s pack (some stickers belong to none)</string>
     <string name="setting_stickers">Stickers: %1$s</string>
     <string name="stickers_title">Stickers and custom emoji</string>
     <string name="stickers_data_saver">Data saver (as text)</string>

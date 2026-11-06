@@ -28,6 +28,8 @@ import java.io.IOException
 // to the chat, which sends it. Back (or Left) in the grid returns to the packs. The grid's
 // pictures are the chat's (same StickerLoader size and files); in data saver mode, or while
 // a picture loads, the sticker's emoji shows instead.
+// "View sticker pack" (message menu on a sticker) opens straight at that sticker's pack; Back
+// then closes, and while the pack isn't mine F1 ("Add pack") adds it to my packs.
 class StickerPickerActivity : AppCompatActivity() {
     private lateinit var api: ApiClient
     private lateinit var title: TextView
@@ -37,6 +39,8 @@ class StickerPickerActivity : AppCompatActivity() {
     private lateinit var loader: StickerLoader
     private var packs = emptyList<StickerPack>()
     private var stickers = emptyList<StickerInfo>()
+    private lateinit var softKeys: SoftKeyBar
+    private var addablePack: String? = null  // the open pack's id while F1 can add it
 
     // Back in the grid goes back to the packs
     private val backToPacks = object : OnBackPressedCallback(false) {
@@ -63,11 +67,25 @@ class StickerPickerActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, backToPacks)
         packList.setOnItemClickListener { _, _, position, _ -> openPack(packs[position]) }
         grid.setOnItemClickListener { _, _, position, _ -> pick(stickers[position]) }
-        loadPacks()
+        softKeys = SoftKeyBar(this)
+        softKeys.onLeftTap(::addPack)
+        softKeys.setLeft(null)
+        softKeys.setRight(null)
+        if (intent.hasExtra(EXTRA_FROM_STICKER)) {
+            openPackOf(intent.getLongExtra(EXTRA_FROM_STICKER, 0), intent.getLongExtra(EXTRA_FROM_CHAT, 0),
+                intent.getLongExtra(EXTRA_FROM_MESSAGE, 0))
+        } else {
+            loadPacks()
+        }
     }
 
-    // Left closes the grid like Back; in the pack list it closes the screen
+    // Left closes the grid like Back; in the pack list it closes the screen. F1 adds the open
+    // pack while it isn't mine.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.isLeftSoftKey()) {
+            if (event.action == KeyEvent.ACTION_UP) addPack()
+            return true
+        }
         if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && packList.visibility == View.VISIBLE) {
             if (event.action == KeyEvent.ACTION_UP) finish()
             return true
@@ -110,16 +128,58 @@ class StickerPickerActivity : AppCompatActivity() {
                 showStatus(getString(R.string.stickers_empty))
                 return@launch
             }
-            stickers = found
-            status.visibility = View.GONE
-            grid.adapter = StickerGridAdapter()
-            packList.visibility = View.GONE
-            grid.visibility = View.VISIBLE
+            showGrid(found)
             backToPacks.isEnabled = true
-            grid.requestFocus()
-            grid.setSelection(0)
         }
     }
+
+    // Straight at a sticker's pack (from a chat); Back closes the screen, there is no pack list
+    private fun openPackOf(stickerId: Long, chatId: Long, messageId: Long) {
+        title.setText(R.string.stickers_picker_title)
+        showStatus(getString(R.string.stickers_loading))
+        lifecycleScope.launch {
+            val (pack, found) = try {
+                withContext(Dispatchers.IO) { api.getStickerPackOf(stickerId, chatId, messageId) }
+            } catch (e: IOException) {
+                showStatus(getString(R.string.pack_not_loaded))
+                return@launch
+            }
+            title.text = pack.title
+            if (!pack.installed) {
+                addablePack = pack.id
+                softKeys.setLeft(getString(R.string.soft_key_add_pack))
+            }
+            showGrid(found)
+        }
+    }
+
+    private fun showGrid(found: List<StickerInfo>) {
+        stickers = found
+        status.visibility = View.GONE
+        grid.adapter = StickerGridAdapter()
+        packList.visibility = View.GONE
+        grid.visibility = View.VISIBLE
+        grid.requestFocus()
+        grid.setSelection(0)
+    }
+
+    private fun addPack() {
+        val pack = addablePack ?: return
+        addablePack = null
+        softKeys.setLeft(null)
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.installStickerPack(pack) }
+                showToast(R.string.pack_added)
+            } catch (e: IOException) {
+                addablePack = pack
+                softKeys.setLeft(getString(R.string.soft_key_add_pack))
+                showToast(R.string.pack_add_failed)
+            }
+        }
+    }
+
+    private fun showToast(text: Int) = android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_SHORT).show()
 
     private fun showPacks() {
         backToPacks.isEnabled = false
@@ -162,10 +222,17 @@ class StickerPickerActivity : AppCompatActivity() {
         }
     }
 
-    // How the chat screen opens this and gets the chosen sticker back (null = nothing chosen)
-    class Pick : ActivityResultContract<Unit, StickerInfo?>() {
-        override fun createIntent(context: android.content.Context, input: Unit) =
-            Intent(context, StickerPickerActivity::class.java)
+    // How the chat screen opens this and gets the chosen sticker back (null = nothing chosen).
+    // Input: null for the pack list, or a sticker in a chat to open straight at its pack.
+    class Pick : ActivityResultContract<PackOf?, StickerInfo?>() {
+        override fun createIntent(context: android.content.Context, input: PackOf?) =
+            Intent(context, StickerPickerActivity::class.java).apply {
+                if (input != null) {
+                    putExtra(EXTRA_FROM_STICKER, input.stickerId)
+                    putExtra(EXTRA_FROM_CHAT, input.chatId)
+                    putExtra(EXTRA_FROM_MESSAGE, input.messageId)
+                }
+            }
 
         override fun parseResult(resultCode: Int, intent: Intent?): StickerInfo? {
             if (resultCode != Activity.RESULT_OK || intent == null) return null
@@ -183,8 +250,17 @@ class StickerPickerActivity : AppCompatActivity() {
         private const val EXTRA_ID = "sticker_id"
         private const val EXTRA_EMOJI = "emoji"
         private const val EXTRA_KIND = "kind"
+        private const val EXTRA_FROM_STICKER = "from_sticker"
+        private const val EXTRA_FROM_CHAT = "from_chat"
+        private const val EXTRA_FROM_MESSAGE = "from_message"
     }
+
+    // A sticker in a chat, whose pack to open
+    data class PackOf(val stickerId: Long, val chatId: Long, val messageId: Long)
 }
+
+// A pack opened from a sticker: its id (as text), title, and whether it is among my packs
+data class PackInfo(val id: String, val title: String, val installed: Boolean)
 
 // A sticker pack in the picker: "recent", "faved", or an installed pack's id (as text)
 data class StickerPack(val id: String, val title: String, val count: Int)

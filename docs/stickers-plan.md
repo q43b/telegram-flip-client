@@ -92,7 +92,8 @@ the pack list arrives with sticker sending, which needs it anyway.
 2. **0.10.1**: custom emoji inside text and reactions as text-sized still pictures.
 3. **0.11.x stickers, step by step** (owner's split, 2026-11-06):
    - 0.11.0 sending stickers: F2 > Stickers, Recent, Favorites, installed packs, a grid. Done.
-   - 0.11.1 from a sticker in a chat (message menu): view its pack, and add the pack to my packs.
+   - 0.11.1 from a sticker in a chat (message menu): view its pack, and add the pack to my packs
+     (F1 "Add pack" while it isn't mine). Done.
    - 0.11.2 in a pack's grid, F2 on a sticker: a menu to add it to / remove it from Favorites
      (Telegram's, at most 5 on a free account).
    - 0.11.3 "local favourites": the app's own favourites list (no limit), with add/remove in the

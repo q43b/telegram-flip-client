@@ -184,6 +184,21 @@ class ApiClient(baseUrl: String?, val token: String) {
         return List(json.length()) { StickerInfo.fromJson(json.getJSONObject(it)) }
     }
 
+    // The pack a sticker comes from, and its stickers (chatId/messageId: the message it came in)
+    fun getStickerPackOf(stickerId: Long, chatId: Long, messageId: Long): Pair<PackInfo, List<StickerInfo>> {
+        val json = JSONObject(call(Request.Builder()
+            .url(endpoint("/sticker_set_of/$stickerId?chat_id=$chatId&message_id=$messageId"))))
+        val pack = json.getJSONObject("pack")
+        val stickers = json.getJSONArray("stickers")
+        return PackInfo(pack.getLong("id").toString(), pack.optString("title"), pack.optBoolean("installed")) to
+            List(stickers.length()) { StickerInfo.fromJson(stickers.getJSONObject(it)) }
+    }
+
+    // Adds a pack to my packs
+    fun installStickerPack(packId: String) {
+        call(Request.Builder().url(endpoint("/sticker_set/$packId/install")).post("".toRequestBody(null)))
+    }
+
     // Returns the new message's id. replyToId = the message being replied to, if any.
     fun sendSticker(chatId: Long, topicId: Long?, stickerId: Long, replyToId: Long?): Long {
         val body = JSONObject().put("chat_id", chatId).put("sticker_id", stickerId)
