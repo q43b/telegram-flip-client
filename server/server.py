@@ -103,7 +103,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.9.0-beta"
+VERSION = "0.10.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -310,6 +310,28 @@ def reactions_of(message):
     return reactions_list(getattr(message, "reactions", None))
 
 
+STICKER_KINDS = {"image/webp": "static", "application/x-tgsticker": "animated", "video/webm": "video"}
+
+# Sticker documents seen so far, by id: downloading one later needs its document (with the
+# file reference Telegram gave alongside it), not just the id. See docs/stickers-plan.md.
+sticker_documents = {}
+
+
+def sticker_of(message):
+    """For a sticker: {id, emoji, kind} (kind static / animated / video); None otherwise.
+    Remembers the document for GET /sticker. The picture comes from there."""
+    document = getattr(message, "sticker", None)
+    if document is None:
+        return None
+    sticker_documents[document.id] = document
+    attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeSticker)), None)
+    return {
+        "id": document.id,
+        "emoji": (attr.alt if attr else "") or "",
+        "kind": STICKER_KINDS.get(document.mime_type, "static"),
+    }
+
+
 def sender_name(message, sender=None):
     """Who wrote a message, shown in groups: their first name (or a channel's title when a
     channel posts into a group). None for my own messages, private chats and channel posts,
@@ -339,7 +361,7 @@ def last_message_preview(message):
     It comes with the chat list itself (each dialog's last message, in a forum group the
     newest of any topic), so it costs no extra requests. kind: "text", "media" (no text,
     e.g. a sticker), "photo" and "video" (text is the caption), "round" (a round video
-    message), "voice" (details in voice, see voice_of), "call" (details in
+    message), "sticker" (text is its emoji), "voice" (details in voice, see voice_of), "call" (details in
     call, see call_of) or "event" (joined,
     pinned, ...). sender: who wrote it, only for other people's messages in groups;
     None in private chats and channel posts.
@@ -358,6 +380,8 @@ def last_message_preview(message):
         text, kind = message.raw_text or "", "video"
     elif round_of(message) is not None:
         text, kind = "", "round"
+    elif sticker_of(message) is not None:
+        text, kind = sticker_of(message)["emoji"], "sticker"
     elif isinstance(message, types.MessageService):
         text, kind = "", "event"
     else:
@@ -478,6 +502,7 @@ async def on_new_message(event):
         "video": video_of(event.message),
         "round": round_of(event.message),
         "reactions": reactions_of(event.message),
+        "sticker": sticker_of(event.message),
         "sender": sender_name(event.message, sender),
         "sender_id": sender_id_of(event.message, sender),
     })
@@ -1005,6 +1030,68 @@ async def full_photo(chat_id, message_id):
     return data
 
 
+STICKER_CACHE = "sticker_cache"
+STICKER_SIZES = range(32, 513)  # Telegram's stickers are 512 px
+
+
+async def sticker_document(document_id, chat_id, message_id):
+    """The sticker's document: remembered from an earlier message, or read again from the
+    message it came in (after a server restart, or when its file reference expired)."""
+    if chat_id is not None and message_id is not None:
+        message = await client.get_messages(chat_id, ids=message_id)
+        if message is not None and sticker_of(message) is not None and message.sticker.id == document_id:
+            return message.sticker
+    return sticker_documents.get(document_id)
+
+
+def still_sticker(data, size):
+    """PNG bytes at most size×size, transparency kept."""
+    image = Image.open(BytesIO(data)).convert("RGBA")
+    image.thumbnail((size, size), Image.LANCZOS)
+    out = BytesIO()
+    image.save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
+# A sticker as a still picture (PNG, at most size×size): a static sticker's own image; for
+# animated and video stickers, the still preview Telegram makes for every sticker. Cached in
+# sticker_cache/. chat_id and message_id say where it came from, in case the server has to
+# read the message again. 404 when there is nothing to show (the app then shows text).
+@api.get("/sticker/{document_id}")
+@recovering
+async def get_sticker(document_id: int, size: int = 128, chat_id: Optional[int] = None,
+                      message_id: Optional[int] = None):
+    if size not in STICKER_SIZES:
+        raise HTTPException(status_code=400, detail="size must be 32-512")
+    headers = {"Cache-Control": "private, max-age=604800"}  # a sticker never changes
+    path = cache_path(STICKER_CACHE, f"{document_id}_still_{size}.png")
+    if not os.path.exists(path):
+        document = sticker_documents.get(document_id)
+        try:
+            if document is None:
+                document = await sticker_document(document_id, chat_id, message_id)
+            if document is None:
+                raise HTTPException(status_code=404, detail="Unknown sticker")
+            static = document.mime_type == "image/webp"
+            try:
+                data = await client.download_media(document, file=bytes, thumb=None if static else -1)
+            except errors.FileReferenceExpiredError:
+                document = await sticker_document(document_id, chat_id, message_id)
+                if document is None:
+                    raise HTTPException(status_code=404, detail="Sticker no longer available")
+                data = await client.download_media(document, file=bytes, thumb=None if static else -1)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        except errors.RPCError as e:
+            bad_request(e)
+        if not data:
+            raise HTTPException(status_code=404, detail="No picture for this sticker")
+        with open(path, "wb") as f:
+            f.write(still_sticker(data, size))
+    with open(path, "rb") as f:
+        return Response(f.read(), media_type="image/png", headers=headers)
+
+
 # Downloads still running, by file: a second request for the same video waits for the first
 # download instead of starting its own
 video_downloads = {}
@@ -1090,7 +1177,8 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
          "voice": voice_of(m), "image": image_of(m), "video": video_of(m),
-         "round": round_of(m), "reactions": reactions_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
+         "round": round_of(m), "reactions": reactions_of(m),
+         "sticker": sticker_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
