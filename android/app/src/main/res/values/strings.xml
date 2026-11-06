@@ -66,6 +66,10 @@
     <string name="load_older">Load older messages…</string>
     <string name="media">[media]</string>
     <string name="event">[event]</string>
+    <string name="photo">Photo</string>
+    <string name="photo_loading">Loading photo…</string>
+    <string name="photo_not_loaded">Could not load the photo</string>
+    <string name="action_view_photo">🖼 View photo</string>
     <string name="voice_message">Voice message</string>
     <string name="voice_loading">▶ Loading…</string>
     <string name="voice_not_loaded">Couldn\'t load the voice message</string>

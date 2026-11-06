@@ -134,6 +134,10 @@ class ApiClient(baseUrl: String?, val token: String) {
     fun getPhoto(chatId: Long, photoId: String, size: Int): ByteArray? =
         bytes(endpoint("/photo/$chatId?size=$size&photo_id=$photoId"))
 
+    // A photo from a message as JPEG bytes, shrunk by the server to fit the phone's screen
+    fun getImage(chatId: Long, messageId: Long): ByteArray =
+        bytes(endpoint("/image/$chatId/$messageId")) ?: throw IOException("No such photo")
+
     // A voice message's OGG/Opus file
     fun getVoice(chatId: Long, messageId: Long): ByteArray =
         bytes(endpoint("/voice/$chatId/$messageId")) ?: throw IOException("No such voice message")

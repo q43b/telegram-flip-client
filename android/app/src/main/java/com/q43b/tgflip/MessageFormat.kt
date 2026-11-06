@@ -53,6 +53,12 @@ object MessageFormat {
         return "☎ $text"
     }
 
+    // "🖼 Photo", or "🖼 Photo: caption"
+    fun photo(context: Context, caption: String): String {
+        val label = "🖼 ${context.getString(R.string.photo)}"
+        return if (caption.isEmpty()) label else "$label: $caption"
+    }
+
     // "🎤 Voice message 0:12"
     fun voice(context: Context, voice: VoiceInfo) =
         "🎤 ${context.getString(R.string.voice_message)} ${duration(voice.duration)}"

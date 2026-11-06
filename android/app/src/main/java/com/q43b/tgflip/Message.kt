@@ -6,6 +6,7 @@ import org.json.JSONObject
 // replyToId = the message this one replies to, if any. edited = show "(edited)".
 // call = set when this is a call record instead of a text message.
 // voice = set for a voice message (text is then its caption, usually empty).
+// image = set for a photo (text is then its caption).
 // sender = who wrote it, only for other people's messages in groups; senderId = their user
 // id (null for channels posting into a group), for their profile or a private chat.
 data class Message(
@@ -19,6 +20,7 @@ data class Message(
     val sender: String? = null,
     val senderId: Long? = null,
     val voice: VoiceInfo? = null,
+    val image: ImageInfo? = null,
 ) {
     // Same keys as the server sends, so saved messages read back with fromJson
     fun toJson(): JSONObject = JSONObject()
@@ -29,6 +31,7 @@ data class Message(
         .put("sender", sender ?: JSONObject.NULL)
         .put("sender_id", senderId ?: JSONObject.NULL)
         .put("voice", voice?.toJson() ?: JSONObject.NULL)
+        .put("image", image?.toJson() ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = Message(
@@ -43,6 +46,7 @@ data class Message(
             sender = if (json.isNull("sender")) null else json.getString("sender"),
             senderId = if (json.isNull("sender_id")) null else json.getLong("sender_id"),
             voice = json.optJSONObject("voice")?.let(VoiceInfo::fromJson),
+            image = json.optJSONObject("image")?.let(ImageInfo::fromJson),
         )
     }
 }
@@ -70,5 +74,14 @@ data class VoiceInfo(val duration: Int) {
 
     companion object {
         fun fromJson(json: JSONObject) = VoiceInfo(duration = json.optInt("duration"))
+    }
+}
+
+// A photo: its full size in pixels. The picture itself comes from GET /image, shrunk.
+data class ImageInfo(val width: Int, val height: Int) {
+    fun toJson(): JSONObject = JSONObject().put("w", width).put("h", height)
+
+    companion object {
+        fun fromJson(json: JSONObject) = ImageInfo(width = json.optInt("w"), height = json.optInt("h"))
     }
 }
