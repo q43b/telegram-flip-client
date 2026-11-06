@@ -2,10 +2,12 @@ package com.q43b.tgflip
 
 import android.Manifest
 import android.content.Context
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
@@ -92,6 +94,11 @@ class ChatActivity : AppCompatActivity() {
     // Android asks the user once; after a yes, recording starts right away
     private val askMicrophone = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) recorder.start() else showStatus(getString(R.string.voice_no_microphone))
+    }
+    // The phone's picture picker (Kyocera's Data Folder on the flip phone); its answer is
+    // the chosen picture, or nothing when Back was pressed
+    private val pickPhoto = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.data?.let(::chooseHowToSend)
     }
     private var chatId = 0L
     private var topicId: Long? = null  // set when this is one topic of a forum group
@@ -248,6 +255,7 @@ class ChatActivity : AppCompatActivity() {
             when (items[which]) {
                 R.string.quick_phrases -> showQuickPhrases()
                 R.string.menu_record_voice -> startRecording()
+                R.string.menu_media -> startPhotoPick()
                 else -> {
                     val text = getString(R.string.coming_later)
                     showStatus(text)
@@ -267,6 +275,64 @@ class ChatActivity : AppCompatActivity() {
             recorder.start()
         } else {
             askMicrophone.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    // ACTION_PICK goes straight to the phone's own picture picker; phones without one get
+    // the general file picker
+    private fun startPhotoPick() {
+        val pick = Intent(Intent.ACTION_PICK).setType("image/*")
+        val getContent = Intent(Intent.ACTION_GET_CONTENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE)
+        try {
+            pickPhoto.launch(pick)
+        } catch (e: ActivityNotFoundException) {
+            try {
+                pickPhoto.launch(getContent)
+            } catch (e: ActivityNotFoundException) {
+                showStatus(getString(R.string.photo_no_picker))
+            }
+        }
+    }
+
+    private fun chooseHowToSend(uri: Uri) {
+        val items = listOf(R.string.photo_send_optimized, R.string.photo_send_original)
+        MessageMenu.choose(this, getString(R.string.photo_send_title), items.map(::getString)) { which ->
+            sendPhoto(uri, optimized = which == 0)
+        }
+    }
+
+    // Sends the picture, as a reply if one is being written; text in the message box becomes
+    // its caption. If sending fails, a dialog offers to try again.
+    private fun sendPhoto(uri: Uri, optimized: Boolean) {
+        if (sending) return
+        sending = true
+        showStatus(getString(R.string.photo_sending))
+        val caption = if (editing == null) messageInput.text.toString().trim() else ""
+        val replyToId = replyingTo?.id
+        lifecycleScope.launch {
+            try {
+                val (id, prepared) = withContext(Dispatchers.IO) {
+                    val prepared = PhotoSender.prepare(this@ChatActivity, uri, optimized)
+                    api.sendPhoto(chatId, topicId, prepared.bytes, prepared.mimeType, caption, replyToId) to prepared
+                }
+                if (caption.isNotEmpty()) messageInput.text.clear()
+                if (replyToId != null) cancelCompose()
+                status.visibility = View.GONE
+                val sent = Message(id, caption, out = true, date = MessageFormat.now(), replyToId = replyToId,
+                    image = ImageInfo(prepared.width, prepared.height))
+                addMessage(sent, follow = true)
+            } catch (e: PhotoSender.TooLargeException) {
+                showStatus(getString(R.string.photo_too_large))
+            } catch (e: IOException) {
+                status.visibility = View.GONE
+                AlertDialog.Builder(this@ChatActivity)
+                    .setMessage(R.string.photo_send_failed)
+                    .setPositiveButton(R.string.voice_retry) { _, _ -> sendPhoto(uri, optimized) }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            } finally {
+                sending = false
+            }
         }
     }
 

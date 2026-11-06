@@ -1,5 +1,6 @@
 package com.q43b.tgflip
 
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -89,7 +90,36 @@ class ApiClient(baseUrl: String?, val token: String) {
         }
     }
 
-    private val uploads by lazy { http.newBuilder().readTimeout(60, TimeUnit.SECONDS).build() }
+    // Sends a picture (JPEG, PNG or WebP bytes) as a photo, with an optional caption;
+    // returns its id
+    fun sendPhoto(
+        chatId: Long,
+        topicId: Long?,
+        photo: ByteArray,
+        mimeType: String,
+        caption: String,
+        replyToId: Long? = null,
+    ): Long {
+        val url = endpoint("/send_photo").toHttpUrl().newBuilder()
+            .addQueryParameter("chat_id", chatId.toString())
+            .apply {
+                if (caption.isNotEmpty()) addQueryParameter("caption", caption)
+                if (topicId != null) addQueryParameter("topic_id", topicId.toString())
+                if (replyToId != null) addQueryParameter("reply_to_id", replyToId.toString())
+            }
+            .build()
+        val request = Request.Builder().url(url).post(photo.toRequestBody(mimeType.toMediaType()))
+            .header("x-token", token).build()
+        uploads.newCall(request).execute().use { response ->
+            if (response.code == 401) throw BadTokenException()
+            if (!response.isSuccessful) throw IOException("Server error ${response.code}")
+            return JSONObject(response.body!!.string()).getLong("id")
+        }
+    }
+
+    // Uploads wait for Telegram to take the file through the proxy: an original photo of a
+    // few MB can take a minute
+    private val uploads by lazy { http.newBuilder().readTimeout(120, TimeUnit.SECONDS).build() }
 
     // Sends a read receipt to the other side, so only call it on a deliberate key press
     fun markRead(chatId: Long, topicId: Long?) {

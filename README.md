@@ -16,7 +16,7 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Folders of your own on the phone: a total unread counter, and a folder can hide its chats from the main list (an alternative to archiving)
 - Forum groups (groups split into topics): a topic list, and each topic as its own chat
 - Read and send messages; "Load older messages" for history
-- Photos: open one from the message menu to see it full screen, then zoom, move around and rotate it from the F2 menu. The server shrinks it to the phone's screen size first (about 30–60 KB instead of several MB), and both sides keep a copy
+- Photos: open one from the message menu to see it full screen, then zoom, move around and rotate it from the F2 menu. The server shrinks it to the phone's screen size first (about 30–60 KB instead of several MB), and both sides keep a copy. Send your own from the F2 menu, picked in the phone's picture folder: optimized on the phone (about 1280 px, a few hundred KB, quick over a slow connection) or the original file; text in the message box becomes the caption
 - Voice messages: play them from the message menu, with a running time on the message line, and record your own from the F2 menu (up to 5 minutes; OK sends, Back discards). They are kept on the phone like photos, and listening does not tell the sender
 - Message menu on OK: view a photo, play a voice message, reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone"), view the writer's profile, and in groups message them privately
 - Profiles: photo, name, and username and phone number where the person lets you see them
@@ -72,7 +72,7 @@ Later runs just start. Settings and the login stay next to the exe (`.env`, `tg_
 | Right | Open Settings | Group info (groups and channels) | |
 | Left | | | Close Settings, a profile, group info or a photo |
 | F1 (left soft key) | | Mark as read | |
-| F2 (right soft key) | Open a forum's General topic | Menu: quick phrases, record a voice message (media and stickers to come) | |
+| F2 (right soft key) | Open a forum's General topic | Menu: quick phrases, record a voice message, send a photo (stickers to come) | |
 | Back | | Cancel a reply or edit, otherwise leave | Go back |
 
 ## Building from source
@@ -139,7 +139,7 @@ PROJECT_BRIEF.md           Goals, decisions, milestones
 - **Home network only for now.** The home connection is behind carrier-grade NAT, and the remote-access options tried (Tailscale, tunnels, a rented server) are blocked or ruled out where I live. The app's VPN and Public modes are ready for when a route exists.
 - **Text, photos and voice only in chats:** stickers, GIFs, videos and files show as "[media]". Voice messages play and record on Android 10 and newer (Settings already has a switch for Android 7–9, for a compatible format that comes later).
 - The packaged server is Windows-only.
-- Planned: reactions, stickers, sending photos, and other media.
+- Planned: reactions, stickers, and other media.
 
 ## Credits
 

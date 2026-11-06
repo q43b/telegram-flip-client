@@ -160,7 +160,14 @@
     <string name="error_send">Couldn\'t send. Press OK to try again.</string>
     <string name="soft_key_mark_read">Mark as read (%1$d)</string>
     <string name="soft_key_menu">Menu</string>
-    <string name="menu_media">Media</string>
+    <string name="menu_media">🖼 Send photo</string>
+    <string name="photo_send_title">Send photo</string>
+    <string name="photo_send_optimized">Optimized (smaller, sends faster)</string>
+    <string name="photo_send_original">Original (full quality)</string>
+    <string name="photo_sending">Sending photo…</string>
+    <string name="photo_send_failed">Couldn\'t send the photo.</string>
+    <string name="photo_too_large">The original is over 10 MB, Telegram\'s limit: send it optimized</string>
+    <string name="photo_no_picker">No app on this phone to choose photos with</string>
     <string name="menu_stickers">Stickers</string>
     <string name="coming_later">Coming in a later version</string>
     <string name="quick_phrases">Quick phrases</string>
