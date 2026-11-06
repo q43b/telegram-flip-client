@@ -7,18 +7,16 @@ import android.view.KeyEvent
 import android.widget.ArrayAdapter
 import android.widget.ListView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
-// The settings screen: a list with one row per setting, OK opens a row.
-// Opened with Right from the chat list, like swiping open the official app's side
-// menu; Left or Back closes it. New settings: add a row in rows() and a case in open().
+// The settings screen: a list of setting groups (Network, Appearance, Media and Cache,
+// Advanced) plus quick phrases; OK opens a group's own screen (SettingsGroupActivity).
+// Opened with Right from the chat list, like swiping open the official app's side menu;
+// Left or Back closes it. New settings go into their group in SettingsGroupActivity.
 class SettingsActivity : AppCompatActivity() {
-    private lateinit var settings: ServerSettings
     private lateinit var adapter: ArrayAdapter<String>
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,7 +29,6 @@ class SettingsActivity : AppCompatActivity() {
             insets
         }
 
-        settings = ServerSettings(this)
         val list = findViewById<ListView>(R.id.settings_list)
         adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, rows().toMutableList())
         list.adapter = adapter
@@ -54,67 +51,22 @@ class SettingsActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    // Row 0: which connection mode is active. Rows 1..3: each mode's server.
-    // Then theme, quick phrases, cache, the voice format and the soft key setting. The chat list reconnects with new server values
-    // when shown again.
-    private fun rows(): List<String> {
-        val modes = ConnectionMode.entries.map { mode ->
-            // The address without "http(s)://", as host:port
-            val server = settings.getAddress(mode)?.toHttpUrlOrNull()?.let { "${it.host}:${it.port}" }
-            getString(R.string.setting_server, getString(mode.label), server ?: getString(R.string.not_set))
-        }
-        val theme = getString(ThemeSetting.label(ThemeSetting.load(this)))
-        return listOf(getString(R.string.setting_mode, getString(settings.getMode().label))) +
-            modes +
-            getString(R.string.setting_theme, theme) +
-            getString(R.string.setting_quick_phrases, QuickPhrases(this).load().size) +
-            getString(R.string.setting_cache) +
-            getString(R.string.setting_voice_compatible,
-                getString(if (VoiceFormat.isCompatible(this)) R.string.on else R.string.off)) +
-            getString(R.string.setting_feature_phone,
-                getString(if (SoftKeySetting.isOn(this)) R.string.on else R.string.off))
-    }
+    // The groups, then quick phrases. Each group opens its own screen (SettingsGroupActivity).
+    private fun rows(): List<String> = listOf(
+        getString(R.string.group_network),
+        getString(R.string.group_appearance),
+        getString(R.string.group_media_cache),
+        getString(R.string.group_advanced),
+        getString(R.string.setting_quick_phrases, QuickPhrases(this).load().size),
+    )
 
     private fun open(position: Int) {
-        val modes = ConnectionMode.entries
-        when (position) {
-            0 -> MessageMenu.choose(this, getString(R.string.settings_screen_title), modes.map { getString(it.label) }) {
-                val mode = modes[it]
-                settings.saveMode(mode)
-                savedAndRefresh()
-                // A mode without an address cannot connect yet: ask for it now (Cancel keeps it unset)
-                if (settings.getAddress(mode) == null) {
-                    ServerSettingsDialog.show(this, settings, mode, cancelable = true) { savedAndRefresh() }
-                }
-            }
-            in 1..modes.size -> ServerSettingsDialog.show(this, settings, modes[position - 1], cancelable = true) {
-                savedAndRefresh()
-            }
-            modes.size + 1 -> MessageMenu.choose(this, getString(R.string.settings_screen_title),
-                ThemeSetting.choices.map { getString(it.second) }) { which ->
-                // Android redraws this screen in the new theme, which also refreshes the rows
-                ThemeSetting.save(this, ThemeSetting.choices[which].first)
-            }
-            modes.size + 2 -> QuickPhrasesEditor.show(this, ::refreshRows)
-            modes.size + 3 -> CacheMenu.show(this)
-            // OK switches it on and off
-            modes.size + 4 -> {
-                VoiceFormat.saveCompatible(this, !VoiceFormat.isCompatible(this))
-                refreshRows()
-                val note = if (VoiceFormat.isCompatible(this)) R.string.voice_compatible_on else R.string.saved
-                Toast.makeText(this, note, Toast.LENGTH_LONG).show()
-            }
-            // OK switches it on and off; open screens pick it up when shown again
-            modes.size + 5 -> {
-                SoftKeySetting.save(this, !SoftKeySetting.isOn(this))
-                savedAndRefresh()
-            }
+        val groups = SettingsGroupActivity.Group.entries
+        if (position < groups.size) {
+            SettingsGroupActivity.start(this, groups[position])
+        } else {
+            QuickPhrasesEditor.show(this, ::refreshRows)
         }
-    }
-
-    private fun savedAndRefresh() {
-        refreshRows()
-        Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show()
     }
 
     private fun refreshRows() {

@@ -158,7 +158,14 @@
     <string name="add_phrase">+ Add phrase</string>
     <string name="setting_quick_phrases">Quick phrases: %1$d</string>
     <string name="app_version">TG Flip %1$s</string>
-    <string name="setting_cache">Cache</string>
+    <string name="group_network">Network…</string>
+    <string name="group_network_title">Network</string>
+    <string name="group_appearance">Appearance…</string>
+    <string name="group_appearance_title">Appearance</string>
+    <string name="group_media_cache">Media and Cache…</string>
+    <string name="group_media_cache_title">Media and Cache</string>
+    <string name="group_advanced">Advanced settings…</string>
+    <string name="group_advanced_title">Advanced settings</string>
     <string name="cache_keep">Keep media: %1$s</string>
     <string name="cache_keep_title">Keep media since last seen for</string>
     <string name="cache_max">Media limit: %1$s</string>

@@ -53,6 +53,10 @@
             android:name=".SettingsActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="false" />
+        <activity
+            android:name=".SettingsGroupActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation"
+            android:exported="false" />
     </application>
 
 </manifest>

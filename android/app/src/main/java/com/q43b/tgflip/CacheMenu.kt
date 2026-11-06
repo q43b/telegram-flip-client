@@ -12,65 +12,60 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// Settings > Cache: how long media is kept and how much space it may take, clearing
-// it, and "Delete all saved data" (also the saved chats and messages: a fresh start
-// for when something looks wrong). Reopens after each change, like folder settings.
+// The rows of Settings > Media and Cache: how long media is kept and how much space it may
+// take, clearing it, and "Delete all saved data" (also the saved chats and messages: a
+// fresh start for when something looks wrong). refresh redraws the rows after a change.
 object CacheMenu {
-    fun show(activity: AppCompatActivity) {
-        activity.lifecycleScope.launch {
-            val bytes = withContext(Dispatchers.IO) { MediaCache.sizeBytes(activity) }
-            val items = listOf(
-                activity.getString(R.string.cache_keep, daysLabel(activity, MediaCache.keepDays(activity))),
-                activity.getString(R.string.cache_max, mbLabel(activity, MediaCache.maxMb(activity))),
-                activity.getString(R.string.cache_clear_media, Formatter.formatShortFileSize(activity, bytes)),
-                activity.getString(R.string.cache_clear_all),
-            )
-            MessageMenu.choose(activity, activity.getString(R.string.setting_cache), items) { which ->
-                when (which) {
-                    0 -> pickDays(activity)
-                    1 -> pickMb(activity)
-                    2 -> confirm(activity, R.string.cache_clear_media_confirm) { clearMedia(activity) }
-                    3 -> confirm(activity, R.string.cache_clear_all_confirm) { clearEverything(activity) }
-                }
-            }
-        }
-    }
+    fun rows(activity: AppCompatActivity, bytes: Long, refresh: () -> Unit) = listOf(
+        SettingRow(activity.getString(R.string.cache_keep, daysLabel(activity, MediaCache.keepDays(activity)))) {
+            pickDays(activity, refresh)
+        },
+        SettingRow(activity.getString(R.string.cache_max, mbLabel(activity, MediaCache.maxMb(activity)))) {
+            pickMb(activity, refresh)
+        },
+        SettingRow(activity.getString(R.string.cache_clear_media, Formatter.formatShortFileSize(activity, bytes))) {
+            confirm(activity, R.string.cache_clear_media_confirm) { clearMedia(activity, refresh) }
+        },
+        SettingRow(activity.getString(R.string.cache_clear_all)) {
+            confirm(activity, R.string.cache_clear_all_confirm) { clearEverything(activity) }
+        },
+    )
 
     // The usual choices, then "Custom…" for any number of days
-    private fun pickDays(activity: AppCompatActivity) {
+    private fun pickDays(activity: AppCompatActivity, refresh: () -> Unit) {
         val choices = MediaCache.dayChoices
         val labels = choices.map { daysLabel(activity, it) } + activity.getString(R.string.cache_custom)
         MessageMenu.choose(activity, activity.getString(R.string.cache_keep_title), labels) {
             if (it < choices.size) {
                 MediaCache.saveKeepDays(activity, choices[it])
-                trimAndReopen(activity)
+                trimAndRefresh(activity, refresh)
             } else {
                 askNumber(activity, R.string.cache_custom_days, MediaCache.keepDays(activity)) { days ->
                     MediaCache.saveKeepDays(activity, days)
-                    trimAndReopen(activity)
+                    trimAndRefresh(activity, refresh)
                 }
             }
         }
     }
 
-    private fun pickMb(activity: AppCompatActivity) {
+    private fun pickMb(activity: AppCompatActivity, refresh: () -> Unit) {
         val choices = MediaCache.mbChoices
         val labels = choices.map { mbLabel(activity, it) } + activity.getString(R.string.cache_custom)
         MessageMenu.choose(activity, activity.getString(R.string.cache_max_title), labels) {
             if (it < choices.size) {
                 MediaCache.saveMaxMb(activity, choices[it])
-                trimAndReopen(activity)
+                trimAndRefresh(activity, refresh)
             } else {
                 askNumber(activity, R.string.cache_custom_mb, MediaCache.maxMb(activity)) { mb ->
                     MediaCache.saveMaxMb(activity, mb)
-                    trimAndReopen(activity)
+                    trimAndRefresh(activity, refresh)
                 }
             }
         }
     }
 
     // A whole number from 1 to MAX_CUSTOM (0, "no limit", is one of the usual choices).
-    // Anything else is refused with a note, and the menu reopens.
+    // Anything else is refused with a note, and nothing changes.
     private fun askNumber(activity: AppCompatActivity, @StringRes title: Int, current: Int, onDone: (Int) -> Unit) {
         val initial = if (current > 0) current.toString() else ""
         MessageMenu.askText(activity, activity.getString(title), initial, InputType.TYPE_CLASS_NUMBER) { text ->
@@ -79,25 +74,24 @@ object CacheMenu {
                 onDone(number)
             } else {
                 Toast.makeText(activity, activity.getString(R.string.cache_custom_invalid, MAX_CUSTOM), Toast.LENGTH_LONG).show()
-                show(activity)
             }
         }
     }
 
     // A stricter limit applies at once
-    private fun trimAndReopen(activity: AppCompatActivity) {
+    private fun trimAndRefresh(activity: AppCompatActivity, refresh: () -> Unit) {
         activity.lifecycleScope.launch {
             withContext(Dispatchers.IO) { MediaCache.trim(activity) }
             Toast.makeText(activity, R.string.saved, Toast.LENGTH_SHORT).show()
-            show(activity)
+            refresh()
         }
     }
 
-    private fun clearMedia(activity: AppCompatActivity) {
+    private fun clearMedia(activity: AppCompatActivity, refresh: () -> Unit) {
         activity.lifecycleScope.launch {
             withContext(Dispatchers.IO) { MediaCache.clear(activity) }
             Toast.makeText(activity, R.string.cache_cleared, Toast.LENGTH_SHORT).show()
-            show(activity)
+            refresh()
         }
     }
 
