@@ -46,9 +46,14 @@ class ApiClient(baseUrl: String?, val token: String) {
     }
 
     // Opens /logs (the server's console log, for the "under the hood" screen). The listener
-    // must send the token as the first message.
-    fun openLogSocket(listener: WebSocketListener): WebSocket =
-        http.newWebSocket(Request.Builder().url(endpoint("/logs")).build(), listener)
+    // must send the token as the first message. The version header tells the server this app
+    // knows private and shared servers (from 0.13.0-beta); older apps get one line instead.
+    fun openLogSocket(listener: WebSocketListener): WebSocket {
+        val request = Request.Builder().url(endpoint("/logs"))
+            .header("x-app-version", BuildConfig.VERSION_NAME)
+            .build()
+        return http.newWebSocket(request, listener)
+    }
 
     // The functions below block until the server answers, so call them from a background thread.
     fun getChats(limit: Int = 20): List<Chat> {

@@ -29,11 +29,12 @@ $zip = Join-Path $root "dist\tgflip-server-$Version-win64.zip"
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 
 Copy-Item (Join-Path $server "packaging\README.txt") $out
+Copy-Item (Join-Path $server "packaging\Maintenance mode.bat") $out
 Copy-Item (Join-Path $server ".env.example") $out
 
-# Never ship secrets or personal data: settings, the Telegram login and the local favourite
-# stickers are created on the user's PC
-$secrets = Get-ChildItem $out -Recurse -Force -Include ".env", "*.session", "*.session-journal", "local_favorites.json"
+# Never ship secrets or personal data: settings, the accounts list, the Telegram logins and the
+# local favourite stickers are created on the user's PC
+$secrets = Get-ChildItem $out -Recurse -Force -Include ".env", "*.session", "*.session-journal", "local_favorites*.json", "accounts.json*"
 if ($secrets) { throw "Refusing to pack secrets: $($secrets.FullName -join ', ')" }
 
 New-Item -ItemType Directory -Force (Split-Path $zip) | Out-Null

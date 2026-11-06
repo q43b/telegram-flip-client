@@ -39,21 +39,18 @@ class SettingsActivity : AppCompatActivity() {
         list.setOnItemClickListener { _, _, position, _ -> open(position) }
         list.requestFocus()
 
-        // versionName from build.gradle.kts (dev builds add "-dev")
+        // versionName and the era's name from build.gradle.kts (dev builds add "-dev")
         version = findViewById(R.id.app_version)
-        version.text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
-        // While the line has focus: " >" hints that Right opens something (the server's log),
-        // and F2's label offers this version's release notes
+        version.text = getString(R.string.app_version, BuildConfig.VERSION_NAME, BuildConfig.CODENAME)
+        // While the line has focus, F2's label offers this version's release notes
         softKeys = SoftKeyBar(this)
         softKeys.onRightTap(::openReleaseNotes)
         version.setOnFocusChangeListener { _, hasFocus ->
-            val text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
-            version.text = if (hasFocus) "$text >" else text
             softKeys.setRight(if (hasFocus) getString(R.string.soft_key_release_notes) else null)
         }
         // The version line counts as the list's last row: Up on the first row goes to it,
         // Down from it goes back to the first row (Down on the last row reaches it anyway).
-        // Right on it opens "under the hood", the server's live log.
+        // OK on it opens "under the hood", the server's live log.
         list.wrapsDown = false
         list.onUpFromTop = { version.requestFocus() }
         version.setOnKeyListener { _, keyCode, event ->
@@ -63,7 +60,7 @@ class SettingsActivity : AppCompatActivity() {
                     list.requestFocus()
                     list.setSelection(0)
                 }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> if (fresh) LogActivity.start(this)
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> if (fresh) LogActivity.start(this)
                 else -> return@setOnKeyListener false
             }
             true

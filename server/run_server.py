@@ -1,13 +1,14 @@
 """Starts the TG Flip server: first-run setup, Telegram login, then the web server.
+With --maintenancemode, first a menu for the accounts (maintenance.py).
 
 This is what the packaged tgflip-server.exe runs. For development, plain
 `uvicorn server:app --host 0.0.0.0` keeps working as before.
 """
 import asyncio
 import os
-import secrets
-import string
 import sys
+
+from maintenance import generate_token
 
 # Settings (.env) and the Telegram session live next to the program,
 # not in whatever folder it happened to be started from
@@ -33,12 +34,6 @@ def ask_number(prompt):
         print("  Digits only, please.")
 
 
-def generate_token():
-    # Lowercase letters and digits only: easy to type on a phone keypad
-    alphabet = string.ascii_lowercase + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(12))
-
-
 def first_run_setup():
     """Asks for the settings once and writes them to .env next to the program."""
     print("TG Flip server: first-run setup")
@@ -57,6 +52,11 @@ def first_run_setup():
     if generated:
         token = generate_token()
 
+    print("\nWho will use this server? Only you (private: your apps may see its live log), or")
+    print("several people, each with their own Telegram account (shared: the log stays on this PC,")
+    print("except for accounts you make admins). Change it later in Maintenance mode.")
+    shared = ask("Shared server? (y/N)", required=False).lower() in ("y", "yes")
+
     with open(ENV_FILE, "w", encoding="utf-8") as f:
         f.write(f"API_ID={api_id}\n")
         f.write(f"API_HASH={api_hash}\n")
@@ -65,6 +65,7 @@ def first_run_setup():
         f.write(f"PROXY_PORT={proxy_port}\n")
         f.write(f"PROXY_SECRET={proxy_secret}\n")
         f.write(f"PORT={DEFAULT_PORT}\n")
+        f.write(f"SERVER_MODE={'shared' if shared else 'private'}\n")
 
     print(f"\nSaved to {ENV_FILE}. Edit that file to change these later.")
     if generated:
@@ -73,10 +74,23 @@ def first_run_setup():
     print()
 
 
-async def serve(server, port):
+async def serve(server, port, maintenance_mode):
     import uvicorn
 
-    server.use_account(server.ACCOUNTS[0])  # today's single account (more in 0.13.0)
+    if maintenance_mode:
+        import accounts
+        import maintenance
+        # Loading server.py opened every account's session file; close them, so the menu can
+        # log an account out (which deletes its file: Windows refuses while it is open)
+        for acc in server.ACCOUNTS:
+            acc.client.session.close()
+        if not await maintenance.menu(server):
+            return
+        # The list may have changed in the menu
+        server.ACCOUNTS[:] = [server.Account(**entry) for entry in accounts.load()]
+    # The first account may still need its first login (first-run setup); later accounts are
+    # logged in when added, in --maintenancemode
+    server.use_account(server.ACCOUNTS[0])
     me = await server.connect_telegram()
     if me is None:
         # Only on the first run, or after logging out: asks for phone, code, 2FA password
@@ -98,8 +112,10 @@ def main():
     import server  # reads the settings from the environment when imported
 
     port = int(os.environ.get("PORT") or DEFAULT_PORT)
-    print(f"Starting on port {port}. Press Ctrl+C to stop.")
-    asyncio.run(serve(server, port))
+    maintenance_mode = "--maintenancemode" in sys.argv[1:]
+    if not maintenance_mode:
+        print(f"Starting on port {port}. Press Ctrl+C to stop.")
+    asyncio.run(serve(server, port, maintenance_mode))
 
 
 if __name__ == "__main__":

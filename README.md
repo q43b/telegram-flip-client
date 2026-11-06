@@ -31,8 +31,8 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Offline reading: the last chats, topics and messages are kept on the phone
 - Cache settings: how long media is kept and how much space it may take (presets or your own numbers), clearing it, an optional separate cache for stickers with its own limits, and deleting all saved data for a fresh start
 - Soft key labels in the phone's own soft key boxes on Japanese Android flip phones (NextFP, like my Kyocera); other phones get the app's own label bar. A Settings switch picks which one shows
-- On the version line in Settings: F2 opens that version's release notes, Right ("under the hood") shows the server's log, live
-- Several phones can use the same account on one server at the same time
+- On the version line in Settings: F2 opens that version's release notes, OK ("under the hood") shows the server's log, live
+- One server for several people: each Telegram account gets its own app token, chats and caches (accounts are added on the PC in Maintenance mode), and several phones can use the same account at the same time. A shared server shows its log only to the accounts you make admins
 - Connection status bar on every screen
 - Settings: server address per connection mode (local network, VPN, public internet over HTTPS), app token, theme (light, dark, follow phone)
 - Built for the d-pad: every action works with Up/Down, OK, Left/Right, Back and the soft keys
@@ -59,7 +59,9 @@ Both downloads are on the [Releases](https://github.com/q43b/telegram-flip-clien
 3. The first run asks for the API ID and hash, an MTProxy (only if Telegram is blocked for you; press Enter to skip) and the app token (press Enter to generate one). Then it logs in to Telegram: phone number, the code Telegram sends, and your 2FA password if you have one.
 4. If Windows Firewall asks, allow it on private networks.
 
-Later runs just start. Settings and the login stay next to the exe (`.env`, `tg_session.session`).
+Later runs just start. Settings and the logins stay next to the exe (`.env`, `accounts.json`, `tg_session*.session`).
+
+**More people on one server:** double-click `Maintenance mode.bat` (or run `tgflip-server.exe --maintenancemode`). Its menu adds an account (that person's phone number, the code Telegram sends them and their 2FA password, typed in on the PC, so the code never crosses the network), then prints the app token for their phone once. It also removes and renames accounts, switches between a private server (your apps may see the live log) and a shared one (only accounts you make admins may), and gives or takes admin rights. Then it starts the server.
 
 > **The phone can't connect although the server started?** Windows probably treats your home Wi-Fi as a "Public" network, where it blocks incoming connections. Set it to Private: Settings > Network & internet > Wi-Fi > (your network) > Network profile type > Private.
 
@@ -113,6 +115,9 @@ android/                   The Android app (Kotlin, Views)
 server/
   server.py                FastAPI app: REST endpoints, WebSocket, Telethon client
   run_server.py            Start script: first-run setup, Telegram login, then the server
+  accounts.py              The accounts list (accounts.json)
+  maintenance.py           Maintenance mode: add, remove, rename accounts; private/shared
+  tools/check_server.py    Checks every read-only endpoint (statuses and shapes only)
   build_server.ps1         Builds the packaged Windows server (PyInstaller)
   packaging/README.txt     The README inside the server zip
   static/                  The earlier web client, still served at http://<PC>:9436/
@@ -125,7 +130,7 @@ PROJECT_BRIEF.md           Goals, decisions, milestones
 ## Security notes
 
 - The Telegram session file gives full access to the account. It is git-ignored, never packed into the server zip, and must never be shared.
-- Secrets live in `.env`, not in code. Token comparison uses `secrets.compare_digest`. The WebSocket token is sent as the first message, not in the URL, so it does not end up in logs.
+- Secrets live in `.env` and `accounts.json` (the app tokens), not in code. Each request's token picks its account, and each account's cached media sits in its own folder, so one account never reaches another's data. Token comparison uses `secrets.compare_digest`. The WebSocket token is sent as the first message, not in the URL, so it does not end up in logs.
 - Message text is always shown as plain text, never interpreted as HTML.
 - On the local network and inside a VPN the app uses plain HTTP; in the "Public internet" connection mode it always uses HTTPS, so the token and messages never cross the open internet readable. The server itself is meant for a trusted network; don't expose it to the internet without HTTPS in front.
 - Messages saved for offline reading are kept in the app's private storage and excluded from phone backups.
@@ -144,7 +149,7 @@ PROJECT_BRIEF.md           Goals, decisions, milestones
 - **Home network only for now.** The home connection is behind carrier-grade NAT, and the remote-access options tried (Tailscale, tunnels, a rented server) are blocked or ruled out where I live. The app's VPN and Public modes are ready for when a route exists.
 - **Text, photos, videos and voice in chats:** GIFs and files show as "[media]"; animated stickers don't play yet. Voice messages play and record on Android 10 and newer (Settings already has a switch for Android 7–9, for a compatible format that comes later).
 - The packaged server is Windows-only.
-- Planned: reactions, stickers, and other media.
+- Planned: animated stickers, as an optional add-on to the server.
 
 ## Credits
 

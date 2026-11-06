@@ -21,8 +21,8 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <!-- Small gray "TG Flip 0.7.1-alpha" line. Down from the last row reaches it; there F2
-         opens this version's release notes and Right the server's log. The background only
+    <!-- Small gray 'TG Flip 0.13.0-beta "Almost Liquid"' line. Down from the last row reaches
+         it; there F2 opens this version's release notes and OK the server's log. The background only
          shows while it has focus. -->
     <TextView
         android:id="@+id/app_version"

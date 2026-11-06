@@ -8,8 +8,8 @@ First run
 1. Double-click tgflip-server.exe.
 2. It asks for your Telegram API ID and hash (from https://my.telegram.org,
    "API development tools"), an MTProxy if Telegram is blocked where you are
-   (press Enter to skip), and the app token (press Enter to generate one).
-   These are saved to .env in this folder.
+   (press Enter to skip), the app token (press Enter to generate one), and
+   whether the server is shared (see below). These are saved to .env in this folder.
 3. It logs in to Telegram: your phone number, the code Telegram sends you,
    and your 2FA password if you have one. The login is saved in tg_session.session.
 4. If Windows Firewall asks, allow tgflip-server on private networks,
@@ -23,10 +23,28 @@ and allow it if Windows asks.
 
 Later runs just start. Stop the server with Ctrl+C or by closing the window.
 
+Several people on one server
+----------------------------
+Double-click "Maintenance mode.bat" (or run tgflip-server.exe --maintenancemode).
+Its menu:
+  a) Add an account: a name, then that person's phone number, the code Telegram
+     sends them and their 2FA password, typed in here. It prints the app token for
+     their phone once.
+  r) Remove an account (and, if you want, log it out of Telegram)
+  n) Rename an account
+  m) Give or take admin rights
+  p) Private or shared server: on a private server every app may see the live
+     log ("Under the hood"); on a shared one only admin accounts may, since the
+     log shows everyone's addresses and chats.
+  s) Start the server, q) Quit
+Each account has its own app token, Telegram login (tg_session*.session) and
+cached media. The list is in accounts.json.
+
 The photo_cache folder holds small copies of chats' profile photos for the app,
 image_cache small copies of photos from messages, video_cache the videos the
-phone has played, and sticker_cache sticker pictures. All of them can be deleted at any time; files are fetched again
-when needed (video_cache can grow large).
+phone has played, and sticker_cache sticker pictures, each with one folder per
+account. All of them can be deleted at any time; files are fetched again when
+needed (video_cache can grow large).
 
 In the phone app
 ----------------
@@ -35,7 +53,10 @@ and the app token.
 
 Keep private
 ------------
-.env (your API keys and token) and tg_session.session (your Telegram login)
-give access to your account. Don't share them or upload them anywhere.
-To log out of this server, delete tg_session.session.
-local_favorites.json holds the app's local favourite stickers; it is yours too.
+.env (your API keys), accounts.json (the app tokens) and the tg_session*.session
+files (the Telegram logins) give access to the accounts. Don't share them or
+upload them anywhere. To log an account out of this server, remove it in
+Maintenance mode. local_favorites*.json hold the app's local favourite stickers.
+
+Updating from before 0.13.0: nothing to do. The first start makes accounts.json
+from .env (your account becomes "main") and moves the cached files into its folder.

@@ -20,10 +20,11 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONException
 
-// "Under the hood": the server's console log, live (WebSocket /logs). Opened with Right on
+// "Under the hood": the server's console log, live (WebSocket /logs). Opened with OK on
 // the version line in Settings. First the server's last lines arrive, then each new one as
 // it is printed. The last row says whether it is live; while the bottom row is selected the
-// list follows new lines, otherwise it stays where it was. Reconnects by itself while open.
+// list follows new lines, otherwise it stays where it was. Reconnects by itself while open,
+// except on a shared server where this account isn't an admin (close code LOG_PRIVATE).
 // Left or Back closes it (the server then prints a line saying the sharing stopped).
 class LogActivity : AppCompatActivity() {
     private lateinit var list: WrapListView
@@ -96,6 +97,17 @@ class LogActivity : AppCompatActivity() {
                 runOnUiThread { if (socket === webSocket) addLines(received) }
             }
 
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                if (code != LOG_PRIVATE) return
+                webSocket.close(1000, null)
+                runOnUiThread {
+                    if (socket !== webSocket) return@runOnUiThread
+                    socket = null  // so lost() doesn't try again: the answer won't change
+                    lines.clear()
+                    setFooter(getString(R.string.log_private))
+                }
+            }
+
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = lost(webSocket)
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = lost(webSocket)
@@ -142,6 +154,7 @@ class LogActivity : AppCompatActivity() {
     companion object {
         private const val MAX_LINES = 500  // the server keeps as many
         private const val RETRY_MS = 3000L
+        private const val LOG_PRIVATE = 4003  // the server's close code (server.py LOG_PRIVATE)
 
         fun start(activity: Activity) {
             activity.startActivity(Intent(activity, LogActivity::class.java))

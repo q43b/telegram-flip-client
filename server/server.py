@@ -14,6 +14,7 @@ from collections import deque
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+from http import HTTPStatus
 from io import BytesIO
 
 from dotenv import load_dotenv
@@ -28,6 +29,8 @@ from pydantic import BaseModel
 from telethon import TelegramClient, connection, errors, events, functions, types, utils
 from telethon.client.dialogs import _dialog_message_key  # to build dialogs like iter_dialogs
 from telethon.tl import custom
+
+import accounts
 
 load_dotenv()
 
@@ -99,14 +102,26 @@ def start_log_capture():
     real console, so its loggers get a LogRecorder instead (never both: no doubled lines)."""
     global log_loop
     log_loop = asyncio.get_running_loop()
-    for name in ("uvicorn", "uvicorn.access"):
-        logger = logging.getLogger(name)
-        if not any(isinstance(getattr(h, "stream", None), LogTee) for h in logger.handlers):
-            logger.addHandler(LogRecorder())
+    logger = logging.getLogger("uvicorn")
+    if not any(isinstance(getattr(h, "stream", None), LogTee) for h in logger.handlers):
+        logger.addHandler(LogRecorder())
+    # AccessLog prints these lines instead, with the account
+    logging.getLogger("uvicorn.access").disabled = True
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.12.1-beta"
+VERSION = "0.13.0-beta"
+CODENAME = "Almost Liquid"  # the era's name, printed after the version (from 0.13.0-beta)
+
+def shared_server():
+    """SERVER_MODE in .env: "private" (the default: one person's server, every account's app
+    may watch the live log) or "shared" (for several people: only admin accounts may, since
+    the log shows everyone's addresses and chats). Read each time: maintenance mode can change it."""
+    mode = (os.environ.get("SERVER_MODE") or "private").strip().lower()
+    if mode not in ("private", "shared"):
+        raise RuntimeError(f"SERVER_MODE in .env must be private or shared, not {mode!r}")
+    return mode == "shared"
+
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -123,13 +138,14 @@ else:
 
 class Account:
     """One Telegram account the server works for: its Telegram connection and everything that
-    belongs to that account alone. 0.12.0 has exactly one, from .env; 0.13.0 reads several
-    (docs/multi-account-plan.md). Code working for an account gets it with account(), and
-    `client` below is always the current account's TelegramClient."""
+    belongs to that account alone, made from its entry in accounts.json (accounts.py). Code
+    working for an account gets it with account(), and `client` below is always the current
+    account's TelegramClient."""
 
-    def __init__(self, name, token, session, local_favorites):
+    def __init__(self, name, token, session, local_favorites, admin=False):
         self.name = name
         self.token = token  # the app token that means this account
+        self.admin = admin  # may see the live log on a shared server
         self.client = TelegramClient(session, int(os.environ["API_ID"]), os.environ["API_HASH"], **proxy_args)
         self.ws_clients = set()  # its apps' live connections (several phones can share one account)
         self.telegram_config = None  # Telegram's settings as this account gets them
@@ -138,6 +154,9 @@ class Account:
         self.sticker_sets = {}  # pack id -> InputStickerSetID
         self.video_downloads = {}  # file path -> running download, see get_video
         self.local_favorites = local_favorites  # its local favourite stickers' file
+        # Its own subfolder in every media cache (cache_path): named after its session, which,
+        # unlike the account's name, never changes
+        self.cache_folder = session
         self.reconnect_lock = asyncio.Lock()
         self.last_recovery = 0.0
         self.watchdog = None  # its watchdog task, while running
@@ -169,9 +188,8 @@ class CurrentClient:
 
 client = CurrentClient()
 
-# Only today's single account, from .env, with the session and local favourites files it always
-# had (0.13.0 adds accounts.json)
-ACCOUNTS = [Account("main", os.environ["API_TOKEN"], "tg_session", "local_favorites.json")]
+# Every account in accounts.json (made from .env the first time: the account the server always had)
+ACCOUNTS = [Account(**entry) for entry in accounts.load()]
 
 # Telegram update handlers (@on below), registered on every account's client at startup;
 # each runs as that account
@@ -777,13 +795,20 @@ async def watchdog():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     start_log_capture()
+    move_old_caches()
     for acc in ACCOUNTS:
         use_account(acc)  # the tasks started here keep it (they copy the context)
         register_handlers(acc)
         if await connect_telegram() is None:
-            raise RuntimeError("Not logged in. Run list_chats.py once first.")
+            raise RuntimeError(f"Account \"{acc.name}\" is not logged in to Telegram. "
+                               "Log it in with tgflip-server --maintenancemode.")
+        print(f"Account \"{acc.name}\" connected to Telegram")
         acc.watchdog = asyncio.create_task(watchdog())
-    print(f"TG Flip server {VERSION} started successfully")
+    if shared_server():
+        print("Shared server: only admin accounts' apps may see this log")
+    else:
+        print("Private server: every account's app may see this log")
+    print(f"TG Flip server {VERSION} \"{CODENAME}\" started successfully")
     yield
     for acc in ACCOUNTS:
         acc.watchdog.cancel()
@@ -799,7 +824,7 @@ def account_with_token(token):
     return found
 
 
-async def current_account(x_token: str = Header(default="")):
+async def current_account(request: Request, x_token: str = Header(default="")):
     """Every request's first step: the token says which account it is for (401 if none), which
     is then the current account for the rest of the request. async, so it runs in the
     request's own context (a plain def would run in another thread and the choice would be lost)."""
@@ -807,10 +832,46 @@ async def current_account(x_token: str = Header(default="")):
     if acc is None:
         raise HTTPException(status_code=401, detail="Bad token")
     use_account(acc)
+    request.scope["tgflip_account"] = acc.name  # for its line in the log (AccessLog)
     return acc
 
 
+class AccessLog:
+    """One line per request, like uvicorn's own access log (turned off at startup:
+    start_log_capture), plus the account it was for. uvicorn's runs before the token is read,
+    so it can't say whose request it was; this one prints when the answer has gone."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        status = 500  # unless an answer starts
+
+        async def send_noting_status(message):
+            nonlocal status
+            if message["type"] == "http.response.start":
+                status = message["status"]
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_noting_status)
+        finally:
+            host, port = scope.get("client") or ("?", 0)
+            name = scope.get("tgflip_account")
+            whose = f" [{name}]" if name else ""
+            path = scope["path"] + (f"?{scope['query_string'].decode()}" if scope["query_string"] else "")
+            try:
+                phrase = HTTPStatus(status).phrase
+            except ValueError:
+                phrase = ""
+            print(f'INFO:     {host}:{port}{whose} - "{scope["method"]} {path} '
+                  f'HTTP/{scope["http_version"]}" {status} {phrase}')
+
+
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(AccessLog)
 api = APIRouter(dependencies=[Depends(current_account)])  # token required on these
 
 
@@ -911,6 +972,15 @@ async def dialogs_by_ids(chat_ids):
     ]
     oldest = datetime.min.replace(tzinfo=timezone.utc)
     return sorted(dialogs, key=lambda d: d.date or oldest, reverse=True)
+
+
+# About the server itself, for the app: its version and whether this account's app may see
+# the live log (private server, or an admin on a shared one)
+@api.get("/server_info")
+async def server_info():
+    shared = shared_server()
+    return {"version": VERSION, "codename": CODENAME, "shared": shared,
+            "log": not shared or account().admin}
 
 
 # ids: comma-separated chat ids (an app folder); then only those chats, ignoring limit
@@ -1023,7 +1093,7 @@ async def get_photo(chat_id: int, size: int = 48, photo_id: Optional[str] = None
     headers = {"Cache-Control": "private, max-age=86400"}
 
     def cached(pid):
-        return os.path.join(PHOTO_CACHE, f"{chat_id}_{pid}_{size}.jpg")
+        return cache_path(PHOTO_CACHE, f"{chat_id}_{pid}_{size}.jpg")
 
     if photo_id and photo_id.isdigit() and os.path.exists(cached(photo_id)):
         with open(cached(photo_id), "rb") as f:
@@ -1043,11 +1113,11 @@ async def get_photo(chat_id: int, size: int = 48, photo_id: Optional[str] = None
             bad_request(e)
         if not data:
             raise HTTPException(status_code=404, detail="No photo")
-        os.makedirs(PHOTO_CACHE, exist_ok=True)
         # Copies of this chat's older photos are no use any more
-        for old in os.listdir(PHOTO_CACHE):
+        folder = os.path.dirname(path)
+        for old in os.listdir(folder):
             if old.startswith(f"{chat_id}_") and not old.startswith(f"{chat_id}_{current}_"):
-                os.remove(os.path.join(PHOTO_CACHE, old))
+                os.remove(os.path.join(folder, old))
         with open(path, "wb") as f:
             f.write(shrink_photo(data, size))
     with open(path, "rb") as f:
@@ -1060,10 +1130,28 @@ MAX_VIDEO_BYTES = 100 * 1024 * 1024  # more takes minutes through the proxy, and
 
 
 def cache_path(folder, name):
-    """Where a cached media file lives. The one place that builds these paths, so the planned
-    per-account caches (docs/multi-account-plan.md) only have to change it."""
+    """Where a cached media file lives: in the current account's own subfolder, so one account
+    can never get another's pictures by guessing ids (message ids in private chats are per
+    account anyway). The one place that builds these paths."""
+    folder = os.path.join(folder, account().cache_folder)
     os.makedirs(folder, exist_ok=True)
     return os.path.join(folder, name)
+
+
+def move_old_caches():
+    """Before 0.13.0 the caches had no account subfolders, and their files all belonged to the
+    first account; they move into its subfolder, so nothing has to be downloaded again."""
+    first = ACCOUNTS[0].cache_folder
+    for folder in (PHOTO_CACHE, IMAGE_CACHE, VIDEO_CACHE, STICKER_CACHE):
+        if not os.path.isdir(folder):
+            continue
+        files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
+        if not files:
+            continue
+        os.makedirs(os.path.join(folder, first), exist_ok=True)
+        for f in files:
+            os.replace(os.path.join(folder, f), os.path.join(folder, first, f))
+        print(f"Moved {len(files)} cached files from {folder}/ to {folder}/{first}/")
 SCREEN = (480, 854)  # the flip phone's screen; photos are shrunk to fit inside it
 
 
@@ -1087,7 +1175,7 @@ async def get_image(chat_id: int, message_id: int, full: bool = False):
     headers = {"Cache-Control": "private, max-age=86400"}
     if full:
         return Response(await full_photo(chat_id, message_id), media_type="image/jpeg", headers=headers)
-    path = os.path.join(IMAGE_CACHE, f"{chat_id}_{message_id}.jpg")
+    path = cache_path(IMAGE_CACHE, f"{chat_id}_{message_id}.jpg")
     if not os.path.exists(path):
         try:
             message = await client.get_messages(chat_id, ids=message_id)
@@ -1105,7 +1193,6 @@ async def get_image(chat_id: int, message_id: int, full: bool = False):
             bad_request(e)
         if not data:
             raise HTTPException(status_code=404, detail="No such photo")
-        os.makedirs(IMAGE_CACHE, exist_ok=True)
         with open(path, "wb") as f:
             f.write(shrink_to_fit(data, SCREEN))
     with open(path, "rb") as f:
@@ -1524,8 +1611,7 @@ async def get_sticker_sets():
 # allow 5 without Premium), never sent to Telegram. Kept in this file next to .env, newest
 # first, as {id, set_id, set_hash}: the pack each came from, so the server can load the
 # sticker again after a restart (drawing and sending need its full document).
-# One file per account (Account.local_favorites; today's single account uses this one).
-LOCAL_FAVORITES = "local_favorites.json"
+# One file per account (Account.local_favorites, named in accounts.json).
 
 
 def load_local_favorites():
@@ -1786,13 +1872,13 @@ async def forward(body: ForwardBody):
 
 app.include_router(api)
 
-seen_apps = set()  # (address, app version) already printed, so reconnects don't repeat it
+seen_apps = set()  # (address [account], app version) already printed, so reconnects don't repeat it
 
 
 def log_app(ws: WebSocket):
     # Apps from 0.7.1 on send x-app-version when they open the live connection
     version = ws.headers.get("x-app-version")
-    host = ws.client.host if ws.client else "?"
+    host = client_host(ws)  # with its account
     if (host, version) in seen_apps:
         return
     seen_apps.add((host, version))
@@ -1819,7 +1905,10 @@ async def ws_endpoint(ws: WebSocket):
 
 
 def client_host(ws):
-    return ws.client.host if ws.client else "an app"
+    """The app's address and, once its token is known, its account: "192.168.1.5 [main]"."""
+    host = ws.client.host if ws.client else "an app"
+    acc = _current_account.get(None)
+    return f"{host} [{acc.name}]" if acc is not None else host
 
 
 async def ws_token_ok(ws):
@@ -1835,6 +1924,29 @@ async def ws_token_ok(ws):
     return False
 
 
+# Apps before this can't tell a private server's log from a shared one's, so they get only this
+# line instead of the log
+LOGS_MIN_APP = "0.13.0-beta"
+LOGS_OLD_APP_LINE = "Client too old to verify whether logs are private or shared"
+LOG_PRIVATE = 4003  # /logs close code: a shared server, and this account is not an admin
+
+
+def app_version_key(version):
+    """For comparing app versions: "0.12.1-beta" -> (1, 0, 12, 1). Every beta comes after every
+    alpha (they started over at 0.1.0-beta), a release without a tag after both; "-dev" (debug
+    builds) is ignored. None for a missing or unreadable version."""
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta))?(?:-dev)?", version or "")
+    if match is None:
+        return None
+    stage = {"alpha": 0, "beta": 1, None: 2}[match.group(4)]
+    return (stage, *map(int, match.group(1, 2, 3)))
+
+
+def app_is_older_than(ws, version):
+    key = app_version_key(ws.headers.get("x-app-version"))
+    return key is None or key < app_version_key(version)
+
+
 # The app's "under the hood" screen: first the kept lines (one JSON list), then each new line
 # as it is printed (a list of one). Nothing is logged per line sent; opening and closing the
 # screen each leave one line ("Started/Stopped live sharing the log"), so every viewing shows
@@ -1846,6 +1958,17 @@ async def logs_endpoint(ws: WebSocket):
     sender = None
     try:
         if not await ws_token_ok(ws):
+            return
+        if app_is_older_than(ws, LOGS_MIN_APP):
+            # Stays open, so the app doesn't keep reconnecting, but nothing more is sent
+            await ws.send_json([LOGS_OLD_APP_LINE])
+            print(f"Not sharing the log with {client_host(ws)}: the app is older than {LOGS_MIN_APP}")
+            while True:
+                await ws.receive_text()
+        if shared_server() and not account().admin:
+            # 4003 tells the app the log is private here, so it says so and stops trying
+            print(f"Not sharing the log with {client_host(ws)}: shared server, not an admin")
+            await ws.close(code=LOG_PRIVATE)
             return
         # Printed before this viewer listens, so it arrives once, as the last kept line
         print(f"Started live sharing the log with {client_host(ws)}")

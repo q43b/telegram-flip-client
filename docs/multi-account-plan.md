@@ -1,10 +1,27 @@
 # Plan: one server, several Telegram accounts
 
-Status: step 1 done in v0.12.0-beta (the Account object, still one account), plus 0.12.1-beta
-(Android 17's local network permission, found while testing two phones on one account).
-Steps 2-5 are **0.13.0-beta "Almost Liquid"**, the first release of that era (owner,
-2026-11-06). To pick it up, ask: "let's do the multi-account plan from
-docs/multi-account-plan.md". Read "Handoff for 0.13.0" below first.
+Status: **done**. Step 1 in v0.12.0-beta (the Account object, still one account), plus
+0.12.1-beta (Android 17's local network permission, found while testing two phones on one
+account); steps 2-5 in **0.13.0-beta "Almost Liquid"**. How it's built now is in CLAUDE.md
+("Accounts"); the handoff below is kept as the record of what 0.13.0 started from.
+
+What 0.13.0 did, against the handoff's list:
+1. `accounts.json` (`server/accounts.py`), made from .env when missing. Done.
+2. Unique tokens (and names, sessions, favourites files). Done.
+3. Per-account caches: `<folder>/<session name>/` (not the account name, which can be
+   renamed); old loose files moved into the first account's folder. Done.
+4. `--maintenancemode` (`server/maintenance.py`, plus `Maintenance mode.bat` in the zip):
+   add (login on the PC, as agreed), remove (optionally logging out), rename, admin rights,
+   private/shared, start, quit. Done.
+5. Private/shared (`SERVER_MODE` in .env, asked at first run and in the menu). The owner chose:
+   on a shared server nobody sees the log by default; the menu gives accounts "admin" rights
+   for it. Non-admins are closed with 4003 and the app says so; apps older than 0.13.0-beta get
+   one line instead of the log in either mode. `/server_info` added. Done.
+6. Log lines name the account (also every request line: the server prints those itself). Done.
+7. Tests: the check script; two accounts at once on two phones (owner); an account-only chat's
+   photo and messages are 404 for the other account; heavy requests on one account didn't slow
+   the other (a real FLOOD_WAIT was not provoked, to keep the account safe). Done.
+8. Docs. Done.
 
 ## Why
 

@@ -19,6 +19,11 @@ video_cache/
 server/sticker_cache/
 sticker_cache/
 
-# Local favourite stickers (server data, like .env: next to the exe)
-server/local_favorites.json
-local_favorites.json
+# Server data next to .env (packaged server: next to the exe): the accounts list (tokens) and
+# each account's local favourite stickers
+server/accounts.json
+accounts.json
+server/accounts.json.new
+accounts.json.new
+server/local_favorites*.json
+local_favorites*.json

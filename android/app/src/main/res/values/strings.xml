@@ -247,12 +247,13 @@
     <string name="no_quick_phrases">No quick phrases yet: add some in Settings</string>
     <string name="add_phrase">+ Add phrase</string>
     <string name="setting_quick_phrases">Quick phrases: %1$d</string>
-    <string name="app_version">TG Flip %1$s</string>
+    <string name="app_version">TG Flip %1$s \"%2$s\"</string>
     <string name="log_title">Under the hood: server log</string>
     <string name="log_live">● Live sharing the log</string>
     <string name="log_connecting">Connecting to the server…</string>
     <string name="log_offline">Not connected, trying again…</string>
     <string name="log_no_server">No server set for this connection mode</string>
+    <string name="log_private">This server is shared: its log is private</string>
     <string name="soft_key_release_notes">Release notes</string>
     <string name="no_browser">No browser on this phone to open the release notes</string>
     <string name="group_network">Network…</string>
