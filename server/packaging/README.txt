@@ -38,3 +38,4 @@ Keep private
 .env (your API keys and token) and tg_session.session (your Telegram login)
 give access to your account. Don't share them or upload them anywhere.
 To log out of this server, delete tg_session.session.
+local_favorites.json holds the app's local favourite stickers; it is yours too.

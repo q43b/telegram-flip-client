@@ -18,3 +18,7 @@ server/video_cache/
 video_cache/
 server/sticker_cache/
 sticker_cache/
+
+# Local favourite stickers (server data, like .env: next to the exe)
+server/local_favorites.json
+local_favorites.json

@@ -8,6 +8,7 @@ import functools
 import itertools
 import time
 import tempfile
+import json
 from collections import deque
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
@@ -103,7 +104,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.11.2-beta"
+VERSION = "0.11.3-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -1439,13 +1440,74 @@ async def get_sticker_sets():
     return {"packs": [{"id": p.id, "title": p.title, "count": p.count} for p in packs]}
 
 
+# "Local favourites": the app's own favourite stickers, with no limit (Telegram's Favorites
+# allow 5 without Premium), never sent to Telegram. Kept in this file next to .env, newest
+# first, as {id, set_id, set_hash}: the pack each came from, so the server can load the
+# sticker again after a restart (drawing and sending need its full document).
+# Per account later (docs/multi-account-plan.md).
+LOCAL_FAVORITES = "local_favorites.json"
+
+
+def load_local_favorites():
+    try:
+        with open(LOCAL_FAVORITES, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def save_local_favorites(entries):
+    part = LOCAL_FAVORITES + ".part"  # replaced in one step, so a crash never leaves half a file
+    with open(part, "w", encoding="utf-8") as f:
+        json.dump(entries, f)
+    os.replace(part, LOCAL_FAVORITES)
+
+
+async def local_favorite_documents():
+    """The local favourites' documents, in the list's order: each pack is loaded once.
+    Stickers whose pack is gone are left out."""
+    entries = load_local_favorites()
+    found = {}
+    for set_id, set_hash in {(e["set_id"], e["set_hash"]) for e in entries}:
+        try:
+            result = await client(functions.messages.GetStickerSetRequest(
+                stickerset=types.InputStickerSetID(id=set_id, access_hash=set_hash), hash=0))
+        except errors.RPCError as e:
+            if is_cluster_error(e):
+                raise
+            continue  # the pack was deleted: its stickers drop out
+        for document in result.documents:
+            found[document.id] = document
+    return [found[e["id"]] for e in entries if e["id"] in found]
+
+
+# Adds a sticker the server has seen to the local favourites (first in the list), or with
+# remove=true takes it out. Stickers that belong to no pack can't be kept (no way to reload).
+@api.post("/sticker/{sticker_id}/local_favorite")
+async def local_favorite(sticker_id: int, remove: bool = False):
+    entries = [e for e in load_local_favorites() if e["id"] != sticker_id]
+    if not remove:
+        document = sticker_documents.get(sticker_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="Unknown sticker: open its pack again")
+        attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeSticker)), None)
+        if attr is None or not isinstance(attr.stickerset, types.InputStickerSetID):
+            raise HTTPException(status_code=400, detail="This sticker belongs to no pack")
+        entries.insert(0, {"id": sticker_id, "set_id": attr.stickerset.id, "set_hash": attr.stickerset.access_hash})
+    save_local_favorites(entries)
+    return {"ok": True}
+
+
 # One pack's stickers ({id, emoji, kind} each, remembered for /sticker and /send_sticker):
-# "recent" = my recently used, "faved" = my favorites, or an installed pack's id
+# "recent" = my recently used, "faved" = my Telegram favorites, "local" = the local
+# favourites above, or an installed pack's id
 @api.get("/sticker_set/{pack}")
 @recovering
 async def get_sticker_set(pack: str):
     try:
-        if pack == "recent":
+        if pack == "local":
+            documents = await local_favorite_documents()
+        elif pack == "recent":
             documents = (await client(functions.messages.GetRecentStickersRequest(hash=0))).stickers
         elif pack == "faved":
             documents = (await client(functions.messages.GetFavedStickersRequest(hash=0))).stickers
