@@ -194,6 +194,11 @@ class ApiClient(baseUrl: String?, val token: String) {
             List(stickers.length()) { StickerInfo.fromJson(stickers.getJSONObject(it)) }
     }
 
+    // Adds a sticker to my Telegram Favorites, or takes it out (unfave = true)
+    fun faveSticker(stickerId: Long, unfave: Boolean) {
+        call(Request.Builder().url(endpoint("/sticker/$stickerId/fave?unfave=$unfave")).post("".toRequestBody(null)))
+    }
+
     // Adds a pack to my packs
     fun installStickerPack(packId: String) {
         call(Request.Builder().url(endpoint("/sticker_set/$packId/install")).post("".toRequestBody(null)))

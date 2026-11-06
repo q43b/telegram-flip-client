@@ -95,7 +95,8 @@ the pack list arrives with sticker sending, which needs it anyway.
    - 0.11.1 from a sticker in a chat (message menu): view its pack, and add the pack to my packs
      (F1 "Add pack" while it isn't mine). Done.
    - 0.11.2 in a pack's grid, F2 on a sticker: a menu to add it to / remove it from Favorites
-     (Telegram's, at most 5 on a free account).
+     (Telegram's, at most 5 on a free account), and my own description of it, shown in data
+     saver mode. Built.
    - 0.11.3 "local favourites": the app's own favourites list (no limit), with add/remove in the
      same F2 menu.
    - Later: per-pack "chosen" ticks (makes "Only chosen packs" work), "download whole pack".

@@ -1054,7 +1054,7 @@ class ChatActivity : AppCompatActivity() {
             ?: message.image?.let { MessageFormat.photo(this, message.text) }
             ?: message.video?.let { MessageFormat.video(this, it, message.text) }
             ?: message.round?.let { MessageFormat.round(this, it) }
-            ?: message.sticker?.let { MessageFormat.sticker(this, it.emoji) }
+            ?: message.sticker?.let(::stickerLine)
             ?: message.text.ifEmpty { getString(R.string.media) }
         val time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
         val line = SpannableStringBuilder("$time ")
@@ -1075,6 +1075,14 @@ class ChatActivity : AppCompatActivity() {
             SpannableStringBuilder("↪ $quoted\n").append(line)
         }
         return withReactions(body, message.reactions)
+    }
+
+    // "🏷 Sticker 😂", and in data saver mode (no picture) my description: "🏷 Sticker 😂: cat laughing"
+    private fun stickerLine(sticker: StickerInfo): String {
+        val line = MessageFormat.sticker(this, sticker.emoji)
+        if (StickerSetting.showsPictures(this)) return line
+        val description = StickerDescriptions.get(this, sticker.id) ?: return line
+        return "$line: $description"
     }
 
     // Custom emoji: their pictures laid over the plain emoji the text holds at their places.
@@ -1152,7 +1160,7 @@ class ChatActivity : AppCompatActivity() {
             ?: message.image?.let { MessageFormat.photo(this, message.text) }
             ?: message.video?.let { MessageFormat.video(this, it, message.text) }
             ?: message.round?.let { MessageFormat.round(this, it) }
-            ?: message.sticker?.let { MessageFormat.sticker(this, it.emoji) }
+            ?: message.sticker?.let(::stickerLine)
             ?: message.text.ifEmpty { getString(R.string.media) }
         return MessageFormat.snippet(text, SNIPPET_LENGTH)
     }

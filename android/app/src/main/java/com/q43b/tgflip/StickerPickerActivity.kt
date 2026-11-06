@@ -30,6 +30,8 @@ import java.io.IOException
 // a picture loads, the sticker's emoji shows instead.
 // "View sticker pack" (message menu on a sticker) opens straight at that sticker's pack; Back
 // then closes, and while the pack isn't mine F1 ("Add pack") adds it to my packs.
+// F2 ("Menu") on a sticker in a grid: add it to / remove it from my Telegram Favorites, and
+// add, edit or remove my own description of it (shown in data saver mode).
 class StickerPickerActivity : AppCompatActivity() {
     private lateinit var api: ApiClient
     private lateinit var title: TextView
@@ -41,6 +43,8 @@ class StickerPickerActivity : AppCompatActivity() {
     private var stickers = emptyList<StickerInfo>()
     private lateinit var softKeys: SoftKeyBar
     private var addablePack: String? = null  // the open pack's id while F1 can add it
+    private var openPackId: String? = null  // the pack in the grid ("recent", "faved" or an id)
+    private var favedIds: Set<Long>? = null  // my Telegram Favorites, asked when first needed
 
     // Back in the grid goes back to the packs
     private val backToPacks = object : OnBackPressedCallback(false) {
@@ -69,6 +73,7 @@ class StickerPickerActivity : AppCompatActivity() {
         grid.setOnItemClickListener { _, _, position, _ -> pick(stickers[position]) }
         softKeys = SoftKeyBar(this)
         softKeys.onLeftTap(::addPack)
+        softKeys.onRightTap { stickerMenu(grid.selectedItemPosition) }
         softKeys.setLeft(null)
         softKeys.setRight(null)
         if (intent.hasExtra(EXTRA_FROM_STICKER)) {
@@ -84,6 +89,10 @@ class StickerPickerActivity : AppCompatActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.isLeftSoftKey()) {
             if (event.action == KeyEvent.ACTION_UP) addPack()
+            return true
+        }
+        if (event.isRightSoftKey()) {
+            if (event.action == KeyEvent.ACTION_UP && grid.visibility == View.VISIBLE) stickerMenu(grid.selectedItemPosition)
             return true
         }
         if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && packList.visibility == View.VISIBLE) {
@@ -116,6 +125,7 @@ class StickerPickerActivity : AppCompatActivity() {
 
     private fun openPack(pack: StickerPack) {
         title.text = pack.title
+        openPackId = pack.id
         showStatus(getString(R.string.stickers_loading))
         lifecycleScope.launch {
             val found = try {
@@ -145,6 +155,7 @@ class StickerPickerActivity : AppCompatActivity() {
                 return@launch
             }
             title.text = pack.title
+            openPackId = pack.id
             if (!pack.installed) {
                 addablePack = pack.id
                 softKeys.setLeft(getString(R.string.soft_key_add_pack))
@@ -153,14 +164,70 @@ class StickerPickerActivity : AppCompatActivity() {
         }
     }
 
-    private fun showGrid(found: List<StickerInfo>) {
+    private fun showGrid(found: List<StickerInfo>, select: Int = 0) {
         stickers = found
         status.visibility = View.GONE
         grid.adapter = StickerGridAdapter()
         packList.visibility = View.GONE
         grid.visibility = View.VISIBLE
+        softKeys.setRight(getString(R.string.soft_key_menu))
         grid.requestFocus()
-        grid.setSelection(0)
+        grid.setSelection(select.coerceIn(0, (found.size - 1).coerceAtLeast(0)))
+    }
+
+    // F2 on a sticker: Favorites (Telegram's), and my description of it
+    private fun stickerMenu(position: Int) {
+        val sticker = stickers.getOrNull(position) ?: return
+        lifecycleScope.launch {
+            val faved = favedIds ?: try {
+                withContext(Dispatchers.IO) { api.getStickerPack(FAVED) }.map { it.id }.toSet().also { favedIds = it }
+            } catch (e: IOException) {
+                emptySet()
+            }
+            val description = StickerDescriptions.get(this@StickerPickerActivity, sticker.id)
+            val actions = mutableListOf<Pair<String, () -> Unit>>()
+            if (sticker.id in faved) {
+                actions += getString(R.string.sticker_unfave) to { fave(sticker, unfave = true, position) }
+            } else {
+                actions += getString(R.string.sticker_fave) to { fave(sticker, unfave = false, position) }
+            }
+            actions += getString(if (description == null) R.string.sticker_describe else R.string.sticker_edit_description) to
+                { describe(sticker, description) }
+            if (description != null) {
+                actions += getString(R.string.sticker_remove_description) to {
+                    StickerDescriptions.save(this@StickerPickerActivity, sticker.id, null)
+                    (grid.adapter as? BaseAdapter)?.notifyDataSetChanged()
+                }
+            }
+            val menuTitle = listOfNotNull(sticker.emoji.ifEmpty { null }, description).joinToString(" ")
+                .ifEmpty { getString(R.string.sticker) }
+            MessageMenu.choose(this@StickerPickerActivity, menuTitle, actions.map { it.first }) { actions[it].second() }
+        }
+    }
+
+    // Telegram keeps 5 favorites without Premium; when it refuses, the note says so. In the
+    // Favorites grid itself, the grid follows the change.
+    private fun fave(sticker: StickerInfo, unfave: Boolean, position: Int) {
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.faveSticker(sticker.id, unfave) }
+                favedIds = null  // ask again next time (Telegram may have dropped an old one)
+                showToast(if (unfave) R.string.sticker_unfaved else R.string.sticker_faved)
+                if (openPackId == FAVED) {
+                    val found = withContext(Dispatchers.IO) { api.getStickerPack(FAVED) }
+                    if (found.isEmpty()) showStatus(getString(R.string.stickers_empty)) else showGrid(found, position)
+                }
+            } catch (e: IOException) {
+                showToast(if (unfave) R.string.sticker_unfave_failed else R.string.sticker_fave_failed)
+            }
+        }
+    }
+
+    private fun describe(sticker: StickerInfo, current: String?) {
+        MessageMenu.askText(this, getString(R.string.sticker_describe_title), current.orEmpty()) { text ->
+            StickerDescriptions.save(this, sticker.id, text)
+            (grid.adapter as? BaseAdapter)?.notifyDataSetChanged()
+        }
     }
 
     private fun addPack() {
@@ -183,6 +250,8 @@ class StickerPickerActivity : AppCompatActivity() {
 
     private fun showPacks() {
         backToPacks.isEnabled = false
+        openPackId = null
+        softKeys.setRight(null)
         grid.visibility = View.GONE
         grid.adapter = null
         status.visibility = View.GONE
@@ -217,6 +286,12 @@ class StickerPickerActivity : AppCompatActivity() {
             cell.findViewById<TextView>(R.id.emoji).apply {
                 text = sticker.emoji.ifEmpty { "🏷" }
                 visibility = if (picture == null) View.VISIBLE else View.INVISIBLE
+            }
+            // My description, where no picture shows (data saver)
+            val description = if (pictures) null else StickerDescriptions.get(this@StickerPickerActivity, sticker.id)
+            cell.findViewById<TextView>(R.id.description).apply {
+                text = description
+                visibility = if (description == null) View.GONE else View.VISIBLE
             }
             return cell
         }

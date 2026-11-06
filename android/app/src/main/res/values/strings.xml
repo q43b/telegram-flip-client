@@ -71,6 +71,16 @@
     <string name="action_view_sticker">🏷 View sticker</string>
     <string name="action_view_pack">📦 View sticker pack</string>
     <string name="soft_key_add_pack">Add pack</string>
+    <string name="sticker_fave">★ Add to Favorites</string>
+    <string name="sticker_unfave">☆ Remove from Favorites</string>
+    <string name="sticker_faved">Added to Favorites</string>
+    <string name="sticker_unfaved">Removed from Favorites</string>
+    <string name="sticker_fave_failed">Couldn\'t add to Favorites (Telegram allows 5 without Premium)</string>
+    <string name="sticker_unfave_failed">Couldn\'t remove from Favorites</string>
+    <string name="sticker_describe">✎ Add description</string>
+    <string name="sticker_edit_description">✎ Edit description</string>
+    <string name="sticker_remove_description">✕ Remove description</string>
+    <string name="sticker_describe_title">What does this sticker show?</string>
     <string name="pack_added">Added to your sticker packs</string>
     <string name="pack_add_failed">Couldn\'t add the pack</string>
     <string name="pack_not_loaded">Could not open this sticker\'s pack (some stickers belong to none)</string>
