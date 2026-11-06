@@ -98,7 +98,8 @@ the pack list arrives with sticker sending, which needs it anyway.
      (Telegram's, at most 5 on a free account), and my own description of it, shown in data
      saver mode. Built.
    - 0.11.3 "local favourites": the app's own favourites list (no limit), with add/remove in the
-     same F2 menu.
+     same F2 menu. Built: kept on the server in local_favorites.json (with each sticker's pack, to
+     reload it after a restart).
    - Later: per-pack "chosen" ticks (makes "Only chosen packs" work), "download whole pack".
 4. **0.12.0 animated mode** (moved after sending at the owner's request; the owner will
    choose the approach then): e.g. server conversion to animated WebP (TGS with

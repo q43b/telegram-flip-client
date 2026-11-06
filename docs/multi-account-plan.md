@@ -18,6 +18,7 @@ can't do yet.
   HTTP endpoints, 6 `@client.on` event handlers and the WebSockets.
 - Server-wide state that really belongs to an account: `ws_clients`, `telegram_config`,
   `forum_unread_cache`, `seen_apps`, the watchdog, `@recovering` reconnects.
+- Server-wide data on disk: `local_favorites.json` (the local favourite stickers, 0.11.3) must become per account too.
 - Server-wide caches on disk: `photo_cache/` (`<chat>_<photo>_<size>.jpg`) and
   `image_cache/` (`<chat>_<message>.jpg`). Both answer from the file before asking Telegram
   whether the requester may see that chat.

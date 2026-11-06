@@ -199,6 +199,12 @@ class ApiClient(baseUrl: String?, val token: String) {
         call(Request.Builder().url(endpoint("/sticker/$stickerId/fave?unfave=$unfave")).post("".toRequestBody(null)))
     }
 
+    // Adds a sticker to the local favourites (the app's own list on the server, no limit), or
+    // takes it out (remove = true)
+    fun localFavorite(stickerId: Long, remove: Boolean) {
+        call(Request.Builder().url(endpoint("/sticker/$stickerId/local_favorite?remove=$remove")).post("".toRequestBody(null)))
+    }
+
     // Adds a pack to my packs
     fun installStickerPack(packId: String) {
         call(Request.Builder().url(endpoint("/sticker_set/$packId/install")).post("".toRequestBody(null)))

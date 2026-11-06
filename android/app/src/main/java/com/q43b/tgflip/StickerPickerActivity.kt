@@ -30,8 +30,9 @@ import java.io.IOException
 // a picture loads, the sticker's emoji shows instead.
 // "View sticker pack" (message menu on a sticker) opens straight at that sticker's pack; Back
 // then closes, and while the pack isn't mine F1 ("Add pack") adds it to my packs.
-// F2 ("Menu") on a sticker in a grid: add it to / remove it from my Telegram Favorites, and
-// add, edit or remove my own description of it (shown in data saver mode).
+// F2 ("Menu") on a sticker in a grid: add it to / remove it from my Telegram Favorites and my
+// local favourites (the app's own list, kept on the server, no limit), and add, edit or
+// remove my own description of it (shown in data saver mode).
 class StickerPickerActivity : AppCompatActivity() {
     private lateinit var api: ApiClient
     private lateinit var title: TextView
@@ -45,6 +46,7 @@ class StickerPickerActivity : AppCompatActivity() {
     private var addablePack: String? = null  // the open pack's id while F1 can add it
     private var openPackId: String? = null  // the pack in the grid ("recent", "faved" or an id)
     private var favedIds: Set<Long>? = null  // my Telegram Favorites, asked when first needed
+    private var localIds: Set<Long>? = null  // my local favourites, likewise
 
     // Back in the grid goes back to the packs
     private val backToPacks = object : OnBackPressedCallback(false) {
@@ -115,6 +117,7 @@ class StickerPickerActivity : AppCompatActivity() {
             packs = listOf(
                 StickerPack(RECENT, getString(R.string.stickers_recent), 0),
                 StickerPack(FAVED, getString(R.string.stickers_faved), 0),
+                StickerPack(LOCAL, getString(R.string.stickers_local), 0),
             ) + mine
             packList.adapter = ArrayAdapter(this@StickerPickerActivity, android.R.layout.simple_list_item_1,
                 packs.map { if (it.count > 0) "${it.title} (${it.count})" else it.title })
@@ -184,12 +187,22 @@ class StickerPickerActivity : AppCompatActivity() {
             } catch (e: IOException) {
                 emptySet()
             }
+            val local = localIds ?: try {
+                withContext(Dispatchers.IO) { api.getStickerPack(LOCAL) }.map { it.id }.toSet().also { localIds = it }
+            } catch (e: IOException) {
+                emptySet()
+            }
             val description = StickerDescriptions.get(this@StickerPickerActivity, sticker.id)
             val actions = mutableListOf<Pair<String, () -> Unit>>()
             if (sticker.id in faved) {
                 actions += getString(R.string.sticker_unfave) to { fave(sticker, unfave = true, position) }
             } else {
                 actions += getString(R.string.sticker_fave) to { fave(sticker, unfave = false, position) }
+            }
+            if (sticker.id in local) {
+                actions += getString(R.string.sticker_unfave_local) to { localFave(sticker, remove = true, position) }
+            } else {
+                actions += getString(R.string.sticker_fave_local) to { localFave(sticker, remove = false, position) }
             }
             actions += getString(if (description == null) R.string.sticker_describe else R.string.sticker_edit_description) to
                 { describe(sticker, description) }
@@ -219,6 +232,23 @@ class StickerPickerActivity : AppCompatActivity() {
                 }
             } catch (e: IOException) {
                 showToast(if (unfave) R.string.sticker_unfave_failed else R.string.sticker_fave_failed)
+            }
+        }
+    }
+
+    // The same for the local favourites; the Local favourites grid follows the change
+    private fun localFave(sticker: StickerInfo, remove: Boolean, position: Int) {
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.localFavorite(sticker.id, remove) }
+                localIds = null
+                showToast(if (remove) R.string.sticker_unfaved_local else R.string.sticker_faved_local)
+                if (openPackId == LOCAL) {
+                    val found = withContext(Dispatchers.IO) { api.getStickerPack(LOCAL) }
+                    if (found.isEmpty()) showStatus(getString(R.string.stickers_empty)) else showGrid(found, position)
+                }
+            } catch (e: IOException) {
+                showToast(if (remove) R.string.sticker_unfave_local_failed else R.string.sticker_fave_local_failed)
             }
         }
     }
@@ -322,6 +352,7 @@ class StickerPickerActivity : AppCompatActivity() {
     companion object {
         private const val RECENT = "recent"
         private const val FAVED = "faved"
+        private const val LOCAL = "local"
         private const val EXTRA_ID = "sticker_id"
         private const val EXTRA_EMOJI = "emoji"
         private const val EXTRA_KIND = "kind"

@@ -99,6 +99,13 @@
     <string name="stickers_empty">No stickers here yet</string>
     <string name="stickers_recent">🕘 Recent</string>
     <string name="stickers_faved">★ Favorites</string>
+    <string name="stickers_local">♥ Local favourites</string>
+    <string name="sticker_fave_local">♥ Add to local favourites</string>
+    <string name="sticker_unfave_local">♡ Remove from local favourites</string>
+    <string name="sticker_faved_local">Added to local favourites</string>
+    <string name="sticker_unfaved_local">Removed from local favourites</string>
+    <string name="sticker_fave_local_failed">Couldn\'t add it (stickers that belong to no pack can\'t be kept)</string>
+    <string name="sticker_unfave_local_failed">Couldn\'t remove it from local favourites</string>
     <string name="sticker_send_failed">Couldn\'t send the sticker</string>
     <string name="round_message">Video message</string>
     <string name="action_play_round">▶ Play video message</string>
