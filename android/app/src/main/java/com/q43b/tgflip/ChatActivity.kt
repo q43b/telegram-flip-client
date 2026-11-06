@@ -250,19 +250,32 @@ class ChatActivity : AppCompatActivity() {
 
     // F2: Media and Stickers are placeholders for version 2; Quick phrases works
     private fun showSoftKeyMenu() {
-        val items = listOf(R.string.quick_phrases, R.string.menu_record_voice, R.string.menu_stickers, R.string.menu_media)
+        val items = listOf(R.string.quick_phrases, R.string.menu_stickers, R.string.menu_media, R.string.menu_record_voice)
         MessageMenu.choose(this, getString(R.string.soft_key_menu), items.map(::getString)) { which ->
             when (items[which]) {
                 R.string.quick_phrases -> showQuickPhrases()
                 R.string.menu_record_voice -> startRecording()
-                R.string.menu_media -> startPhotoPick()
-                else -> {
-                    val text = getString(R.string.coming_later)
-                    showStatus(text)
-                    hideStatusLater(text)
-                }
+                R.string.menu_media -> showMediaMenu()
+                else -> showComingLater()
             }
         }
+    }
+
+    // Send media: a photo, or (later) a video
+    private fun showMediaMenu() {
+        val items = listOf(R.string.menu_send_photo, R.string.menu_send_video)
+        MessageMenu.choose(this, getString(R.string.menu_media_title), items.map(::getString)) { which ->
+            when (items[which]) {
+                R.string.menu_send_photo -> startPhotoPick()
+                else -> showComingLater()
+            }
+        }
+    }
+
+    private fun showComingLater() {
+        val text = getString(R.string.coming_later)
+        showStatus(text)
+        hideStatusLater(text)
     }
 
     private fun startRecording() {

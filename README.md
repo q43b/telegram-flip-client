@@ -28,6 +28,7 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Offline reading: the last chats, topics and messages are kept on the phone
 - Cache settings: how long media is kept and how much space it may take (presets or your own numbers), clearing it, and deleting all saved data for a fresh start
 - Soft key labels in the phone's own soft key boxes on Japanese Android flip phones (NextFP, like my Kyocera); other phones get the app's own label bar. A Settings switch picks which one shows
+- On the version line in Settings: F2 opens that version's release notes, Right ("under the hood") shows the server's log, live
 - Connection status bar on every screen
 - Settings: server address per connection mode (local network, VPN, public internet over HTTPS), app token, theme (light, dark, follow phone)
 - Built for the d-pad: every action works with Up/Down, OK, Left/Right, Back and the soft keys
@@ -72,7 +73,7 @@ Later runs just start. Settings and the login stay next to the exe (`.env`, `tg_
 | Right | Open Settings | Group info (groups and channels) | |
 | Left | | | Close Settings, a profile, group info or a photo |
 | F1 (left soft key) | | Mark as read | |
-| F2 (right soft key) | Open a forum's General topic | Menu: quick phrases, record a voice message, send a photo (stickers to come) | |
+| F2 (right soft key) | Open a forum's General topic | Menu: quick phrases, send media (a photo; videos and stickers to come), record a voice message | |
 | Back | | Cancel a reply or edit, otherwise leave | Go back |
 
 ## Building from source

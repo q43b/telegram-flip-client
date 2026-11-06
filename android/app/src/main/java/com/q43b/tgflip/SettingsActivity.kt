@@ -20,6 +20,8 @@ import androidx.core.view.WindowInsetsCompat
 // Left or Back closes it. New settings go into their group in SettingsGroupActivity.
 class SettingsActivity : AppCompatActivity() {
     private lateinit var adapter: ArrayAdapter<String>
+    private lateinit var version: TextView
+    private lateinit var softKeys: SoftKeyBar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,18 +40,31 @@ class SettingsActivity : AppCompatActivity() {
         list.requestFocus()
 
         // versionName from build.gradle.kts (dev builds add "-dev")
-        val version = findViewById<TextView>(R.id.app_version)
+        version = findViewById(R.id.app_version)
         version.text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
-        version.setOnClickListener { openReleaseNotes() }
+        // While the line has focus: " >" hints that Right opens something (the server's log),
+        // and F2's label offers this version's release notes
+        softKeys = SoftKeyBar(this)
+        softKeys.onRightTap(::openReleaseNotes)
+        version.setOnFocusChangeListener { _, hasFocus ->
+            val text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
+            version.text = if (hasFocus) "$text >" else text
+            softKeys.setRight(if (hasFocus) getString(R.string.soft_key_release_notes) else null)
+        }
         // The version line counts as the list's last row: Up on the first row goes to it,
-        // Down from it goes back to the first row (Down on the last row reaches it anyway)
+        // Down from it goes back to the first row (Down on the last row reaches it anyway).
+        // Right on it opens "under the hood", the server's live log.
         list.wrapsDown = false
         list.onUpFromTop = { version.requestFocus() }
         version.setOnKeyListener { _, keyCode, event ->
-            if (keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return@setOnKeyListener false
-            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                list.requestFocus()
-                list.setSelection(0)
+            val fresh = event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_DOWN -> if (fresh) {
+                    list.requestFocus()
+                    list.setSelection(0)
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> if (fresh) LogActivity.start(this)
+                else -> return@setOnKeyListener false
             }
             true
         }
@@ -57,10 +72,14 @@ class SettingsActivity : AppCompatActivity() {
         setUpTabBar(Tab.SETTINGS) { finish() }
     }
 
-    // Left closes, mirroring Right that opened it
+    // Left closes, mirroring Right that opened it. F2 on the version line: release notes.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             if (event.action == KeyEvent.ACTION_UP) finish()
+            return true
+        }
+        if (event.isRightSoftKey() && version.hasFocus()) {
+            if (event.action == KeyEvent.ACTION_UP) openReleaseNotes()
             return true
         }
         return super.dispatchKeyEvent(event)

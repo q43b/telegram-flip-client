@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One log line: small and monospaced, like a console, so more fits on the small screen -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:fontFamily="monospace"
+    android:paddingHorizontal="4dp"
+    android:paddingVertical="2dp"
+    android:textSize="11sp" />

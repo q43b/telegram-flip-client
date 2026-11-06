@@ -21,14 +21,14 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <!-- Small gray "TG Flip 0.7.1-alpha" line. Down from the last row reaches it, OK opens
-         this version's release notes. The background only shows while it has focus. -->
+    <!-- Small gray "TG Flip 0.7.1-alpha" line. Down from the last row reaches it; there F2
+         opens this version's release notes and Right the server's log. The background only
+         shows while it has focus. -->
     <TextView
         android:id="@+id/app_version"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?android:attr/selectableItemBackground"
-        android:clickable="true"
         android:focusable="true"
         android:gravity="center"
         android:padding="4dp"
@@ -36,5 +36,9 @@
         android:textColor="?android:attr/textColorSecondary" />
 
     <include layout="@layout/tab_bar" />
+
+    <!-- "Release notes" over F2 while the version line has focus (as text only on phones
+         without their own soft key boxes) -->
+    <include layout="@layout/soft_key_bar" />
 
 </LinearLayout>

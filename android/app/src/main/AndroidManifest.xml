@@ -54,6 +54,10 @@
             android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="false" />
         <activity
+            android:name=".LogActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation"
+            android:exported="false" />
+        <activity
             android:name=".ImageActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="false" />

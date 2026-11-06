@@ -165,7 +165,10 @@
     <string name="error_send">Couldn\'t send. Press OK to try again.</string>
     <string name="soft_key_mark_read">Mark as read (%1$d)</string>
     <string name="soft_key_menu">Menu</string>
-    <string name="menu_media">🖼 Send photo</string>
+    <string name="menu_media">📎 Send media…</string>
+    <string name="menu_media_title">Send media</string>
+    <string name="menu_send_photo">🖼 Send photo</string>
+    <string name="menu_send_video">🎬 Send video (coming later)</string>
     <string name="photo_send_title">Send photo</string>
     <string name="photo_send_optimized">Optimized (smaller, sends faster)</string>
     <string name="photo_send_original">Original (full quality)</string>
@@ -180,6 +183,12 @@
     <string name="add_phrase">+ Add phrase</string>
     <string name="setting_quick_phrases">Quick phrases: %1$d</string>
     <string name="app_version">TG Flip %1$s</string>
+    <string name="log_title">Under the hood: server log</string>
+    <string name="log_live">● Live sharing the log</string>
+    <string name="log_connecting">Connecting to the server…</string>
+    <string name="log_offline">Not connected, trying again…</string>
+    <string name="log_no_server">No server set for this connection mode</string>
+    <string name="soft_key_release_notes">Release notes</string>
     <string name="no_browser">No browser on this phone to open the release notes</string>
     <string name="group_network">Network…</string>
     <string name="group_network_title">Network</string>

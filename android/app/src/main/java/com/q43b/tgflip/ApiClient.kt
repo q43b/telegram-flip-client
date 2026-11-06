@@ -40,6 +40,11 @@ class ApiClient(baseUrl: String?, val token: String) {
         return http.newWebSocket(request, listener)
     }
 
+    // Opens /logs (the server's console log, for the "under the hood" screen). The listener
+    // must send the token as the first message.
+    fun openLogSocket(listener: WebSocketListener): WebSocket =
+        http.newWebSocket(Request.Builder().url(endpoint("/logs")).build(), listener)
+
     // The functions below block until the server answers, so call them from a background thread.
     fun getChats(limit: Int = 20): List<Chat> {
         val json = JSONArray(call(Request.Builder().url(endpoint("/chats?limit=$limit"))))
