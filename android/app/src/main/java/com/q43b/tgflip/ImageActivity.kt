@@ -1,17 +1,23 @@
 package com.q43b.tgflip
 
 import android.app.Activity
+import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.view.KeyEvent
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.util.AtomicFile
 import androidx.core.view.ViewCompat
@@ -28,14 +34,19 @@ import java.io.IOException
 // (GET /image); the copy is kept in the media cache's "images" folder, so the Cache
 // settings apply.
 // F2 opens a menu: Zoom (then Up/Down zoom in and out), Move around (then the arrow keys
-// move the picture) and Rotate 90° clockwise. OK, Back or F1 ends a mode. Outside a mode
-// Left or Back closes the screen.
+// move the picture), Rotate 90° clockwise, and Download photo (the full-size original into
+// the phone's Pictures/TG Flip folder). OK, Back or F1 ends a mode. Outside a mode Left or
+// Back closes the screen.
 class ImageActivity : AppCompatActivity() {
     private enum class Mode { NONE, ZOOM, MOVE }
 
     private lateinit var image: ImageView
     private lateinit var modeHint: TextView
     private lateinit var softKeys: SoftKeyBar
+    private lateinit var api: ApiClient
+    private var chatId = 0L
+    private var messageId = 0L
+    private var downloading = false
     private var bitmap: Bitmap? = null
     private var mode = Mode.NONE
     private var zoom = 1f        // 1 = the whole picture fits the screen
@@ -57,8 +68,8 @@ class ImageActivity : AppCompatActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
-        val chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
-        val messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
+        chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
+        messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
         image = findViewById(R.id.image)
         modeHint = findViewById(R.id.mode_hint)
         val status = findViewById<TextView>(R.id.status)
@@ -73,7 +84,7 @@ class ImageActivity : AppCompatActivity() {
         softKeys.onRightTap(::showMenu)
 
         val settings = ServerSettings(this)
-        val api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
         lifecycleScope.launch {
             val loaded = withContext(Dispatchers.IO) {
                 try {
@@ -141,7 +152,7 @@ class ImageActivity : AppCompatActivity() {
 
     private fun showMenu() {
         if (bitmap == null) return
-        val items = listOf(R.string.image_zoom, R.string.image_move, R.string.image_rotate)
+        val items = listOf(R.string.image_zoom, R.string.image_move, R.string.image_rotate, R.string.image_download)
         MessageMenu.choose(this, getString(R.string.photo), items.map(::getString)) { which ->
             when (items[which]) {
                 R.string.image_zoom -> setMode(Mode.ZOOM)
@@ -150,9 +161,60 @@ class ImageActivity : AppCompatActivity() {
                     rotation = (rotation + 90) % 360
                     applyMatrix()
                 }
+                R.string.image_download -> download()
             }
         }
     }
+
+    // Asks the server for the full-size original and saves it in Pictures/TG Flip, where the
+    // phone's own picture apps find it. Through the media store, which needs no permission
+    // from Android 10 on; older phones only get a note.
+    private fun download() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            toast(R.string.image_download_needs_10)
+            return
+        }
+        if (downloading) return
+        downloading = true
+        toast(R.string.image_downloading)
+        lifecycleScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                try {
+                    savePicture(api.getFullImage(chatId, messageId), "TGFlip_${chatId}_$messageId.jpg")
+                    true
+                } catch (e: IOException) {
+                    false
+                }
+            }
+            downloading = false
+            toast(if (saved) R.string.image_downloaded else R.string.image_download_failed)
+        }
+    }
+
+    // Marked pending while it is written, so no picture app shows half a file
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun savePicture(bytes: ByteArray, name: String) {
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, name)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/$SAVE_FOLDER")
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            ?: throw IOException("Can't save pictures")
+        try {
+            val out = contentResolver.openOutputStream(uri) ?: throw IOException("Can't save pictures")
+            out.use { it.write(bytes) }
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            contentResolver.update(uri, values, null, null)
+        } catch (e: IOException) {
+            contentResolver.delete(uri, null, null)
+            throw e
+        }
+    }
+
+    private fun toast(text: Int) = Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
 
     // The hint at the top and the left soft key say how to use and leave the mode
     private fun setMode(newMode: Mode) {
@@ -216,6 +278,7 @@ class ImageActivity : AppCompatActivity() {
     companion object {
         private const val EXTRA_CHAT_ID = "chat_id"
         private const val EXTRA_MESSAGE_ID = "message_id"
+        private const val SAVE_FOLDER = "TG Flip"
         private const val ZOOM_STEP = 1.25f
         private const val MAX_ZOOM = 6f
         private const val MOVE_STEP = 0.15f  // of the screen's width or height per press

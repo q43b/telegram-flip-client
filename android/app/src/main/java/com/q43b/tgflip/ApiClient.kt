@@ -83,7 +83,7 @@ class ApiClient(baseUrl: String?, val token: String) {
         if (replyToId != null) url += "&reply_to_id=$replyToId"
         val request = Request.Builder().url(url).post(audio.toRequestBody(OGG)).header("x-token", token).build()
         // Telegram takes a few seconds to accept a file through the proxy
-        uploads.newCall(request).execute().use { response ->
+        slow.newCall(request).execute().use { response ->
             if (response.code == 401) throw BadTokenException()
             if (!response.isSuccessful) throw IOException("Server error ${response.code}")
             return JSONObject(response.body!!.string()).getLong("id")
@@ -110,16 +110,16 @@ class ApiClient(baseUrl: String?, val token: String) {
             .build()
         val request = Request.Builder().url(url).post(photo.toRequestBody(mimeType.toMediaType()))
             .header("x-token", token).build()
-        uploads.newCall(request).execute().use { response ->
+        slow.newCall(request).execute().use { response ->
             if (response.code == 401) throw BadTokenException()
             if (!response.isSuccessful) throw IOException("Server error ${response.code}")
             return JSONObject(response.body!!.string()).getLong("id")
         }
     }
 
-    // Uploads wait for Telegram to take the file through the proxy: an original photo of a
-    // few MB can take a minute
-    private val uploads by lazy { http.newBuilder().readTimeout(120, TimeUnit.SECONDS).build() }
+    // For big files to or from Telegram: the server passes them through the proxy before it
+    // answers, and an original photo of a few MB can take a minute
+    private val slow by lazy { http.newBuilder().readTimeout(120, TimeUnit.SECONDS).build() }
 
     // Sends a read receipt to the other side, so only call it on a deliberate key press
     fun markRead(chatId: Long, topicId: Long?) {
@@ -168,13 +168,17 @@ class ApiClient(baseUrl: String?, val token: String) {
     fun getImage(chatId: Long, messageId: Long): ByteArray =
         bytes(endpoint("/image/$chatId/$messageId")) ?: throw IOException("No such photo")
 
+    // A photo's biggest size, unchanged (up to 2560 px, a few MB), for saving on the phone
+    fun getFullImage(chatId: Long, messageId: Long): ByteArray =
+        bytes(endpoint("/image/$chatId/$messageId?full=true"), slow) ?: throw IOException("No such photo")
+
     // A voice message's OGG/Opus file
     fun getVoice(chatId: Long, messageId: Long): ByteArray =
         bytes(endpoint("/voice/$chatId/$messageId")) ?: throw IOException("No such voice message")
 
     // A file's bytes, or null for 404
-    private fun bytes(url: String): ByteArray? {
-        http.newCall(Request.Builder().url(url).header("x-token", token).build()).execute().use { response ->
+    private fun bytes(url: String, client: OkHttpClient = http): ByteArray? {
+        client.newCall(Request.Builder().url(url).header("x-token", token).build()).execute().use { response ->
             if (response.code == 404) return null
             if (response.code == 401) throw BadTokenException()
             if (!response.isSuccessful) throw IOException("Server error ${response.code}")

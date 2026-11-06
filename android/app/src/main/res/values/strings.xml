@@ -73,6 +73,11 @@
     <string name="image_zoom">Zoom (Up / Down)</string>
     <string name="image_move">Move around (arrow keys)</string>
     <string name="image_rotate">Rotate 90° clockwise</string>
+    <string name="image_download">Download photo</string>
+    <string name="image_downloading">Downloading the full photo…</string>
+    <string name="image_downloaded">Saved to Pictures/TG Flip</string>
+    <string name="image_download_failed">Couldn\'t download the photo</string>
+    <string name="image_download_needs_10">Saving photos needs Android 10 or newer</string>
     <string name="image_zoom_hint">Zoom: Up = in, Down = out · OK = done</string>
     <string name="image_move_hint">Move: arrow keys · OK = done</string>
     <string name="soft_key_done">Done</string>
