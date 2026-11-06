@@ -23,7 +23,7 @@ from telethon.tl import custom
 load_dotenv()
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.1.0-beta"
+VERSION = "0.2.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):

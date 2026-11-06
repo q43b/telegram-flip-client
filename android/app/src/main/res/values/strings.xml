@@ -70,6 +70,12 @@
     <string name="photo_loading">Loading photo…</string>
     <string name="photo_not_loaded">Could not load the photo</string>
     <string name="action_view_photo">🖼 View photo</string>
+    <string name="image_zoom">Zoom (Up / Down)</string>
+    <string name="image_move">Move around (arrow keys)</string>
+    <string name="image_rotate">Rotate 90° clockwise</string>
+    <string name="image_zoom_hint">Zoom: Up = in, Down = out · OK = done</string>
+    <string name="image_move_hint">Move: arrow keys · OK = done</string>
+    <string name="soft_key_done">Done</string>
     <string name="voice_message">Voice message</string>
     <string name="voice_loading">▶ Loading…</string>
     <string name="voice_not_loaded">Couldn\'t load the voice message</string>
