@@ -103,7 +103,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.8.0-beta"
+VERSION = "0.8.1-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -245,14 +245,44 @@ def round_of(message):
     return {"duration": int(attr.duration or 0) if attr else 0, "size": document.size}
 
 
-CUSTOM_EMOJI = "✦"  # stands in for a custom (sticker-like) emoji reaction, which has no plain character
+CUSTOM_EMOJI = "✦"  # for a custom emoji whose plain emoji isn't known (yet)
 PAID_REACTION = "⭐"
+
+# Every custom emoji (a small sticker) names the plain emoji it stands for, its "alt"; reactions
+# only give the custom emoji's id. Learned from Telegram once per id and kept: they never change.
+custom_emoji_alts = {}  # document id -> plain emoji
+
+
+def custom_emoji_ids(reactions):
+    if reactions is None:
+        return []
+    return [r.reaction.document_id for r in reactions.results if isinstance(r.reaction, types.ReactionCustomEmoji)]
+
+
+async def learn_custom_emoji(ids):
+    """Asks Telegram for the plain emoji of custom emoji not seen before (200 at a time, its
+    limit). On failure they stay "✦"; only a broken connection is passed on (@recovering)."""
+    missing = list({i for i in ids if i not in custom_emoji_alts})
+    for start in range(0, len(missing), 200):
+        try:
+            documents = await client(functions.messages.GetCustomEmojiDocumentsRequest(
+                document_id=missing[start:start + 200]))
+        except errors.RPCError as e:
+            if is_cluster_error(e):
+                raise
+            return
+        for document in documents:
+            alt = next((a.alt for a in document.attributes
+                        if isinstance(a, types.DocumentAttributeCustomEmoji)), None)
+            if alt:
+                custom_emoji_alts[document.id] = alt
 
 
 def reactions_list(reactions):
     """[{emoji, count, mine}] from Telegram's MessageReactions (or None), in Telegram's order.
-    mine = I chose this reaction. Custom emoji and paid stars get stand-in characters; all the
-    custom emoji count together as one "✦" (they'd look the same anyway)."""
+    mine = I chose this reaction. Custom emoji show as their plain emoji when known (call
+    learn_custom_emoji first), else "✦"; paid stars as "⭐". Reactions that end up with the same
+    character (a custom laughing cat and a plain 😂) count together."""
     if reactions is None or not reactions.results:
         return []
     result = []
@@ -261,7 +291,7 @@ def reactions_list(reactions):
         if isinstance(reaction, types.ReactionEmoji):
             emoji = reaction.emoticon
         elif isinstance(reaction, types.ReactionCustomEmoji):
-            emoji = CUSTOM_EMOJI
+            emoji = custom_emoji_alts.get(reaction.document_id, CUSTOM_EMOJI)
         elif type(reaction).__name__ == "ReactionPaid":
             emoji = PAID_REACTION
         else:
@@ -427,6 +457,7 @@ async def broadcast(data):
 @client.on(events.NewMessage)
 async def on_new_message(event):
     forget_forum_unread(event.chat_id)
+    await learn_live_custom_emoji(getattr(event.message, "reactions", None))
     try:
         sender = await event.get_sender()  # usually cached from the update itself
     except (ValueError, errors.RPCError):
@@ -504,6 +535,7 @@ async def display_name(user_id):
 
 @client.on(events.MessageEdited)
 async def on_edited(event):
+    await learn_live_custom_emoji(getattr(event.message, "reactions", None))
     await broadcast({
         "type": "edited",
         "id": event.id,
@@ -514,9 +546,18 @@ async def on_edited(event):
     })
 
 
+async def learn_live_custom_emoji(reactions):
+    """For live events: a failure only leaves "✦", it never stops the event."""
+    try:
+        await learn_custom_emoji(custom_emoji_ids(reactions))
+    except errors.RPCError:
+        pass
+
+
 # Reactions added or taken back, by anyone: Telegram sends these as their own update
 @client.on(events.Raw(types.UpdateMessageReactions))
 async def on_reactions(update):
+    await learn_live_custom_emoji(update.reactions)
     await broadcast({
         "type": "reactions",
         "chat_id": utils.get_peer_id(update.peer),
@@ -1038,6 +1079,7 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
         raise HTTPException(status_code=404, detail="Chat not found")
     except errors.RPCError as e:
         bad_request(e)
+    await learn_custom_emoji([i for m in found for i in custom_emoji_ids(getattr(m, "reactions", None))])
     msgs = [
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
