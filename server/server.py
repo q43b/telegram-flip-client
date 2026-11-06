@@ -23,7 +23,7 @@ from telethon.tl import custom
 load_dotenv()
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.3.0-beta"
+VERSION = "0.3.1-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -739,10 +739,14 @@ def shrink_to_fit(data, box):
 # A photo from a message, shrunk to fit the phone's screen (usually 30-60 KB). Telegram
 # keeps several sizes; the smallest one that still fills the screen is downloaded, not the
 # original, which can be several MB. Saved in image_cache/, so opening it again is instant.
+# full=true instead sends the biggest size Telegram keeps (up to 2560 px), unchanged and
+# not saved here: for saving a photo on the phone.
 @api.get("/image/{chat_id}/{message_id}")
 @recovering
-async def get_image(chat_id: int, message_id: int):
+async def get_image(chat_id: int, message_id: int, full: bool = False):
     headers = {"Cache-Control": "private, max-age=86400"}
+    if full:
+        return Response(await full_photo(chat_id, message_id), media_type="image/jpeg", headers=headers)
     path = os.path.join(IMAGE_CACHE, f"{chat_id}_{message_id}.jpg")
     if not os.path.exists(path):
         try:
@@ -766,6 +770,25 @@ async def get_image(chat_id: int, message_id: int):
             f.write(shrink_to_fit(data, SCREEN))
     with open(path, "rb") as f:
         return Response(f.read(), media_type="image/jpeg", headers=headers)
+
+
+async def full_photo(chat_id, message_id):
+    """A photo message's biggest size as JPEG bytes (Telegram keeps photos as JPEG)."""
+    try:
+        message = await client.get_messages(chat_id, ids=message_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    if message is None or not photo_sizes(message):
+        raise HTTPException(status_code=404, detail="No such photo")
+    try:
+        data = await client.download_media(message, file=bytes)
+    except errors.RPCError as e:
+        bad_request(e)
+    if not data:
+        raise HTTPException(status_code=404, detail="No such photo")
+    return data
 
 
 # The voice message's OGG/Opus file as Telegram keeps it (about 100-250 KB a minute).
