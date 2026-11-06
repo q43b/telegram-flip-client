@@ -23,7 +23,7 @@ from telethon.tl import custom
 load_dotenv()
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.11.2-alpha"
+VERSION = "0.1.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -121,6 +121,27 @@ def voice_of(message):
     return {"duration": int(message.file.duration or 0)}
 
 
+# Telegram's sizes of a photo that can be downloaded (not the tiny inline previews)
+DOWNLOADABLE_SIZES = (types.PhotoSize, types.PhotoSizeProgressive, types.PhotoCachedSize)
+
+
+def photo_sizes(message):
+    """A photo message's downloadable sizes, smallest first; [] for anything else."""
+    if not isinstance(message.media, types.MessageMediaPhoto) or not isinstance(message.photo, types.Photo):
+        return []
+    sizes = [s for s in message.photo.sizes if isinstance(s, DOWNLOADABLE_SIZES)]
+    return sorted(sizes, key=lambda s: s.w * s.h)
+
+
+def image_of(message):
+    """For a photo: {w, h}, its full size in pixels; for anything else None. The picture
+    itself comes from GET /image, shrunk to fit the phone's screen."""
+    sizes = photo_sizes(message)
+    if not sizes:
+        return None
+    return {"w": sizes[-1].w, "h": sizes[-1].h}
+
+
 def sender_name(message, sender=None):
     """Who wrote a message, shown in groups: their first name (or a channel's title when a
     channel posts into a group). None for my own messages, private chats and channel posts,
@@ -149,7 +170,8 @@ def last_message_preview(message):
 
     It comes with the chat list itself (each dialog's last message, in a forum group the
     newest of any topic), so it costs no extra requests. kind: "text", "media" (no text,
-    e.g. a photo or sticker), "voice" (details in voice, see voice_of), "call" (details in
+    e.g. a sticker), "photo" (text is its caption), "voice" (details in voice, see
+    voice_of), "call" (details in
     call, see call_of) or "event" (joined,
     pinned, ...). sender: who wrote it, only for other people's messages in groups;
     None in private chats and channel posts.
@@ -162,6 +184,8 @@ def last_message_preview(message):
         text, kind = "", "call"
     elif voice is not None:
         text, kind = message.raw_text or "", "voice"
+    elif image_of(message) is not None:
+        text, kind = message.raw_text or "", "photo"
     elif isinstance(message, types.MessageService):
         text, kind = "", "event"
     else:
@@ -277,6 +301,7 @@ async def on_new_message(event):
         "edited": is_edited(event.message),
         "call": None,
         "voice": voice_of(event.message),
+        "image": image_of(event.message),
         "sender": sender_name(event.message, sender),
         "sender_id": sender_id_of(event.message, sender),
     })
@@ -698,6 +723,51 @@ async def get_photo(chat_id: int, size: int = 48, photo_id: Optional[str] = None
         return Response(f.read(), media_type="image/jpeg", headers=headers)
 
 
+IMAGE_CACHE = "image_cache"
+SCREEN = (480, 854)  # the flip phone's screen; photos are shrunk to fit inside it
+
+
+def shrink_to_fit(data, box):
+    """JPEG bytes no larger than box (width, height), keeping the picture's shape."""
+    image = Image.open(BytesIO(data)).convert("RGB")
+    image.thumbnail(box, Image.LANCZOS)  # only ever makes it smaller
+    out = BytesIO()
+    image.save(out, "JPEG", quality=80)
+    return out.getvalue()
+
+
+# A photo from a message, shrunk to fit the phone's screen (usually 30-60 KB). Telegram
+# keeps several sizes; the smallest one that still fills the screen is downloaded, not the
+# original, which can be several MB. Saved in image_cache/, so opening it again is instant.
+@api.get("/image/{chat_id}/{message_id}")
+@recovering
+async def get_image(chat_id: int, message_id: int):
+    headers = {"Cache-Control": "private, max-age=86400"}
+    path = os.path.join(IMAGE_CACHE, f"{chat_id}_{message_id}.jpg")
+    if not os.path.exists(path):
+        try:
+            message = await client.get_messages(chat_id, ids=message_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        except errors.RPCError as e:
+            bad_request(e)
+        sizes = photo_sizes(message) if message is not None else []
+        if not sizes:
+            raise HTTPException(status_code=404, detail="No such photo")
+        size = next((s for s in sizes if max(s.w, s.h) >= max(SCREEN)), sizes[-1])
+        try:
+            data = await client.download_media(message, file=bytes, thumb=size.type)  # by type: works for every kind of size
+        except errors.RPCError as e:
+            bad_request(e)
+        if not data:
+            raise HTTPException(status_code=404, detail="No such photo")
+        os.makedirs(IMAGE_CACHE, exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(shrink_to_fit(data, SCREEN))
+    with open(path, "rb") as f:
+        return Response(f.read(), media_type="image/jpeg", headers=headers)
+
+
 # The voice message's OGG/Opus file as Telegram keeps it (about 100-250 KB a minute).
 # Not saved on the server: the phone keeps its own copy.
 @api.get("/voice/{chat_id}/{message_id}")
@@ -742,7 +812,7 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
     msgs = [
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
-         "voice": voice_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
+         "voice": voice_of(m), "image": image_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
