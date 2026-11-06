@@ -6,6 +6,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import kotlin.math.max
@@ -54,6 +55,22 @@ object VideoSender {
             throw IOException("Not a video", e)
         } finally {
             retriever.release()
+        }
+    }
+
+    // After sending: a copy in the media cache under the new message's name (as VideoActivity
+    // looks for it), so playing what was just sent needs no download. Best effort: without
+    // the copy it simply downloads like any other video.
+    fun keepCopy(context: Context, uri: Uri, chatId: Long, messageId: Long) {
+        val dir = MediaCache.folder(context, "videos")
+        val file = File(dir, "${chatId}_$messageId.mp4")
+        val part = File(file.path + ".part")
+        try {
+            dir.mkdirs()
+            open(context, uri).use { input -> part.outputStream().use { input.copyTo(it, 64 * 1024) } }
+            if (!part.renameTo(file)) part.delete()
+        } catch (e: IOException) {
+            part.delete()
         }
     }
 

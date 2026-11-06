@@ -346,6 +346,7 @@ class ChatActivity : AppCompatActivity() {
                         },
                         onSent = { runOnUiThread { showStatus(getString(R.string.video_server_sending)) } },
                     )
+                    VideoSender.keepCopy(this@ChatActivity, uri, chatId, id)
                     id to video
                 }
                 if (caption.isNotEmpty()) messageInput.text.clear()
