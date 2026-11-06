@@ -23,7 +23,7 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Message menu on OK: view a photo, play a video, play a voice message, reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone"), view the writer's profile, and in groups message them privately
 - Profiles: photo, name, and username and phone number where the person lets you see them
 - Group info: photo, member count and the member list with photos and admin marks (where Telegram shows it)
-- Replies show a quote of the original; edited messages show "(edited)"
+- Replies show a quote of the original; edited messages show "(edited)"; reactions show in a small line under the message (yours in bold) and update live
 - Live updates over a WebSocket (new, edited and deleted messages), with automatic reconnect and a resync afterwards
 - "Mark as read" as a deliberate action on the F1 soft key, so read receipts are never sent by accident; a soft key label shows when there is something to mark
 - Quick phrases: saved phrases (set up in Settings) you drop into the message box from the F2 soft key menu, since typing on a keypad is slow

@@ -13,6 +13,7 @@ import android.text.SpannableString
 import android.text.SpannableStringBuilder
 import android.text.format.Formatter
 import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.view.KeyEvent
 import android.view.View
@@ -674,6 +675,7 @@ class ChatActivity : AppCompatActivity() {
         when (type) {
             "message" -> if (isInThisTopic(event)) onLiveMessage(event)
             "edited" -> onLiveEdit(event)
+            "reactions" -> onLiveReactions(event)
             "read" -> refreshUnread()  // read on another device, maybe only partly
         }
     }
@@ -682,7 +684,18 @@ class ChatActivity : AppCompatActivity() {
     private fun onLiveEdit(event: JSONObject) {
         val id = event.optLong("id")
         val old = messages.find { it.id == id } ?: return
-        replaceMessage(old.copy(text = event.optString("text"), edited = event.optBoolean("edited")))
+        val reactions = if (event.has("reactions")) Reaction.listFromJson(event.optJSONArray("reactions")) else old.reactions
+        replaceMessage(old.copy(text = event.optString("text"), edited = event.optBoolean("edited"), reactions = reactions))
+    }
+
+    // Someone reacted (or took a reaction back): only that message's line changes
+    private fun onLiveReactions(event: JSONObject) {
+        val id = event.optLong("id")
+        val index = messages.indexOfFirst { it.id == id }
+        if (index < 0) return
+        messages[index] = messages[index].copy(reactions = Reaction.listFromJson(event.optJSONArray("reactions")))
+        refreshRow(id)
+        saveMessages()
     }
 
     // Telegram names the chat only for channels and supergroups. Without a chat_id the
@@ -949,9 +962,27 @@ class ChatActivity : AppCompatActivity() {
             }
         }
         line.append(text)
-        val replyToId = message.replyToId ?: return line
-        val quoted = messages.find { it.id == replyToId }?.let(::snippet) ?: "…"
-        return SpannableStringBuilder("↪ $quoted\n").append(line)
+        val replyToId = message.replyToId
+        val body = if (replyToId == null) line else {
+            val quoted = messages.find { it.id == replyToId }?.let(::snippet) ?: "…"
+            SpannableStringBuilder("↪ $quoted\n").append(line)
+        }
+        return withReactions(body, message.reactions)
+    }
+
+    // A smaller line under the message: "👍 3  ❤ 1", my own reactions in bold
+    private fun withReactions(body: SpannableStringBuilder, reactions: List<Reaction>): CharSequence {
+        if (reactions.isEmpty()) return body
+        body.append("\n")
+        val start = body.length
+        reactions.forEachIndexed { i, reaction ->
+            if (i > 0) body.append("  ")
+            val itemStart = body.length
+            body.append("${reaction.emoji} ${reaction.count}")
+            if (reaction.mine) body.setSpan(StyleSpan(Typeface.BOLD), itemStart, body.length, 0)
+        }
+        body.setSpan(RelativeSizeSpan(REACTIONS_SIZE), start, body.length, 0)
+        return body
     }
 
     // "14:05 ☎ Missed call" in italics: red when someone's call went unanswered, else blue
@@ -995,6 +1026,7 @@ class ChatActivity : AppCompatActivity() {
         private const val EXTRA_UNREAD = "unread"
         private const val SNIPPET_LENGTH = 30
         private const val SENDER_LENGTH = 16
+        private const val REACTIONS_SIZE = 0.85f
         private const val PAGE_SIZE = 20
         private const val MAX_SEARCH_PAGES = 10  // "Go to original" looks at most this far back
 

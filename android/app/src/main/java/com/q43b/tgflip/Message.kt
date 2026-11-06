@@ -1,5 +1,6 @@
 package com.q43b.tgflip
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 // One message, from GET /messages or a live {type: "message"} event (same fields).
@@ -7,7 +8,7 @@ import org.json.JSONObject
 // call = set when this is a call record instead of a text message.
 // voice = set for a voice message (text is then its caption, usually empty).
 // image = set for a photo, video = set for a video (text is then the caption).
-// round = set for a round video message.
+// round = set for a round video message. reactions = people's reactions, in Telegram's order.
 // sender = who wrote it, only for other people's messages in groups; senderId = their user
 // id (null for channels posting into a group), for their profile or a private chat.
 data class Message(
@@ -24,6 +25,7 @@ data class Message(
     val image: ImageInfo? = null,
     val video: VideoInfo? = null,
     val round: RoundInfo? = null,
+    val reactions: List<Reaction> = emptyList(),
 ) {
     // Same keys as the server sends, so saved messages read back with fromJson
     fun toJson(): JSONObject = JSONObject()
@@ -37,6 +39,7 @@ data class Message(
         .put("image", image?.toJson() ?: JSONObject.NULL)
         .put("video", video?.toJson() ?: JSONObject.NULL)
         .put("round", round?.toJson() ?: JSONObject.NULL)
+        .put("reactions", Reaction.toJson(reactions))
 
     companion object {
         fun fromJson(json: JSONObject) = Message(
@@ -54,6 +57,7 @@ data class Message(
             image = json.optJSONObject("image")?.let(ImageInfo::fromJson),
             video = json.optJSONObject("video")?.let(VideoInfo::fromJson),
             round = json.optJSONObject("round")?.let(RoundInfo::fromJson),
+            reactions = Reaction.listFromJson(json.optJSONArray("reactions")),
         )
     }
 }
@@ -115,5 +119,24 @@ data class RoundInfo(val duration: Int, val size: Long) {
 
     companion object {
         fun fromJson(json: JSONObject) = RoundInfo(duration = json.optInt("duration"), size = json.optLong("size"))
+    }
+}
+
+// One reaction under a message: the emoji ("✦" for a custom emoji, "⭐" for paid stars), how
+// many chose it, and whether I did
+data class Reaction(val emoji: String, val count: Int, val mine: Boolean) {
+    companion object {
+        fun toJson(reactions: List<Reaction>) = JSONArray().apply {
+            reactions.forEach { put(JSONObject().put("emoji", it.emoji).put("count", it.count).put("mine", it.mine)) }
+        }
+
+        // Missing (older saved copies, call records) = none
+        fun listFromJson(json: JSONArray?): List<Reaction> {
+            if (json == null) return emptyList()
+            return List(json.length()) { i ->
+                val item = json.getJSONObject(i)
+                Reaction(item.optString("emoji"), item.optInt("count"), item.optBoolean("mine"))
+            }
+        }
     }
 }
