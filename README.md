@@ -66,7 +66,7 @@ Later runs just start. Settings and the login stay next to the exe (`.env`, `tg_
 ### 2. The app (Android 7 or newer)
 
 1. Download `TG-Flip-<version>.apk` to the phone and install it (allow installing from unknown sources if asked).
-2. On first start, enter the server: your PC's IP address on the home network (e.g. `192.168.1.20`), port `9436`, and the app token. The phone must be on the same Wi-Fi as the PC (routers often have separate 2.4 GHz and 5 GHz networks: pick the PC's). On Android 17 and newer, allow "Nearby devices" when asked: that's how Android lets apps reach your home network.
+2. On first start, enter the server: your PC's IP address on the home network (e.g. `192.168.1.20`), port `9436`, and the app token. The phone must be on the same Wi-Fi as the PC (routers often have separate 2.4 GHz and 5 GHz networks: pick the PC's). On newer Android versions, allow "Nearby devices" when asked: that's how Android lets apps reach your home network.
 
 ### Keys
 
