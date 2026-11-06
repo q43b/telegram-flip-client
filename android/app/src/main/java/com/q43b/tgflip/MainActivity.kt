@@ -460,7 +460,8 @@ class MainActivity : AppCompatActivity() {
                 loadMore(tickedNow().map { it.id }.toSet())
             }
         }
-        builder.show()
+        // Down on the last chat goes on to the buttons, so only Up wraps
+        builder.show().listView.wrapAround(wrapsDown = false)
     }
 
     // Only the folder goes; its chats stay in Telegram as they are

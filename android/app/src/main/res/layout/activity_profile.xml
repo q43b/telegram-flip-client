@@ -36,7 +36,7 @@
         android:visibility="gone" />
 
     <!-- Username, phone, and "Send message" when opened from a group; OK on a row acts -->
-    <ListView
+    <com.q43b.tgflip.WrapListView
         android:id="@+id/profile_rows"
         android:layout_width="match_parent"
         android:layout_height="0dp"

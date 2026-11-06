@@ -125,6 +125,7 @@ class ChatActivity : AppCompatActivity() {
         connection = findViewById(R.id.connection)
         status = findViewById(R.id.status)
         messageList = findViewById(R.id.message_list)
+        messageList.wrapsDown = false  // Down on the newest message goes to the message box
         findViewById<TextView>(R.id.chat_title).text = intent.getStringExtra(EXTRA_TITLE)
         messageAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, rows)
         messageList.adapter = messageAdapter

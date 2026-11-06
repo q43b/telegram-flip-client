@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.ArrayAdapter
-import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -32,7 +31,7 @@ class SettingsActivity : AppCompatActivity() {
             insets
         }
 
-        val list = findViewById<ListView>(R.id.settings_list)
+        val list = findViewById<WrapListView>(R.id.settings_list)
         adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, rows().toMutableList())
         list.adapter = adapter
         list.setOnItemClickListener { _, _, position, _ -> open(position) }
@@ -42,6 +41,18 @@ class SettingsActivity : AppCompatActivity() {
         val version = findViewById<TextView>(R.id.app_version)
         version.text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
         version.setOnClickListener { openReleaseNotes() }
+        // The version line counts as the list's last row: Up on the first row goes to it,
+        // Down from it goes back to the first row (Down on the last row reaches it anyway)
+        list.wrapsDown = false
+        list.onUpFromTop = { version.requestFocus() }
+        version.setOnKeyListener { _, keyCode, event ->
+            if (keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return@setOnKeyListener false
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                list.requestFocus()
+                list.setSelection(0)
+            }
+            true
+        }
 
         setUpTabBar(Tab.SETTINGS) { finish() }
     }

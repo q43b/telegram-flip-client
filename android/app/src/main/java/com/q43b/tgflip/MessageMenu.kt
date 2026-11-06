@@ -25,13 +25,16 @@ object MessageMenu {
         }
     }
 
-    // A plain list dialog: Up/Down to choose, OK to pick, Back to close without picking.
-    // Also used for follow-up choices, like where to forward or how to delete.
+    // A plain list dialog: Up/Down to choose (wrapping around at the ends, like every
+    // list in the app), OK to pick, Back to close without picking. Also used for
+    // follow-up choices, like where to forward or how to delete. New pop-up lists should
+    // use this, or call wrapAround() on their dialog's listView after show().
     fun choose(context: Context, title: String, items: List<String>, onPick: (Int) -> Unit) {
         AlertDialog.Builder(context)
             .setTitle(title)
             .setItems(items.toTypedArray()) { _, which -> onPick(which) }
             .show()
+            .listView.wrapAround()
     }
 
     // A one-field text dialog (a phrase, a folder name, a number, ...); blank text is ignored
