@@ -114,6 +114,7 @@ A personal, study-oriented project: use Telegram on an Android 10 flip phone wit
   - Tailscale/TailSocks: the provider's DPI disrupts it; the PC only gets through thanks to Zapret, the phone never went online (TailSocks's built-in DPI bypass did not help), and an earlier try failed on mobile data.
   - No public IPv4 from the ISP; Cloudflare is blocked; a foreign VPS risks its IP being blocked; Russian VPSs may not be used for bypassing by law.
   - The connection modes (VPN, Public) stay in the app for later.
+- Android 17+ (API 37, the app's target): reaching home-network addresses needs the runtime permission `ACCESS_LOCAL_NETWORK` (shown as "Nearby devices"); without it every request fails silently ("Can't reach server"). Found on a Pixel 8 Pro with Android 17 (0.12.1-beta). `LocalNetworkAccess.missing` (Android 17+, Local/VPN modes, not granted); the chat list asks once per screen before connecting (`askLocalNetwork`), connects when allowed, otherwise says where to allow it. Older phones (the Kyocera on 10) never see it.
 - Plain HTTP: `network_security_config.xml` allows it in general (it is fixed at build time and cannot follow Settings). The app limits it itself: it only connects to the addresses entered in Settings; Local network and VPN modes use http, Public internet always https (`ConnectionMode.scheme`).
 - Message text must never be rendered as HTML.
 - Keep the app light: it runs on a weak phone.

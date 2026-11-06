@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 17+: reaching the server on the home network (LocalNetworkAccess); asked at start -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!-- Recording voice messages; asked for the first time one is recorded -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application

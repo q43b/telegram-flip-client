@@ -16,6 +16,7 @@ import android.widget.ListView
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -61,6 +62,12 @@ class MainActivity : AppCompatActivity() {
     // Between onStart and onStop. Android's own lifecycle state only becomes STARTED
     // after onStart returns, too late for code that runs during onStart.
     private var visible = false
+    private var askedLocalNetwork = false  // asked once per screen, so a refusal doesn't loop
+
+    // Android 17+: "Allow TG Flip to access local network devices?"; allowed = connect now
+    private val askLocalNetwork = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+        if (allowed) start() else showStatus(getString(R.string.local_network_needed))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -188,6 +195,16 @@ class MainActivity : AppCompatActivity() {
             }
             // The screen may have been hidden meanwhile; onStart will run start() again
             if (!visible) return@launch
+            if (LocalNetworkAccess.missing(this@MainActivity, settings.getMode())) {
+                connection.showNoServer()
+                if (askedLocalNetwork) {
+                    showStatus(getString(R.string.local_network_needed))
+                } else {
+                    askedLocalNetwork = true
+                    askLocalNetwork.launch(LocalNetworkAccess.PERMISSION)
+                }
+                return@launch
+            }
             val api = ApiClient(address, token!!)
             this@MainActivity.api = api
             photos.api = api

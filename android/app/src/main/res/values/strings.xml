@@ -58,6 +58,7 @@
     <string name="loading_topics">Loading topics…</string>
     <string name="no_topics">No topics</string>
     <string name="error_bad_token">Wrong token</string>
+    <string name="local_network_needed">TG Flip needs access to your home network to reach the server: allow it in the phone\'s Settings > Apps > TG Flip > Permissions (Nearby devices / Local network), then come back</string>
     <string name="error_no_server">Can\'t reach server</string>
     <string name="offline_saved">Offline: showing saved copy</string>
     <string name="error_bad_address">Invalid server address</string>
