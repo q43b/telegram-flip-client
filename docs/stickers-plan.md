@@ -1,6 +1,6 @@
 # Plan: stickers and custom emoji
 
-Status: designed 2026-11-06 at v0.9.0-beta; step 1 built in 0.10.0-beta. Roadmap: 0.10.0 lays the
+Status: designed 2026-11-06 at v0.9.0-beta; step 1 built in 0.10.0-beta, step 2 in 0.10.1-beta. Roadmap: 0.10.0 lays the
 foundation. To pick it up, ask: "let's continue the sticker plan from docs/stickers-plan.md".
 
 ## What they are
@@ -90,7 +90,8 @@ the pack list arrives with sticker sending, which needs it anyway.
    step 4, marked "coming"), pack switch (Only chosen marked "coming"), sticker rows with
    small pictures, "View sticker", data saver as text.
 2. **0.10.1**: custom emoji inside text and reactions as text-sized still pictures.
-3. **Pack list and sending stickers** (F2 > Stickers): installed packs, per-pack "chosen"
-   ticks (makes "Only chosen packs" work), "download whole pack" for offline.
-4. **Animated mode**: server conversion to animated WebP (TGS first, video stickers after
-   the decoder decision), phone playback.
+3. **0.11.0 pack list and sending stickers** (F2 > Stickers): installed packs, per-pack
+   "chosen" ticks (makes "Only chosen packs" work), "download whole pack" for offline.
+4. **0.12.0 animated mode** (moved after sending at the owner's request; the owner will
+   choose the approach then): e.g. server conversion to animated WebP (TGS with
+   rlottie-python, a 0.4 MB wheel; video stickers with PyAV, 27 MB), phone playback.

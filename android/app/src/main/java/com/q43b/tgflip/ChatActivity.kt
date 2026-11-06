@@ -12,7 +12,10 @@ import android.os.Bundle
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
 import android.text.format.Formatter
+import android.graphics.drawable.Drawable
+import android.text.Spanned
 import android.text.style.ForegroundColorSpan
+import android.text.style.ImageSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.view.KeyEvent
@@ -33,6 +36,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -103,6 +107,8 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var cache: LocalCache
     private lateinit var voice: VoicePlayer
     private lateinit var stickers: StickerLoader
+    private lateinit var customEmoji: StickerLoader  // text-sized pictures for custom emoji
+    private var redrawSoon: Job? = null
     private lateinit var recorder: VoiceRecorder
 
     // Android asks the user once; after a yes, recording starts right away
@@ -145,6 +151,10 @@ class ChatActivity : AppCompatActivity() {
         if (intent.hasExtra(EXTRA_TOPIC_ID)) topicId = intent.getLongExtra(EXTRA_TOPIC_ID, 0)
         voice = VoicePlayer(this, lifecycleScope, ::refreshRow).also { it.api = api }
         stickers = StickerLoader(this, lifecycleScope) { messageAdapter.notifyDataSetChanged() }.also { it.api = api }
+        // Custom emoji pictures are part of the rows' text, so rows are rebuilt when they
+        // arrive (at most a few times a second while many come in)
+        customEmoji = StickerLoader(this, lifecycleScope, StickerLoader.EMOJI_SIZE_DP) { redrawRowsSoon() }
+            .also { it.api = api }
         recorder = VoiceRecorder(this, ::sendVoice)
         volumeControlStream = AudioManager.STREAM_MUSIC  // the volume keys set how loud voice messages play
 
@@ -158,7 +168,7 @@ class ChatActivity : AppCompatActivity() {
             val message = messageAt(position)
             val sticker = message?.sticker
             if (sticker == null || !StickerSetting.showsPictures(this)) null
-            else stickers.drawable(sticker, chatId, message.id)
+            else stickers.drawable(sticker.id, chatId, message.id)
         }
         messageList.adapter = messageAdapter
         // OK on a message opens its menu (OkListView takes OK before the keyboard app);
@@ -698,7 +708,9 @@ class ChatActivity : AppCompatActivity() {
         val id = event.optLong("id")
         val old = messages.find { it.id == id } ?: return
         val reactions = if (event.has("reactions")) Reaction.listFromJson(event.optJSONArray("reactions")) else old.reactions
-        replaceMessage(old.copy(text = event.optString("text"), edited = event.optBoolean("edited"), reactions = reactions))
+        val custom = if (event.has("custom_emoji")) CustomEmoji.listFromJson(event.optJSONArray("custom_emoji")) else old.customEmoji
+        replaceMessage(old.copy(text = event.optString("text"), edited = event.optBoolean("edited"), reactions = reactions,
+            customEmoji = custom))
     }
 
     // Someone reacted (or took a reaction back): only that message's line changes
@@ -817,6 +829,14 @@ class ChatActivity : AppCompatActivity() {
     }
 
     // Rebuilds every row; the list keeps the highlight on the same position
+    private fun redrawRowsSoon() {
+        if (redrawSoon?.isActive == true) return
+        redrawSoon = lifecycleScope.launch {
+            delay(REDRAW_DELAY_MS)
+            refreshRows()
+        }
+    }
+
     private fun refreshRows() {
         messageAdapter.clear()
         if (hasOlder) messageAdapter.add(getString(R.string.load_older))
@@ -1019,6 +1039,7 @@ class ChatActivity : AppCompatActivity() {
             }
         }
         line.append(text)
+        addCustomEmoji(line, message)
         val replyToId = message.replyToId
         val body = if (replyToId == null) line else {
             val quoted = messages.find { it.id == replyToId }?.let(::snippet) ?: "…"
@@ -1027,15 +1048,48 @@ class ChatActivity : AppCompatActivity() {
         return withReactions(body, message.reactions)
     }
 
-    // A smaller line under the message: "👍 3  ❤ 1", my own reactions in bold
+    // Custom emoji: their pictures laid over the plain emoji the text holds at their places.
+    // The message's text is at the end of the line (after time and sender, or a label like
+    // "🖼 Photo: "). Pictures not loaded yet (or data saver) leave the plain emoji.
+    private fun addCustomEmoji(line: SpannableStringBuilder, message: Message) {
+        if (message.customEmoji.isEmpty() || message.text.isEmpty() || !StickerSetting.showsPictures(this)) return
+        if (!line.endsWith(message.text)) return
+        val base = line.length - message.text.length
+        for (emoji in message.customEmoji) {
+            val start = base + emoji.offset
+            val end = start + emoji.length
+            if (emoji.offset < 0 || end > line.length) continue
+            val picture = customEmoji.drawable(emoji.id, null, null) ?: continue
+            line.setSpan(emojiSpan(picture), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    private fun emojiSpan(picture: Drawable): ImageSpan {
+        val px = (StickerLoader.EMOJI_SIZE_DP * resources.displayMetrics.density).toInt()
+        picture.setBounds(0, 0, px, px)
+        return ImageSpan(picture, ImageSpan.ALIGN_BOTTOM)
+    }
+
+    // A smaller line under the message: "👍 3  ❤ 1", my own reactions in bold. Custom emoji
+    // reactions show their pictures; without pictures (data saver) equal emoji are added up.
     private fun withReactions(body: SpannableStringBuilder, reactions: List<Reaction>): CharSequence {
         if (reactions.isEmpty()) return body
+        val pictures = StickerSetting.showsPictures(this)
+        val shown = if (pictures) reactions else reactions.groupBy { it.emoji }.map { (emoji, same) ->
+            Reaction(emoji, same.sumOf { it.count }, same.any { it.mine })
+        }
         body.append("\n")
         val start = body.length
-        reactions.forEachIndexed { i, reaction ->
+        shown.forEachIndexed { i, reaction ->
             if (i > 0) body.append("  ")
             val itemStart = body.length
             body.append("${reaction.emoji} ${reaction.count}")
+            val customId = reaction.customId
+            if (pictures && customId != null) {
+                customEmoji.drawable(customId, null, null)?.let {
+                    body.setSpan(emojiSpan(it), itemStart, itemStart + reaction.emoji.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
             if (reaction.mine) body.setSpan(StyleSpan(Typeface.BOLD), itemStart, body.length, 0)
         }
         body.setSpan(RelativeSizeSpan(REACTIONS_SIZE), start, body.length, 0)
@@ -1085,6 +1139,7 @@ class ChatActivity : AppCompatActivity() {
         private const val SNIPPET_LENGTH = 30
         private const val SENDER_LENGTH = 16
         private const val REACTIONS_SIZE = 0.85f
+        private const val REDRAW_DELAY_MS = 300L
         private const val PAGE_SIZE = 20
         private const val MAX_SEARCH_PAGES = 10  // "Go to original" looks at most this far back
 

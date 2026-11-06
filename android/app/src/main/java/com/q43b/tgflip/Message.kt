@@ -9,6 +9,7 @@ import org.json.JSONObject
 // voice = set for a voice message (text is then its caption, usually empty).
 // image = set for a photo, video = set for a video (text is then the caption).
 // round = set for a round video message. sticker = set for a sticker.
+// customEmoji = where custom emoji sit in text (their plain emoji is in the text there).
 // reactions = people's reactions, in Telegram's order.
 // sender = who wrote it, only for other people's messages in groups; senderId = their user
 // id (null for channels posting into a group), for their profile or a private chat.
@@ -28,6 +29,7 @@ data class Message(
     val round: RoundInfo? = null,
     val reactions: List<Reaction> = emptyList(),
     val sticker: StickerInfo? = null,
+    val customEmoji: List<CustomEmoji> = emptyList(),
 ) {
     // Same keys as the server sends, so saved messages read back with fromJson
     fun toJson(): JSONObject = JSONObject()
@@ -43,6 +45,7 @@ data class Message(
         .put("round", round?.toJson() ?: JSONObject.NULL)
         .put("reactions", Reaction.toJson(reactions))
         .put("sticker", sticker?.toJson() ?: JSONObject.NULL)
+        .put("custom_emoji", CustomEmoji.toJson(customEmoji))
 
     companion object {
         fun fromJson(json: JSONObject) = Message(
@@ -62,6 +65,7 @@ data class Message(
             round = json.optJSONObject("round")?.let(RoundInfo::fromJson),
             reactions = Reaction.listFromJson(json.optJSONArray("reactions")),
             sticker = json.optJSONObject("sticker")?.let(StickerInfo::fromJson),
+            customEmoji = CustomEmoji.listFromJson(json.optJSONArray("custom_emoji")),
         )
     }
 }
@@ -126,12 +130,16 @@ data class RoundInfo(val duration: Int, val size: Long) {
     }
 }
 
-// One reaction under a message: the emoji ("✦" for a custom emoji, "⭐" for paid stars), how
-// many chose it, and whether I did
-data class Reaction(val emoji: String, val count: Int, val mine: Boolean) {
+// One reaction under a message: the emoji (for a custom emoji its plain emoji, or "✦";
+// "⭐" for paid stars), how many chose it, whether I did, and a custom emoji's id (its picture
+// comes from GET /sticker), else null
+data class Reaction(val emoji: String, val count: Int, val mine: Boolean, val customId: Long? = null) {
     companion object {
         fun toJson(reactions: List<Reaction>) = JSONArray().apply {
-            reactions.forEach { put(JSONObject().put("emoji", it.emoji).put("count", it.count).put("mine", it.mine)) }
+            reactions.forEach {
+                put(JSONObject().put("emoji", it.emoji).put("count", it.count).put("mine", it.mine)
+                    .put("custom_id", it.customId ?: JSONObject.NULL))
+            }
         }
 
         // Missing (older saved copies, call records) = none
@@ -139,7 +147,8 @@ data class Reaction(val emoji: String, val count: Int, val mine: Boolean) {
             if (json == null) return emptyList()
             return List(json.length()) { i ->
                 val item = json.getJSONObject(i)
-                Reaction(item.optString("emoji"), item.optInt("count"), item.optBoolean("mine"))
+                Reaction(item.optString("emoji"), item.optInt("count"), item.optBoolean("mine"),
+                    if (item.isNull("custom_id")) null else item.getLong("custom_id"))
             }
         }
     }
@@ -156,5 +165,24 @@ data class StickerInfo(val id: Long, val emoji: String, val kind: String) {
             emoji = json.optString("emoji"),
             kind = json.optString("kind", "static"),
         )
+    }
+}
+
+// A custom emoji in a message's text: where it sits (offset and length in the text, which holds
+// its plain emoji there) and its id, for its picture from GET /sticker
+data class CustomEmoji(val offset: Int, val length: Int, val id: Long) {
+    companion object {
+        fun toJson(list: List<CustomEmoji>) = JSONArray().apply {
+            list.forEach { put(JSONObject().put("offset", it.offset).put("length", it.length).put("id", it.id)) }
+        }
+
+        // Missing (older saved copies) = none
+        fun listFromJson(json: JSONArray?): List<CustomEmoji> {
+            if (json == null) return emptyList()
+            return List(json.length()) { i ->
+                val item = json.getJSONObject(i)
+                CustomEmoji(item.optInt("offset"), item.optInt("length"), item.optLong("id"))
+            }
+        }
     }
 }

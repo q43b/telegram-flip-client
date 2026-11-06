@@ -37,14 +37,15 @@ class StickerLoader(
     private val failed = mutableSetOf<String>()  // nothing to show, or no server: don't ask again
     private val downloads = Semaphore(MAX_DOWNLOADS)
 
-    // chatId and messageId say where the sticker came from (the server may need to look again)
-    fun drawable(sticker: StickerInfo, chatId: Long, messageId: Long): Drawable? {
-        val key = "${sticker.id}_$sizePx"
+    // chatId and messageId say where a sticker came from (the server may need to look again);
+    // null for a custom emoji, which the server can always find by its id
+    fun drawable(id: Long, chatId: Long?, messageId: Long?): Drawable? {
+        val key = "${id}_$sizePx"
         memory.get(key)?.let { return BitmapDrawable(context.resources, it) }
         if (key in loading || key in failed) return null
         loading += key
         scope.launch {
-            val bitmap = withContext(Dispatchers.IO) { fromDisk(key) ?: download(sticker.id, chatId, messageId, key) }
+            val bitmap = withContext(Dispatchers.IO) { fromDisk(key) ?: download(id, chatId, messageId, key) }
             loading -= key
             if (bitmap == null) {
                 failed += key
@@ -63,7 +64,7 @@ class StickerLoader(
         return BitmapFactory.decodeFile(file.path)
     }
 
-    private suspend fun download(id: Long, chatId: Long, messageId: Long, key: String): Bitmap? {
+    private suspend fun download(id: Long, chatId: Long?, messageId: Long?, key: String): Bitmap? {
         val api = api ?: return null
         val bytes = try {
             downloads.withPermit { api.getSticker(id, sizePx, chatId, messageId) }
@@ -89,6 +90,7 @@ class StickerLoader(
 
     companion object {
         const val CHAT_SIZE_DP = 96  // as in message_row.xml
+        const val EMOJI_SIZE_DP = 20  // custom emoji inside text, about the text's height
         private const val MEMORY_STICKERS = 40  // at 144×144 px about 80 KB each
         private const val MAX_DOWNLOADS = 2
     }

@@ -289,10 +289,13 @@ class ApiClient(baseUrl: String?, val token: String) {
 
     private val videos by lazy { http.newBuilder().readTimeout(10, TimeUnit.MINUTES).build() }
 
-    // A sticker as a still PNG at most size×size, or null when there is nothing to show.
-    // chatId and messageId: the message it came in, in case the server has to look again.
-    fun getSticker(id: Long, size: Int, chatId: Long, messageId: Long): ByteArray? =
-        bytes(endpoint("/sticker/$id?size=$size&chat_id=$chatId&message_id=$messageId"))
+    // A sticker or custom emoji as a still PNG at most size×size, or null when there is
+    // nothing to show. chatId and messageId: the message a sticker came in, in case the server
+    // has to look again; null for a custom emoji (found by its id alone).
+    fun getSticker(id: Long, size: Int, chatId: Long?, messageId: Long?): ByteArray? {
+        val from = if (chatId != null && messageId != null) "&chat_id=$chatId&message_id=$messageId" else ""
+        return bytes(endpoint("/sticker/$id?size=$size$from"))
+    }
 
     // A voice message's OGG/Opus file
     fun getVoice(chatId: Long, messageId: Long): ByteArray =
