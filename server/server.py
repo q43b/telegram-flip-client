@@ -103,7 +103,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.11.0-beta"
+VERSION = "0.11.1-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -1463,6 +1463,45 @@ async def get_sticker_set(pack: str):
     except errors.RPCError as e:
         bad_request(e)
     return {"stickers": [sticker_json(d) for d in documents]}
+
+
+# The pack a sticker comes from (message menu > View sticker pack): {pack: {id, title, count,
+# installed}, stickers: [...]}. chat_id and message_id as in /sticker, in case the server has
+# to read the message again. 404 for stickers that belong to no pack.
+@api.get("/sticker_set_of/{sticker_id}")
+@recovering
+async def get_sticker_set_of(sticker_id: int, chat_id: Optional[int] = None, message_id: Optional[int] = None):
+    try:
+        document = sticker_documents.get(sticker_id) or await sticker_document(sticker_id, chat_id, message_id)
+        attr = None if document is None else next(
+            (a for a in document.attributes if isinstance(a, types.DocumentAttributeSticker)), None)
+        if attr is None or not isinstance(attr.stickerset, types.InputStickerSetID):
+            raise HTTPException(status_code=404, detail="This sticker belongs to no pack")
+        found = await client(functions.messages.GetStickerSetRequest(stickerset=attr.stickerset, hash=0))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    pack = found.set
+    sticker_sets[pack.id] = types.InputStickerSetID(id=pack.id, access_hash=pack.access_hash)
+    return {
+        "pack": {"id": pack.id, "title": pack.title, "count": pack.count,
+                 "installed": pack.installed_date is not None and not pack.archived},
+        "stickers": [sticker_json(d) for d in found.documents],
+    }
+
+
+# Adds a pack to my packs (one the server has seen: listed, or opened from a sticker)
+@api.post("/sticker_set/{pack_id}/install")
+@recovering
+async def install_sticker_set(pack_id: int):
+    if pack_id not in sticker_sets:
+        raise HTTPException(status_code=404, detail="Unknown pack: open it again")
+    try:
+        await client(functions.messages.InstallStickerSetRequest(stickerset=sticker_sets[pack_id], archived=False))
+    except errors.RPCError as e:
+        bad_request(e)
+    return {"ok": True}
 
 
 # Sends a sticker the server has seen (in a pack listed above, or in a message); topics and
