@@ -9,8 +9,10 @@ __pycache__/
 dist/
 # PyInstaller's working files from server/build_server.ps1
 /build/
-# Profile photos and message photos the server saved (packaged server: next to the exe)
+# Profile photos, message photos and videos the server saved (packaged server: next to the exe)
 server/photo_cache/
 photo_cache/
 server/image_cache/
 image_cache/
+server/video_cache/
+video_cache/

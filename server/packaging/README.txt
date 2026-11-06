@@ -24,8 +24,9 @@ and allow it if Windows asks.
 Later runs just start. Stop the server with Ctrl+C or by closing the window.
 
 The photo_cache folder holds small copies of chats' profile photos for the app,
-and image_cache small copies of photos from messages. Both can be deleted at any
-time; the pictures are fetched again when needed.
+image_cache small copies of photos from messages, and video_cache the videos the
+phone has played. All of them can be deleted at any time; files are fetched again
+when needed (video_cache can grow large).
 
 In the phone app
 ----------------

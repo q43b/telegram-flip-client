@@ -15,6 +15,7 @@ from io import BytesIO
 from dotenv import load_dotenv
 from fastapi import (APIRouter, Depends, FastAPI, Header, HTTPException, Request, Response,
                      WebSocket, WebSocketDisconnect)
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
 
@@ -101,7 +102,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.4.0-beta"
+VERSION = "0.5.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -220,6 +221,19 @@ def image_of(message):
     return {"w": sizes[-1].w, "h": sizes[-1].h}
 
 
+def video_of(message):
+    """For a plain video: {duration, w, h, size} (seconds, pixels, bytes); None for anything
+    else, round videos, GIFs and video stickers included (Telegram keeps GIFs as silent videos
+    and video stickers as WebM videos). The file itself comes from GET /video."""
+    document = getattr(message, "video", None)
+    if document is None or getattr(message, "gif", None) is not None or getattr(message, "sticker", None) is not None:
+        return None
+    attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeVideo)), None)
+    if attr is None or attr.round_message:
+        return None
+    return {"duration": int(attr.duration or 0), "w": attr.w, "h": attr.h, "size": document.size}
+
+
 def sender_name(message, sender=None):
     """Who wrote a message, shown in groups: their first name (or a channel's title when a
     channel posts into a group). None for my own messages, private chats and channel posts,
@@ -248,8 +262,8 @@ def last_message_preview(message):
 
     It comes with the chat list itself (each dialog's last message, in a forum group the
     newest of any topic), so it costs no extra requests. kind: "text", "media" (no text,
-    e.g. a sticker), "photo" (text is its caption), "voice" (details in voice, see
-    voice_of), "call" (details in
+    e.g. a sticker), "photo" and "video" (text is the caption), "voice" (details in voice,
+    see voice_of), "call" (details in
     call, see call_of) or "event" (joined,
     pinned, ...). sender: who wrote it, only for other people's messages in groups;
     None in private chats and channel posts.
@@ -264,6 +278,8 @@ def last_message_preview(message):
         text, kind = message.raw_text or "", "voice"
     elif image_of(message) is not None:
         text, kind = message.raw_text or "", "photo"
+    elif video_of(message) is not None:
+        text, kind = message.raw_text or "", "video"
     elif isinstance(message, types.MessageService):
         text, kind = "", "event"
     else:
@@ -380,6 +396,7 @@ async def on_new_message(event):
         "call": None,
         "voice": voice_of(event.message),
         "image": image_of(event.message),
+        "video": video_of(event.message),
         "sender": sender_name(event.message, sender),
         "sender_id": sender_id_of(event.message, sender),
     })
@@ -803,6 +820,15 @@ async def get_photo(chat_id: int, size: int = 48, photo_id: Optional[str] = None
 
 
 IMAGE_CACHE = "image_cache"
+VIDEO_CACHE = "video_cache"
+MAX_VIDEO_BYTES = 100 * 1024 * 1024  # more takes minutes through the proxy, and the phone has little room
+
+
+def cache_path(folder, name):
+    """Where a cached media file lives. The one place that builds these paths, so the planned
+    per-account caches (docs/multi-account-plan.md) only have to change it."""
+    os.makedirs(folder, exist_ok=True)
+    return os.path.join(folder, name)
 SCREEN = (480, 854)  # the flip phone's screen; photos are shrunk to fit inside it
 
 
@@ -870,6 +896,45 @@ async def full_photo(chat_id, message_id):
     return data
 
 
+# Downloads still running, by file: a second request for the same video waits for the first
+# download instead of starting its own
+video_downloads = {}
+
+
+async def download_video(chat_id, message_id, path):
+    try:
+        message = await client.get_messages(chat_id, ids=message_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    info = video_of(message) if message is not None else None
+    if info is None:
+        raise HTTPException(status_code=404, detail="No such video")
+    if info["size"] > MAX_VIDEO_BYTES:
+        raise HTTPException(status_code=413, detail="Video too big (over 100 MB)")
+    part = path + ".part"  # renamed when complete, so a half download is never served
+    await client.download_media(message, file=part)
+    os.replace(part, path)
+
+
+# A video, as Telegram keeps it (no converting yet). Downloaded once from Telegram into
+# video_cache/ and then sent from there; the answer starts only when that download is done.
+@api.get("/video/{chat_id}/{message_id}")
+@recovering
+async def get_video(chat_id: int, message_id: int):
+    path = cache_path(VIDEO_CACHE, f"{chat_id}_{message_id}.mp4")
+    if not os.path.exists(path):
+        task = video_downloads.get(path)
+        if task is None:
+            task = asyncio.create_task(download_video(chat_id, message_id, path))
+            video_downloads[path] = task
+            task.add_done_callback(lambda _: video_downloads.pop(path, None))
+        try:
+            await asyncio.shield(task)  # the phone giving up must not stop a shared download
+        except errors.RPCError as e:
+            bad_request(e)
+    return FileResponse(path, media_type="video/mp4")
+
+
 # The voice message's OGG/Opus file as Telegram keeps it (about 100-250 KB a minute).
 # Not saved on the server: the phone keeps its own copy.
 @api.get("/voice/{chat_id}/{message_id}")
@@ -914,7 +979,7 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
     msgs = [
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
-         "voice": voice_of(m), "image": image_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
+         "voice": voice_of(m), "image": image_of(m), "video": video_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
