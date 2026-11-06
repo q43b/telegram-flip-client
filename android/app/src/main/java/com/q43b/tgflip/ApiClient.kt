@@ -6,13 +6,16 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
+import okio.BufferedSink
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 // Talks to the server's HTTP API. Every request carries the token header.
@@ -206,6 +209,63 @@ class ApiClient(baseUrl: String?, val token: String) {
                     }
                 }
             }
+        }
+    }
+
+    // Sends a video: the body is its preview picture followed by the file, streamed from
+    // openVideo (never held in memory); returns its id. onProgress(bytes sent, total) while
+    // it goes to the server, then onSent() while the server passes it on to Telegram.
+    fun sendVideo(
+        chatId: Long,
+        topicId: Long?,
+        video: VideoSender.Prepared,
+        openVideo: () -> InputStream,
+        caption: String,
+        replyToId: Long?,
+        onProgress: (Long, Long) -> Unit,
+        onSent: () -> Unit,
+    ): Long {
+        val url = endpoint("/send_video").toHttpUrl().newBuilder()
+            .addQueryParameter("chat_id", chatId.toString())
+            .addQueryParameter("duration", video.seconds.toString())
+            .addQueryParameter("w", video.width.toString())
+            .addQueryParameter("h", video.height.toString())
+            .addQueryParameter("thumb_size", video.thumb.size.toString())
+            .apply {
+                if (caption.isNotEmpty()) addQueryParameter("caption", caption)
+                if (topicId != null) addQueryParameter("topic_id", topicId.toString())
+                if (replyToId != null) addQueryParameter("reply_to_id", replyToId.toString())
+            }
+            .build()
+        val total = video.thumb.size + video.size
+        val body = object : RequestBody() {
+            override fun contentType() = "video/mp4".toMediaType()
+
+            // Unknown up front (-1, sent in chunks): a picker's size isn't always exact
+            override fun contentLength() = -1L
+
+            override fun writeTo(sink: BufferedSink) {
+                sink.write(video.thumb)
+                var done = video.thumb.size.toLong()
+                openVideo().use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        sink.write(buffer, 0, read)
+                        done += read
+                        onProgress(done, total)
+                    }
+                }
+                onSent()
+            }
+        }
+        val request = Request.Builder().url(url).post(body).header("x-token", token).build()
+        videos.newCall(request).execute().use { response ->
+            if (response.code == 401) throw BadTokenException()
+            if (response.code == 413) throw TooBigException()
+            if (!response.isSuccessful) throw IOException("Server error ${response.code}")
+            return JSONObject(response.body!!.string()).getLong("id")
         }
     }
 

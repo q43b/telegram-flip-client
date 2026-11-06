@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
+import android.text.format.Formatter
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.view.KeyEvent
@@ -22,6 +23,7 @@ import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -102,6 +104,9 @@ class ChatActivity : AppCompatActivity() {
     // the chosen picture, or nothing when Back was pressed
     private val pickPhoto = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         result.data?.data?.let(::chooseHowToSend)
+    }
+    private val pickVideo = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.data?.let(::sendVideo)
     }
     private var chatId = 0L
     private var topicId: Long? = null  // set when this is one topic of a forum group
@@ -269,7 +274,8 @@ class ChatActivity : AppCompatActivity() {
         val items = listOf(R.string.menu_send_photo, R.string.menu_send_video)
         MessageMenu.choose(this, getString(R.string.menu_media_title), items.map(::getString)) { which ->
             when (items[which]) {
-                R.string.menu_send_photo -> startPhotoPick()
+                R.string.menu_send_photo -> startPick(pickPhoto, "image/*")
+                R.string.menu_send_video -> startPick(pickVideo, "video/*")
                 else -> showComingLater()
             }
         }
@@ -294,18 +300,73 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // ACTION_PICK goes straight to the phone's own picture picker; phones without one get
-    // the general file picker
-    private fun startPhotoPick() {
-        val pick = Intent(Intent.ACTION_PICK).setType("image/*")
-        val getContent = Intent(Intent.ACTION_GET_CONTENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE)
+    // ACTION_PICK goes straight to the phone's own picker (Kyocera's Data Folder, for photos
+    // and videos alike); phones without one get the general file picker
+    private fun startPick(launcher: ActivityResultLauncher<Intent>, type: String) {
+        val pick = Intent(Intent.ACTION_PICK).setType(type)
+        val getContent = Intent(Intent.ACTION_GET_CONTENT).setType(type).addCategory(Intent.CATEGORY_OPENABLE)
         try {
-            pickPhoto.launch(pick)
+            launcher.launch(pick)
         } catch (e: ActivityNotFoundException) {
             try {
-                pickPhoto.launch(getContent)
+                launcher.launch(getContent)
             } catch (e: ActivityNotFoundException) {
                 showStatus(getString(R.string.photo_no_picker))
+            }
+        }
+    }
+
+    // Sends the video unchanged, as a reply if one is being written; text in the message box
+    // becomes its caption. The status line counts the upload to the server, then says the
+    // server is passing it on to Telegram (the long part). If sending fails, a dialog offers
+    // to try again.
+    private fun sendVideo(uri: Uri) {
+        if (sending) return
+        sending = true
+        showStatus(getString(R.string.video_preparing))
+        val caption = if (editing == null) messageInput.text.toString().trim() else ""
+        val replyToId = replyingTo?.id
+        var lastProgress = 0L
+        lifecycleScope.launch {
+            try {
+                val (id, video) = withContext(Dispatchers.IO) {
+                    val video = VideoSender.prepare(this@ChatActivity, uri)
+                    val id = api.sendVideo(
+                        chatId, topicId, video, { VideoSender.open(this@ChatActivity, uri) }, caption, replyToId,
+                        onProgress = { done, total ->
+                            val now = System.currentTimeMillis()
+                            if (now - lastProgress >= 300) {
+                                lastProgress = now
+                                runOnUiThread {
+                                    showStatus(getString(R.string.video_sending,
+                                        Formatter.formatShortFileSize(this@ChatActivity, done),
+                                        Formatter.formatShortFileSize(this@ChatActivity, total)))
+                                }
+                            }
+                        },
+                        onSent = { runOnUiThread { showStatus(getString(R.string.video_server_sending)) } },
+                    )
+                    id to video
+                }
+                if (caption.isNotEmpty()) messageInput.text.clear()
+                if (replyToId != null) cancelCompose()
+                status.visibility = View.GONE
+                val sent = Message(id, caption, out = true, date = MessageFormat.now(), replyToId = replyToId,
+                    video = VideoInfo(video.seconds, video.width, video.height, video.size))
+                addMessage(sent, follow = true)
+            } catch (e: VideoSender.TooLargeException) {
+                showStatus(getString(R.string.video_send_too_big))
+            } catch (e: ApiClient.TooBigException) {
+                showStatus(getString(R.string.video_send_too_big))
+            } catch (e: IOException) {
+                status.visibility = View.GONE
+                AlertDialog.Builder(this@ChatActivity)
+                    .setMessage(R.string.video_send_failed)
+                    .setPositiveButton(R.string.voice_retry) { _, _ -> sendVideo(uri) }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            } finally {
+                sending = false
             }
         }
     }

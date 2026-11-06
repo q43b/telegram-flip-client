@@ -175,7 +175,12 @@
     <string name="menu_media">📎 Send media…</string>
     <string name="menu_media_title">Send media</string>
     <string name="menu_send_photo">🖼 Send photo</string>
-    <string name="menu_send_video">🎬 Send video (coming later)</string>
+    <string name="menu_send_video">🎬 Send video</string>
+    <string name="video_preparing">Preparing the video…</string>
+    <string name="video_sending">Sending video: %1$s of %2$s…</string>
+    <string name="video_server_sending">The server is sending the video to Telegram…</string>
+    <string name="video_send_too_big">The video is over 100 MB, too big to send</string>
+    <string name="video_send_failed">Couldn\'t send the video.</string>
     <string name="photo_send_title">Send photo</string>
     <string name="photo_send_optimized">Optimized (smaller, sends faster)</string>
     <string name="photo_send_original">Original (full quality)</string>
