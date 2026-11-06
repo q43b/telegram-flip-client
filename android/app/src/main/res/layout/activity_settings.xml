@@ -21,11 +21,15 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <!-- Small gray "TG Flip 0.7.1-alpha" line; not focusable, the d-pad skips it -->
+    <!-- Small gray "TG Flip 0.7.1-alpha" line. Down from the last row reaches it, OK opens
+         this version's release notes. The background only shows while it has focus. -->
     <TextView
         android:id="@+id/app_version"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="?android:attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
         android:gravity="center"
         android:padding="4dp"
         android:textAppearance="?android:attr/textAppearanceSmall"

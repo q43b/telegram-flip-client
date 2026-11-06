@@ -158,6 +158,7 @@
     <string name="add_phrase">+ Add phrase</string>
     <string name="setting_quick_phrases">Quick phrases: %1$d</string>
     <string name="app_version">TG Flip %1$s</string>
+    <string name="no_browser">No browser on this phone to open the release notes</string>
     <string name="group_network">Network…</string>
     <string name="group_network_title">Network</string>
     <string name="group_appearance">Appearance…</string>

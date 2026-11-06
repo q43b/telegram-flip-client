@@ -1,12 +1,15 @@
 package com.q43b.tgflip
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.ArrayAdapter
 import android.widget.ListView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -36,8 +39,9 @@ class SettingsActivity : AppCompatActivity() {
         list.requestFocus()
 
         // versionName from build.gradle.kts (dev builds add "-dev")
-        findViewById<TextView>(R.id.app_version).text =
-            getString(R.string.app_version, BuildConfig.VERSION_NAME)
+        val version = findViewById<TextView>(R.id.app_version)
+        version.text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
+        version.setOnClickListener { openReleaseNotes() }
 
         setUpTabBar(Tab.SETTINGS) { finish() }
     }
@@ -51,6 +55,17 @@ class SettingsActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    // This version's page on GitHub, in the phone's browser (dev builds: the version they
+    // were made from, without "-dev")
+    private fun openReleaseNotes() {
+        val tag = "v" + BuildConfig.VERSION_NAME.removeSuffix("-dev")
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_URL + tag)))
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(this, R.string.no_browser, Toast.LENGTH_LONG).show()
+        }
+    }
+
     // The groups, in the order of SettingsGroupActivity.Group; each opens its own screen
     private fun rows(): List<String> = SettingsGroupActivity.Group.entries.map { getString(it.row) }
 
@@ -58,6 +73,8 @@ class SettingsActivity : AppCompatActivity() {
         SettingsGroupActivity.start(this, SettingsGroupActivity.Group.entries[position])
 
     companion object {
+        private const val RELEASES_URL = "https://github.com/q43b/telegram-flip-client/releases/tag/"
+
         fun start(activity: Activity) {
             activity.startActivity(Intent(activity, SettingsActivity::class.java))
             // Slide in from the left edge, like the official app's side menu
