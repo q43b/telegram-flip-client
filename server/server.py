@@ -103,7 +103,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.10.1-beta"
+VERSION = "0.11.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -316,12 +316,9 @@ STICKER_KINDS = {"image/webp": "static", "application/x-tgsticker": "animated", 
 sticker_documents = {}
 
 
-def sticker_of(message):
-    """For a sticker: {id, emoji, kind} (kind static / animated / video); None otherwise.
-    Remembers the document for GET /sticker. The picture comes from there."""
-    document = getattr(message, "sticker", None)
-    if document is None:
-        return None
+def sticker_json(document):
+    """{id, emoji, kind} (kind static / animated / video) for a sticker document, which is
+    remembered for GET /sticker (the picture) and POST /send_sticker."""
     sticker_documents[document.id] = document
     attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeSticker)), None)
     return {
@@ -329,6 +326,12 @@ def sticker_of(message):
         "emoji": (attr.alt if attr else "") or "",
         "kind": STICKER_KINDS.get(document.mime_type, "static"),
     }
+
+
+def sticker_of(message):
+    """For a sticker message: sticker_json; None otherwise."""
+    document = getattr(message, "sticker", None)
+    return None if document is None else sticker_json(document)
 
 
 def custom_emoji_of(message):
@@ -753,6 +756,13 @@ class ForwardBody(BaseModel):
     from_chat_id: int
     message_id: int
     to_chat_id: int
+
+
+class SendStickerBody(BaseModel):
+    chat_id: int
+    sticker_id: int
+    topic_id: Optional[int] = None
+    reply_to_id: Optional[int] = None
 
 
 class ReactBody(BaseModel):
@@ -1404,6 +1414,73 @@ async def edit(body: EditBody):
     except errors.RPCError as e:
         bad_request(e)  # e.g. MESSAGE_EDIT_TIME_EXPIRED: too old to edit
     return {"ok": True}
+
+
+# My installed sticker packs, by id: opening one needs its access hash too
+sticker_sets = {}
+
+
+async def installed_sticker_sets():
+    found = await client(functions.messages.GetAllStickersRequest(hash=0))
+    for pack in found.sets:
+        sticker_sets[pack.id] = types.InputStickerSetID(id=pack.id, access_hash=pack.access_hash)
+    return found.sets
+
+
+# My sticker packs, in my order, for the app's sticker screen (it puts Recent and Favorites
+# first, which come from /sticker_set/recent and /sticker_set/faved)
+@api.get("/sticker_sets")
+@recovering
+async def get_sticker_sets():
+    try:
+        packs = await installed_sticker_sets()
+    except errors.RPCError as e:
+        bad_request(e)
+    return {"packs": [{"id": p.id, "title": p.title, "count": p.count} for p in packs]}
+
+
+# One pack's stickers ({id, emoji, kind} each, remembered for /sticker and /send_sticker):
+# "recent" = my recently used, "faved" = my favorites, or an installed pack's id
+@api.get("/sticker_set/{pack}")
+@recovering
+async def get_sticker_set(pack: str):
+    try:
+        if pack == "recent":
+            documents = (await client(functions.messages.GetRecentStickersRequest(hash=0))).stickers
+        elif pack == "faved":
+            documents = (await client(functions.messages.GetFavedStickersRequest(hash=0))).stickers
+        else:
+            try:
+                pack_id = int(pack)
+            except ValueError:
+                raise HTTPException(status_code=404, detail="No such pack")
+            if pack_id not in sticker_sets:
+                await installed_sticker_sets()
+            if pack_id not in sticker_sets:
+                raise HTTPException(status_code=404, detail="No such pack")
+            found = await client(functions.messages.GetStickerSetRequest(stickerset=sticker_sets[pack_id], hash=0))
+            documents = found.documents
+    except errors.RPCError as e:
+        bad_request(e)
+    return {"stickers": [sticker_json(d) for d in documents]}
+
+
+# Sends a sticker the server has seen (in a pack listed above, or in a message); topics and
+# replies as in /send. Answers with the new message's id and the sticker.
+@api.post("/send_sticker")
+@recovering
+async def send_sticker(body: SendStickerBody):
+    document = sticker_documents.get(body.sticker_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Unknown sticker: open its pack again")
+    try:
+        msg = await client.send_file(body.chat_id, document,
+                                     reply_to=reply_target(body.topic_id, body.reply_to_id))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    return {"id": msg.id, "sticker": sticker_json(document)}
 
 
 # Telegram's standard reactions anyone may choose, in its order. Asked once; rarely changes.
