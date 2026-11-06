@@ -7,6 +7,7 @@ import asyncio
 import functools
 import itertools
 import time
+import tempfile
 from collections import deque
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
@@ -102,7 +103,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.5.0-beta"
+VERSION = "0.6.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -1052,6 +1053,55 @@ async def send_photo(request: Request, chat_id: int, caption: str = "",
     except errors.RPCError as e:
         bad_request(e)
     return {"id": msg.id}
+
+
+MAX_THUMB_BYTES = 200 * 1024  # Telegram's limit for a video's preview picture
+
+
+# Sends a video. The body is the phone's preview picture (thumb_size bytes of JPEG, may be 0)
+# followed by the video file. Telegram only shows a video's length, shape and preview when
+# the sender gives them, and the server can't read them from the file, so the phone does
+# (duration, w, h). The body is written to disk as it arrives (up to 100 MB, never held in
+# memory), then uploaded; a reconnect retries only the upload.
+@api.post("/send_video")
+async def send_video(request: Request, chat_id: int, duration: int, w: int, h: int,
+                     thumb_size: int = 0, caption: str = "",
+                     topic_id: Optional[int] = None, reply_to_id: Optional[int] = None):
+    if not 0 <= thumb_size <= MAX_THUMB_BYTES:
+        raise HTTPException(status_code=400, detail="Bad preview size")
+    with tempfile.TemporaryDirectory() as folder:
+        thumb_path = os.path.join(folder, "thumb.jpg")
+        video_path = os.path.join(folder, "video.mp4")
+        received = 0
+        with open(thumb_path, "wb") as thumb, open(video_path, "wb") as video:
+            async for chunk in request.stream():
+                if received < thumb_size:  # the first thumb_size bytes are the preview
+                    split = thumb_size - received
+                    thumb.write(chunk[:split])
+                    video.write(chunk[split:])
+                else:
+                    video.write(chunk)
+                received += len(chunk)
+                if received > thumb_size + MAX_VIDEO_BYTES:
+                    raise HTTPException(status_code=413, detail="Video too big (over 100 MB)")
+        if received <= thumb_size:
+            raise HTTPException(status_code=400, detail="No video")
+        msg = await upload_video(chat_id, video_path, thumb_path if thumb_size else None,
+                                 duration, w, h, caption, reply_target(topic_id, reply_to_id))
+    return {"id": msg.id}
+
+
+@recovering
+async def upload_video(chat_id, video_path, thumb_path, duration, w, h, caption, reply_to):
+    try:
+        return await client.send_file(
+            chat_id, video_path, caption=caption or None, thumb=thumb_path, reply_to=reply_to,
+            force_document=False, supports_streaming=True,
+            attributes=[types.DocumentAttributeVideo(duration=duration, w=w, h=h, supports_streaming=True)])
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
 
 
 @api.post("/read/{chat_id}")
