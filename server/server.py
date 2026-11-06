@@ -103,7 +103,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.11.1-beta"
+VERSION = "0.11.2-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -1489,6 +1489,22 @@ async def get_sticker_set_of(sticker_id: int, chat_id: Optional[int] = None, mes
                  "installed": pack.installed_date is not None and not pack.archived},
         "stickers": [sticker_json(d) for d in found.documents],
     }
+
+
+# Adds a sticker the server has seen to my Telegram Favorites, or with unfave=true takes it out.
+# Telegram allows 5 favorites without Premium; a refusal's reason goes to the log.
+@api.post("/sticker/{sticker_id}/fave")
+@recovering
+async def fave_sticker(sticker_id: int, unfave: bool = False):
+    document = sticker_documents.get(sticker_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Unknown sticker: open its pack again")
+    try:
+        await client(functions.messages.FaveStickerRequest(id=utils.get_input_document(document), unfave=unfave))
+    except errors.RPCError as e:
+        print(f"Telegram refused to {'unfave' if unfave else 'fave'} a sticker: {e}")  # for the log screen
+        bad_request(e)
+    return {"ok": True}
 
 
 # Adds a pack to my packs (one the server has seen: listed, or opened from a sticker)
