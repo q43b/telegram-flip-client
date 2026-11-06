@@ -164,6 +164,8 @@
     <string name="group_appearance_title">Appearance</string>
     <string name="group_media_cache">Media and Cache…</string>
     <string name="group_media_cache_title">Media and Cache</string>
+    <string name="group_qol">QoL…</string>
+    <string name="group_qol_title">QoL</string>
     <string name="group_advanced">Advanced settings…</string>
     <string name="group_advanced_title">Advanced settings</string>
     <string name="cache_keep">Keep media: %1$s</string>

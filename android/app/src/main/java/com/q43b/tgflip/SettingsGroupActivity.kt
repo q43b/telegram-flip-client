@@ -22,16 +22,19 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 // One row of a settings group: what it shows, and what OK on it does
 class SettingRow(val label: String, val open: () -> Unit)
 
-// One group of Settings on its own screen: Network, Appearance, Media and Cache, Advanced.
+// One group of Settings on its own screen: Network, Appearance, Media and Cache, QoL
+// (quality of life: quick phrases), Advanced.
 // Rows are rebuilt after every change (refresh) and when the screen is shown again.
 // Choosing between several values (a mode, a theme, a limit) still opens a short list.
 // Left or Back goes back to Settings. New settings: add a row to their group's rows.
 class SettingsGroupActivity : AppCompatActivity() {
-    enum class Group(@StringRes val title: Int) {
-        NETWORK(R.string.group_network_title),
-        APPEARANCE(R.string.group_appearance_title),
-        MEDIA_CACHE(R.string.group_media_cache_title),
-        ADVANCED(R.string.group_advanced_title),
+    // row = its line in Settings, title = its screen's title
+    enum class Group(@StringRes val row: Int, @StringRes val title: Int) {
+        NETWORK(R.string.group_network, R.string.group_network_title),
+        APPEARANCE(R.string.group_appearance, R.string.group_appearance_title),
+        MEDIA_CACHE(R.string.group_media_cache, R.string.group_media_cache_title),
+        QOL(R.string.group_qol, R.string.group_qol_title),
+        ADVANCED(R.string.group_advanced, R.string.group_advanced_title),
     }
 
     private lateinit var group: Group
@@ -88,6 +91,7 @@ class SettingsGroupActivity : AppCompatActivity() {
             Group.NETWORK -> networkRows()
             Group.APPEARANCE -> appearanceRows()
             Group.MEDIA_CACHE -> CacheMenu.rows(this, cacheBytes, ::refresh)
+            Group.QOL -> qolRows()
             Group.ADVANCED -> advancedRows()
         }
         adapter.clear()
@@ -130,6 +134,13 @@ class SettingsGroupActivity : AppCompatActivity() {
             }
         })
     }
+
+    // Things that save keypresses: quick phrases for now
+    private fun qolRows() = listOf(
+        SettingRow(getString(R.string.setting_quick_phrases, QuickPhrases(this).load().size)) {
+            QuickPhrasesEditor.show(this, ::refresh)
+        },
+    )
 
     // Settings for this phone's limits: the voice format for older Android, and whether the
     // phone shows soft key labels itself. OK switches a row on and off.

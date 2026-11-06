@@ -13,7 +13,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
 // The settings screen: a list of setting groups (Network, Appearance, Media and Cache,
-// Advanced) plus quick phrases; OK opens a group's own screen (SettingsGroupActivity).
+// QoL, Advanced); OK opens a group's own screen (SettingsGroupActivity).
 // Opened with Right from the chat list, like swiping open the official app's side menu;
 // Left or Back closes it. New settings go into their group in SettingsGroupActivity.
 class SettingsActivity : AppCompatActivity() {
@@ -51,28 +51,11 @@ class SettingsActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    // The groups, then quick phrases. Each group opens its own screen (SettingsGroupActivity).
-    private fun rows(): List<String> = listOf(
-        getString(R.string.group_network),
-        getString(R.string.group_appearance),
-        getString(R.string.group_media_cache),
-        getString(R.string.group_advanced),
-        getString(R.string.setting_quick_phrases, QuickPhrases(this).load().size),
-    )
+    // The groups, in the order of SettingsGroupActivity.Group; each opens its own screen
+    private fun rows(): List<String> = SettingsGroupActivity.Group.entries.map { getString(it.row) }
 
-    private fun open(position: Int) {
-        val groups = SettingsGroupActivity.Group.entries
-        if (position < groups.size) {
-            SettingsGroupActivity.start(this, groups[position])
-        } else {
-            QuickPhrasesEditor.show(this, ::refreshRows)
-        }
-    }
-
-    private fun refreshRows() {
-        adapter.clear()
-        adapter.addAll(rows())
-    }
+    private fun open(position: Int) =
+        SettingsGroupActivity.start(this, SettingsGroupActivity.Group.entries[position])
 
     companion object {
         fun start(activity: Activity) {
