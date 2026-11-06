@@ -60,6 +60,9 @@ class ChatActivity : AppCompatActivity() {
         MessageAction(R.string.action_view_photo, isAvailable = { it.image != null }) {
             ImageActivity.start(this, chatId, it.id)
         },
+        MessageAction(R.string.action_play_video, isAvailable = { it.video != null }) {
+            VideoActivity.start(this, chatId, it.id)
+        },
         MessageAction(R.string.action_play, isAvailable = { it.voice != null && voice.currentId != it.id }) {
             voice.play(chatId, it.id)
         },
@@ -833,6 +836,7 @@ class ChatActivity : AppCompatActivity() {
         if (call != null) return formatCall(message, call)
         val text = voiceLine(message)?.let { if (message.text.isEmpty()) it else "$it ${message.text}" }
             ?: message.image?.let { MessageFormat.photo(this, message.text) }
+            ?: message.video?.let { MessageFormat.video(this, it, message.text) }
             ?: message.text.ifEmpty { getString(R.string.media) }
         val time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
         val line = SpannableStringBuilder("$time ")
@@ -876,6 +880,7 @@ class ChatActivity : AppCompatActivity() {
         val text = if (call != null) MessageFormat.call(this, call, message.out)
         else message.voice?.let { MessageFormat.voice(this, it) }
             ?: message.image?.let { MessageFormat.photo(this, message.text) }
+            ?: message.video?.let { MessageFormat.video(this, it, message.text) }
             ?: message.text.ifEmpty { getString(R.string.media) }
         return MessageFormat.snippet(text, SNIPPET_LENGTH)
     }

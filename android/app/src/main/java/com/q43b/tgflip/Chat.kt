@@ -32,7 +32,7 @@ data class Chat(
     }
 }
 
-// kind: "text", "media" (no text, e.g. a sticker), "photo" (text = its caption), "voice" (details in voice), "call" (details in call)
+// kind: "text", "media" (no text, e.g. a sticker), "photo" / "video" (text = the caption), "voice" (details in voice), "call" (details in call)
 // or "event" (joined, pinned, ...). sender: who wrote it, only for other people's
 // messages in groups.
 data class LastMessage(

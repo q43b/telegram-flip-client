@@ -1,5 +1,6 @@
 package com.q43b.tgflip
 
+import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -10,6 +11,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -176,6 +178,41 @@ class ApiClient(baseUrl: String?, val token: String) {
     // A photo's biggest size, unchanged (up to 2560 px, a few MB), for saving on the phone
     fun getFullImage(chatId: Long, messageId: Long): ByteArray =
         bytes(endpoint("/image/$chatId/$messageId?full=true"), slow) ?: throw IOException("No such photo")
+
+    // A video's file. The server answers only once it has the whole video from Telegram,
+    // which can take minutes for a big one, hence its own long wait. Run it with downloadTo.
+    fun videoCall(chatId: Long, messageId: Long): Call =
+        videos.newCall(Request.Builder().url(endpoint("/video/$chatId/$messageId")).header("x-token", token).build())
+
+    // Writes the answer of a download call to file, reporting (bytes so far, total) as it goes.
+    // Cancelling the call (from another thread) stops it with an IOException.
+    fun downloadTo(call: Call, file: File, onProgress: (Long, Long) -> Unit) {
+        call.execute().use { response ->
+            if (response.code == 401) throw BadTokenException()
+            if (response.code == 413) throw TooBigException()
+            if (!response.isSuccessful) throw IOException("Server error ${response.code}")
+            val body = response.body!!
+            val total = body.contentLength()
+            var done = 0L
+            body.byteStream().use { input ->
+                file.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        done += read
+                        onProgress(done, total)
+                    }
+                }
+            }
+        }
+    }
+
+    // The server refused: the file is over its size limit
+    class TooBigException : IOException("Too big")
+
+    private val videos by lazy { http.newBuilder().readTimeout(10, TimeUnit.MINUTES).build() }
 
     // A voice message's OGG/Opus file
     fun getVoice(chatId: Long, messageId: Long): ByteArray =

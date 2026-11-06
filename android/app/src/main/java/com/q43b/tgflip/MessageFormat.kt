@@ -2,6 +2,7 @@ package com.q43b.tgflip
 
 import android.content.Context
 import android.text.format.DateUtils
+import android.text.format.Formatter
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -56,6 +57,15 @@ object MessageFormat {
     // "🖼 Photo", or "🖼 Photo: caption"
     fun photo(context: Context, caption: String): String {
         val label = "🖼 ${context.getString(R.string.photo)}"
+        return if (caption.isEmpty()) label else "$label: $caption"
+    }
+
+    // "🎬 Video 0:45 · 12 MB", or with ": caption"; in the chat list only "🎬 Video"
+    fun video(context: Context, video: VideoInfo?, caption: String): String {
+        var label = "🎬 ${context.getString(R.string.video)}"
+        if (video != null) {
+            label += " ${duration(video.duration)} · ${Formatter.formatShortFileSize(context, video.size)}"
+        }
         return if (caption.isEmpty()) label else "$label: $caption"
     }
 

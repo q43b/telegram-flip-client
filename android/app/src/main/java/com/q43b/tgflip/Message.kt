@@ -6,7 +6,7 @@ import org.json.JSONObject
 // replyToId = the message this one replies to, if any. edited = show "(edited)".
 // call = set when this is a call record instead of a text message.
 // voice = set for a voice message (text is then its caption, usually empty).
-// image = set for a photo (text is then its caption).
+// image = set for a photo, video = set for a video (text is then the caption).
 // sender = who wrote it, only for other people's messages in groups; senderId = their user
 // id (null for channels posting into a group), for their profile or a private chat.
 data class Message(
@@ -21,6 +21,7 @@ data class Message(
     val senderId: Long? = null,
     val voice: VoiceInfo? = null,
     val image: ImageInfo? = null,
+    val video: VideoInfo? = null,
 ) {
     // Same keys as the server sends, so saved messages read back with fromJson
     fun toJson(): JSONObject = JSONObject()
@@ -32,6 +33,7 @@ data class Message(
         .put("sender_id", senderId ?: JSONObject.NULL)
         .put("voice", voice?.toJson() ?: JSONObject.NULL)
         .put("image", image?.toJson() ?: JSONObject.NULL)
+        .put("video", video?.toJson() ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = Message(
@@ -47,6 +49,7 @@ data class Message(
             senderId = if (json.isNull("sender_id")) null else json.getLong("sender_id"),
             voice = json.optJSONObject("voice")?.let(VoiceInfo::fromJson),
             image = json.optJSONObject("image")?.let(ImageInfo::fromJson),
+            video = json.optJSONObject("video")?.let(VideoInfo::fromJson),
         )
     }
 }
@@ -83,5 +86,21 @@ data class ImageInfo(val width: Int, val height: Int) {
 
     companion object {
         fun fromJson(json: JSONObject) = ImageInfo(width = json.optInt("w"), height = json.optInt("h"))
+    }
+}
+
+// A video: its length in seconds, its size in pixels and its file size in bytes. The file
+// itself comes from GET /video.
+data class VideoInfo(val duration: Int, val width: Int, val height: Int, val size: Long) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("duration", duration).put("w", width).put("h", height).put("size", size)
+
+    companion object {
+        fun fromJson(json: JSONObject) = VideoInfo(
+            duration = json.optInt("duration"),
+            width = json.optInt("w"),
+            height = json.optInt("h"),
+            size = json.optLong("size"),
+        )
     }
 }

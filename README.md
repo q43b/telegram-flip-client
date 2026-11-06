@@ -17,8 +17,9 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Forum groups (groups split into topics): a topic list, and each topic as its own chat
 - Read and send messages; "Load older messages" for history
 - Photos: open one from the message menu to see it full screen, then zoom, move around, rotate it or download the full-size original into the phone's Pictures/TG Flip folder from the F2 menu. The server shrinks it to the phone's screen size first (about 30–60 KB instead of several MB), and both sides keep a copy. Send your own from the F2 menu, picked in the phone's picture folder: optimized on the phone (about 1280 px, a few hundred KB, quick over a slow connection) or the original file; text in the message box becomes the caption
+- Videos: play them from the message menu. The phone downloads the whole video first (up to 100 MB), then plays it smoothly from its own copy; OK pauses, Left/Right jump 10 seconds
 - Voice messages: play them from the message menu, with a running time on the message line, and record your own from the F2 menu (up to 5 minutes; OK sends, Back discards). They are kept on the phone like photos, and listening does not tell the sender
-- Message menu on OK: view a photo, play a voice message, reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone"), view the writer's profile, and in groups message them privately
+- Message menu on OK: view a photo, play a video, play a voice message, reply, edit (own messages), forward, delete (only the options Telegram allows: "for me" and/or "for everyone"), view the writer's profile, and in groups message them privately
 - Profiles: photo, name, and username and phone number where the person lets you see them
 - Group info: photo, member count and the member list with photos and admin marks (where Telegram shows it)
 - Replies show a quote of the original; edited messages show "(edited)"
@@ -138,7 +139,7 @@ PROJECT_BRIEF.md           Goals, decisions, milestones
 ## Known limitations and roadmap
 
 - **Home network only for now.** The home connection is behind carrier-grade NAT, and the remote-access options tried (Tailscale, tunnels, a rented server) are blocked or ruled out where I live. The app's VPN and Public modes are ready for when a route exists.
-- **Text, photos and voice only in chats:** stickers, GIFs, videos and files show as "[media]". Voice messages play and record on Android 10 and newer (Settings already has a switch for Android 7–9, for a compatible format that comes later).
+- **Text, photos, videos and voice in chats:** stickers, GIFs, round videos and files show as "[media]". Sending videos comes next. Voice messages play and record on Android 10 and newer (Settings already has a switch for Android 7–9, for a compatible format that comes later).
 - The packaged server is Windows-only.
 - Planned: reactions, stickers, and other media.
 

@@ -66,6 +66,13 @@
     <string name="load_older">Load older messages…</string>
     <string name="media">[media]</string>
     <string name="event">[event]</string>
+    <string name="video">Video</string>
+    <string name="action_play_video">▶ Play video</string>
+    <string name="video_server_fetching">The server is getting the video from Telegram…</string>
+    <string name="video_downloading">Downloading %1$s of %2$s…</string>
+    <string name="video_too_big">This video is too big for the phone (over 100 MB)</string>
+    <string name="video_not_loaded">Could not load the video</string>
+    <string name="video_cant_play">This phone can\'t play this video</string>
     <string name="photo">Photo</string>
     <string name="photo_loading">Loading photo…</string>
     <string name="photo_not_loaded">Could not load the photo</string>
