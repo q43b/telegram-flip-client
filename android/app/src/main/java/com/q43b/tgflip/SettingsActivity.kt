@@ -55,7 +55,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     // Row 0: which connection mode is active. Rows 1..3: each mode's server.
-    // Then theme, quick phrases, cache and the voice format. The chat list reconnects with new server values
+    // Then theme, quick phrases, cache, the voice format and the soft key setting. The chat list reconnects with new server values
     // when shown again.
     private fun rows(): List<String> {
         val modes = ConnectionMode.entries.map { mode ->
@@ -70,7 +70,9 @@ class SettingsActivity : AppCompatActivity() {
             getString(R.string.setting_quick_phrases, QuickPhrases(this).load().size) +
             getString(R.string.setting_cache) +
             getString(R.string.setting_voice_compatible,
-                getString(if (VoiceFormat.isCompatible(this)) R.string.on else R.string.off))
+                getString(if (VoiceFormat.isCompatible(this)) R.string.on else R.string.off)) +
+            getString(R.string.setting_feature_phone,
+                getString(if (SoftKeySetting.isOn(this)) R.string.on else R.string.off))
     }
 
     private fun open(position: Int) {
@@ -101,6 +103,11 @@ class SettingsActivity : AppCompatActivity() {
                 refreshRows()
                 val note = if (VoiceFormat.isCompatible(this)) R.string.voice_compatible_on else R.string.saved
                 Toast.makeText(this, note, Toast.LENGTH_LONG).show()
+            }
+            // OK switches it on and off; open screens pick it up when shown again
+            modes.size + 5 -> {
+                SoftKeySetting.save(this, !SoftKeySetting.isOn(this))
+                savedAndRefresh()
             }
         }
     }

@@ -16,6 +16,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.TGFlip">
+        <!-- Japanese Android flip phones (NextFP): the system's own soft key labels at the
+             bottom of the screen. Optional, so the app still installs everywhere else. -->
+        <uses-library android:name="com.nextfp.android.util" android:required="false" />
         <!-- configChanges: opening or closing the flip switches the phone's keyboard state.
              By default Android would rebuild the open screen each time, losing a reply in
              progress and reconnecting; listing them here keeps the screen as it is. -->

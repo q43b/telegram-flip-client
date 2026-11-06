@@ -71,6 +71,7 @@
     <string name="voice_not_loaded">Couldn\'t load the voice message</string>
     <string name="voice_cant_play">Can\'t play this voice message on this phone</string>
     <string name="setting_voice_compatible">Voice for Android 7–9: %1$s</string>
+    <string name="setting_feature_phone">Running on a supported feature phone: %1$s</string>
     <string name="voice_compatible_on">Saved. Voice messages will play in a format for Android 7–9 once a later version adds it; until then they don\'t play. Leave this off on Android 10 and newer.</string>
     <string name="voice_compatible_later">The Android 7–9 voice format comes in a later version. To play voice messages now (Android 10+), turn off Settings > Voice for Android 7–9.</string>
     <string name="menu_record_voice">🎤 Record voice message</string>
