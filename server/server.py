@@ -103,7 +103,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.7.0-beta"
+VERSION = "0.8.0-beta"
 
 # The MTProxy is needed where Telegram is blocked; leave PROXY_HOST empty to connect directly
 if os.environ.get("PROXY_HOST"):
@@ -243,6 +243,41 @@ def round_of(message):
         return None
     attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeVideo)), None)
     return {"duration": int(attr.duration or 0) if attr else 0, "size": document.size}
+
+
+CUSTOM_EMOJI = "✦"  # stands in for a custom (sticker-like) emoji reaction, which has no plain character
+PAID_REACTION = "⭐"
+
+
+def reactions_list(reactions):
+    """[{emoji, count, mine}] from Telegram's MessageReactions (or None), in Telegram's order.
+    mine = I chose this reaction. Custom emoji and paid stars get stand-in characters; all the
+    custom emoji count together as one "✦" (they'd look the same anyway)."""
+    if reactions is None or not reactions.results:
+        return []
+    result = []
+    for count in reactions.results:
+        reaction = count.reaction
+        if isinstance(reaction, types.ReactionEmoji):
+            emoji = reaction.emoticon
+        elif isinstance(reaction, types.ReactionCustomEmoji):
+            emoji = CUSTOM_EMOJI
+        elif type(reaction).__name__ == "ReactionPaid":
+            emoji = PAID_REACTION
+        else:
+            continue
+        mine = count.chosen_order is not None
+        same = next((r for r in result if r["emoji"] == emoji), None)
+        if same is not None:
+            same["count"] += count.count
+            same["mine"] = same["mine"] or mine
+        else:
+            result.append({"emoji": emoji, "count": count.count, "mine": mine})
+    return result
+
+
+def reactions_of(message):
+    return reactions_list(getattr(message, "reactions", None))
 
 
 def sender_name(message, sender=None):
@@ -411,6 +446,7 @@ async def on_new_message(event):
         "image": image_of(event.message),
         "video": video_of(event.message),
         "round": round_of(event.message),
+        "reactions": reactions_of(event.message),
         "sender": sender_name(event.message, sender),
         "sender_id": sender_id_of(event.message, sender),
     })
@@ -474,6 +510,18 @@ async def on_edited(event):
         "chat_id": event.chat_id,
         "text": event.raw_text or "",
         "edited": is_edited(event.message),
+        "reactions": reactions_of(event.message),  # some reaction changes arrive as edits
+    })
+
+
+# Reactions added or taken back, by anyone: Telegram sends these as their own update
+@client.on(events.Raw(types.UpdateMessageReactions))
+async def on_reactions(update):
+    await broadcast({
+        "type": "reactions",
+        "chat_id": utils.get_peer_id(update.peer),
+        "id": update.msg_id,
+        "reactions": reactions_list(update.reactions),
     })
 
 
@@ -994,7 +1042,7 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
         {"id": m.id, "text": m.text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
          "voice": voice_of(m), "image": image_of(m), "video": video_of(m),
-         "round": round_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
+         "round": round_of(m), "reactions": reactions_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
