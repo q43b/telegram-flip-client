@@ -39,6 +39,13 @@ Its menu:
   c) Server cache: keep the media fetched for the apps forever, for some days
      since last used, or not at all, and the most space it may take in all
      (each account gets an equal share; also asked at the first run).
+  x) Modules: optional features for the server, each its own download
+     (tgflip-module-<name>-<version>.zip, from the module's release page).
+     Install one from its zip (keep the .sha256 file next to it: the zip is
+     checked against it first), switch modules on or off, remove them.
+     Installed modules live in the modules folder here. A module is a program
+     with access to every account on this server: only install modules from
+     the TG Flip releases page.
   s) Start the server, q) Quit
 Each account has its own app token, Telegram login (tg_session*.session) and
 cached media. The list is in accounts.json.

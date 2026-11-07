@@ -27,3 +27,10 @@ server/accounts.json.new
 accounts.json.new
 server/local_favorites*.json
 local_favorites*.json
+
+# Installed server modules and their files (packaged server: next to the exe); module sources
+# live in modules/ at the repo's top
+server/modules/
+server/modules.json
+server/module_cache/
+server/module_data/

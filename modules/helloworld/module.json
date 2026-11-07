@@ -1,0 +1,10 @@
+{
+  "id": "helloworld",
+  "name": "Hello world",
+  "version": "1.0.0",
+  "api": 1,
+  "min_server": "0.15.0-beta",
+  "python": "any",
+  "provides": {"helloworld": 1},
+  "description": "The demo module: says hello in the log, in Messages from the server and at /modules/helloworld/ping"
+}

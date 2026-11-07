@@ -32,6 +32,7 @@ from telethon.client.dialogs import _dialog_message_key  # to build dialogs like
 from telethon.tl import custom
 
 import accounts
+import module_loader
 
 load_dotenv()
 
@@ -111,7 +112,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.14.2-beta"
+VERSION = "0.15.0-beta"
 CODENAME = "Almost Liquid"  # the era's name, printed after the version (from 0.13.0-beta)
 
 def shared_server():
@@ -812,8 +813,10 @@ async def lifespan(app: FastAPI):
         print("Shared server: only admin accounts' apps may see this log")
     else:
         print("Private server: every account's app may see this log")
+    await module_loader.start_all()
     print(f"TG Flip server {VERSION} \"{CODENAME}\" started successfully")
     yield
+    await module_loader.stop_all()
     cleaner.cancel()
     for acc in ACCOUNTS:
         acc.watchdog.cancel()
@@ -985,7 +988,16 @@ async def dialogs_by_ids(chat_ids):
 async def server_info():
     shared = shared_server()
     return {"version": VERSION, "codename": CODENAME, "shared": shared,
-            "log": not shared or account().admin}
+            "log": not shared or account().admin,
+            # What installed modules add, e.g. {"animated_stickers": 1} (since 0.15.0-beta).
+            # Apps ask for these, never for a module's name (docs/modules-plan.md)
+            "capabilities": module_loader.capabilities()}
+
+
+# The installed modules (since 0.15.0-beta): status "on", "off" or "failed: <reason>"
+@api.get("/modules")
+async def installed_modules():
+    return {"modules": [m.info() for m in module_loader.modules]}
 
 
 # Messages from the server: a fallback, so a newer server can still tell an older app what it
@@ -1011,6 +1023,14 @@ def server_info_text():
     mode = "Shared server" if shared_server() else "Private server"
     return (f'TG Flip server {VERSION} "{CODENAME}". {mode}, {who}. '
             f"Server cache: {describe_cache_setting()}.")
+
+
+@notice("modules")
+def modules_text():
+    if not module_loader.modules:
+        return None
+    listed = ", ".join(f"{m.name} {m.version} ({m.status})" for m in module_loader.modules)
+    return f"Modules on this server: {listed}."
 
 
 @api.get("/server_messages")
@@ -1280,7 +1300,7 @@ def cached_files():
     """Every cached file as (path, owner, last used, size); owner = the account's cache folder
     (a removed account's folder still counts towards the whole cache)."""
     found = []
-    for folder in (PHOTO_CACHE, IMAGE_CACHE, VIDEO_CACHE, STICKER_CACHE):
+    for folder in (PHOTO_CACHE, IMAGE_CACHE, VIDEO_CACHE, STICKER_CACHE, *module_loader.cache_roots()):
         if not os.path.isdir(folder):
             continue
         for owner in os.listdir(folder):
@@ -2211,3 +2231,14 @@ async def logs_endpoint(ws: WebSocket):
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+
+
+def load_modules():
+    """The installed modules (module_loader.py, docs/modules-plan.md). At import, except in
+    maintenance mode (run_server.py sets TGFLIP_LOAD_MODULES_LATER), where the menu may still
+    replace their files: then just before the server starts."""
+    module_loader.load_all(sys.modules[__name__])
+
+
+if not os.environ.get("TGFLIP_LOAD_MODULES_LATER"):
+    load_modules()

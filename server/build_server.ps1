@@ -1,7 +1,8 @@
 # Builds the packaged server: dist\tgflip-server-<version>-win64.zip
 # Run from anywhere:  powershell -ExecutionPolicy Bypass -File server\build_server.ps1
 # Needs the venv with requirements.txt and requirements-build.txt installed.
-param([string]$Version)  # default: VERSION in server.py
+param([string]$Version,  # default: VERSION in server.py
+      [string]$Venv = "venv")  # the virtual environment (in the repo) to build with
 $ErrorActionPreference = "Stop"
 
 $server = $PSScriptRoot
@@ -11,7 +12,7 @@ if (-not $Version) {
     $Version = $line.Matches[0].Groups[1].Value
 }
 $root = Split-Path $server
-$python = Join-Path $root "venv\Scripts\python.exe"
+$python = Join-Path $root "$Venv\Scripts\python.exe"
 $work = Join-Path $root "build\server"   # PyInstaller's working files (git-ignored)
 $out = Join-Path $work "dist\tgflip-server"
 $zip = Join-Path $root "dist\tgflip-server-$Version-win64.zip"

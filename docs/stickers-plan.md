@@ -72,6 +72,12 @@ the pack list arrives with sticker sending, which needs it anyway.
 
 ## Animated mode: an optional server add-on (owner's design, 2026-11-06, for 0.12.0)
 
+> Since 0.15.0 this becomes a **server module** (`docs/modules-plan.md`): the `animated` module,
+> its own release `module-animated-v<version>`, installed with maintenance mode's "x) Modules"
+> instead of the add-on download and `addons/` folder described below. It provides the capability
+> `animated_stickers` 1 and hooks into `/sticker`. The rest of the design (formats, sizes, the
+> app side) still holds.
+
 "I don't need it, I don't install it": animation is an **add-on to the server**, not part
 of it. Weaker phones, or owners who don't care, never download it; the app works the same,
 with still pictures. The app learns from the server whether the add-on is there.

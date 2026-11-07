@@ -92,6 +92,8 @@ async def serve(server, port, maintenance_mode):
             return
         # The list may have changed in the menu
         server.ACCOUNTS[:] = [server.Account(**entry) for entry in accounts.load()]
+        # Not loaded at import in this mode, so the menu could replace their files
+        server.load_modules()
     # The first account may still need its first login (first-run setup); later accounts are
     # logged in when added, in --maintenancemode
     server.use_account(server.ACCOUNTS[0])
@@ -113,10 +115,14 @@ def main():
     from dotenv import load_dotenv
     load_dotenv(ENV_FILE)
 
+    maintenance_mode = "--maintenancemode" in sys.argv[1:]
+    if maintenance_mode:
+        # Modules are loaded only when the server starts: a loaded module's libraries are
+        # locked by Windows, so the menu couldn't replace or remove them
+        os.environ["TGFLIP_LOAD_MODULES_LATER"] = "1"
     import server  # reads the settings from the environment when imported
 
     port = int(os.environ.get("PORT") or DEFAULT_PORT)
-    maintenance_mode = "--maintenancemode" in sys.argv[1:]
     if not maintenance_mode:
         print(f"Starting on port {port}. Press Ctrl+C to stop.")
     asyncio.run(serve(server, port, maintenance_mode))

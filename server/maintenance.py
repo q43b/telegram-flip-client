@@ -11,6 +11,7 @@ import string
 from dotenv import set_key
 
 import accounts
+import module_menu
 
 ENV_FILE = ".env"  # run_server.py works in the program's folder
 
@@ -237,6 +238,7 @@ async def menu(server):
         print("  m) Give or take admin rights")
         print(f"  p) Private or shared server (now: {'shared' if server.shared_server() else 'private'})")
         print(f"  c) Server cache (now: {server.describe_cache_setting()})")
+        print("  x) Modules")
         print("  s) Start the server")
         print("  q) Quit")
         choice = ask("Choose").lower()
@@ -252,6 +254,8 @@ async def menu(server):
             toggle_mode(server)
         elif choice == "c":
             change_cache(server)
+        elif choice == "x":
+            module_menu.menu(server)
         elif choice == "s":
             return True
         elif choice == "q":

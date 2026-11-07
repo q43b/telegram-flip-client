@@ -33,7 +33,7 @@ Home PC: FastAPI + Telethon
 Telegram
 ```
 
-- **Backend:** Python 3.13, Telethon, FastAPI + uvicorn, python-socks. Files: `server.py`, `list_chats.py`, `listen.py`
+- **Backend:** Python 3.15 (3.13 until 0.14.2), Telethon, FastAPI + uvicorn, python-socks. Files: `server.py`, `list_chats.py`, `listen.py`
 - **Frontend (now):** plain HTML/CSS/JS in `static/`, served by the backend
 - **Frontend (later):** native Android app (Kotlin), where key events can be handled directly
 - **Hosting:** the learner's Windows 11 PC; an old laptop running 24/7 later

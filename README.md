@@ -33,6 +33,7 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Soft key labels in the phone's own soft key boxes on Japanese Android flip phones (NextFP, like my Kyocera); other phones get the app's own label bar. A Settings switch picks which one shows
 - On the version line in Settings: F2 opens that version's release notes, OK opens "Under the hood", a developer mode: the server's live log, and messages from the server (newer servers can tell older apps things there as plain text, which the app can't receive any other way yet)
 - One server for several people: each Telegram account gets its own app token, chats and caches (accounts are added on the PC in Maintenance mode), and several phones can use the same account at the same time. A shared server shows its log only to the accounts you make admins
+- Server modules: optional features you add to the server only if you want them, each its own download, installed and switched on or off in Maintenance mode. The first real one will be animated stickers; a tiny "Hello world" module shows how they work
 - Connection status bar on every screen
 - Settings: server address per connection mode (local network, VPN, public internet over HTTPS), app token, theme (light, dark, follow phone)
 - Built for the d-pad: every action works with Up/Down, OK, Left/Right, Back and the soft keys
@@ -61,7 +62,7 @@ Both downloads are on the [Releases](https://github.com/q43b/telegram-flip-clien
 
 Later runs just start. Settings and the logins stay next to the exe (`.env`, `accounts.json`, `tg_session*.session`).
 
-**More people on one server:** double-click `Maintenance mode.bat` (or run `tgflip-server.exe --maintenancemode`). Its menu adds an account (that person's phone number, the code Telegram sends them and their 2FA password, typed in on the PC, so the code never crosses the network), then prints the app token for their phone once. It also removes and renames accounts, switches between a private server (your apps may see the live log) and a shared one (only accounts you make admins may), gives or takes admin rights, and sets how long the server keeps the media it fetched for the apps (forever, some days since last used, or not at all) and the most space it may take, shared equally by the accounts. Then it starts the server.
+**More people on one server:** double-click `Maintenance mode.bat` (or run `tgflip-server.exe --maintenancemode`). Its menu adds an account (that person's phone number, the code Telegram sends them and their 2FA password, typed in on the PC, so the code never crosses the network), then prints the app token for their phone once. It also removes and renames accounts, switches between a private server (your apps may see the live log) and a shared one (only accounts you make admins may), gives or takes admin rights, and sets how long the server keeps the media it fetched for the apps (forever, some days since last used, or not at all) and the most space it may take, shared equally by the accounts. Its Modules item installs a module from its zip (downloaded from the module's own release; its `.sha256` next to it is checked first), switches modules on or off and removes them. Then it starts the server.
 
 > **The phone can't connect although the server started?** Windows probably treats your home Wi-Fi as a "Public" network, where it blocks incoming connections. Set it to Private: Settings > Network & internet > Wi-Fi > (your network) > Network profile type > Private.
 
@@ -86,10 +87,12 @@ Later runs just start. Settings and the logins stay next to the exe (`.env`, `ac
 
 ### Server
 
+Needs Python 3.15 (from python.org).
+
 ```powershell
 git clone https://github.com/q43b/telegram-flip-client.git
 cd telegram-flip-client
-python -m venv venv
+py -3.15 -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r server\requirements.txt
 cd server
@@ -117,12 +120,16 @@ server/
   run_server.py            Start script: first-run setup, Telegram login, then the server
   accounts.py              The accounts list (accounts.json)
   maintenance.py           Maintenance mode: add, remove, rename accounts; private/shared
+  module_loader.py         Server modules: loading them, module API 1
+  module_menu.py           Maintenance mode's Modules menu
+  tools/build_module.py    Builds a module's zip and .sha256 from modules/<id>/
   tools/check_server.py    Checks every read-only endpoint (statuses and shapes only)
   build_server.ps1         Builds the packaged Windows server (PyInstaller)
   packaging/README.txt     The README inside the server zip
   static/                  The earlier web client, still served at http://<PC>:9436/
   list_chats.py            One-off script: log in and list chats
   listen.py                One-off script: print incoming messages
+modules/                   Server modules' sources (helloworld: the demo)
 docs/screenshots/          Screenshots for this README
 PROJECT_BRIEF.md           Goals, decisions, milestones
 ```
