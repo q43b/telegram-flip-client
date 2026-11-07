@@ -17,6 +17,11 @@ $work = Join-Path $root "build\server"   # PyInstaller's working files (git-igno
 $out = Join-Path $work "dist\tgflip-server"
 $zip = Join-Path $root "dist\tgflip-server-$Version-win64.zip"
 
+# Modules' compiled libraries built for Python's stable ABI (abi3, docs/modules-plan.md) need
+# python3.dll, which PyInstaller leaves out when none of the server's own libraries use it
+$python3dll = Join-Path (& $python -c "import sys; print(sys.base_prefix)") "python3.dll"
+if (-not (Test-Path $python3dll)) { throw "python3.dll not found at $python3dll" }
+
 # One folder with tgflip-server.exe and its libraries. uvicorn loads parts of itself by
 # name at runtime, which PyInstaller cannot see, so all of it is collected explicitly.
 & $python -m PyInstaller --noconfirm --clean --onedir --console `
@@ -26,6 +31,7 @@ $zip = Join-Path $root "dist\tgflip-server-$Version-win64.zip"
     --hidden-import server `
     --collect-submodules uvicorn `
     --add-data "$server\static;static" `
+    --add-binary "$python3dll;." `
     (Join-Path $server "run_server.py")
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 
