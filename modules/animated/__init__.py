@@ -94,6 +94,10 @@ def animate(data, kind, size):
 
 
 def setup(context):
+    # Loaded right away (not at the first sticker), so a library that can't load on this PC
+    # shows as "failed: <reason>" when the server starts, instead of stickers silently staying still
+    import av  # noqa: F401
+    import rlottie_python  # noqa: F401
     context.provide("animated_stickers", 1)
     context.hook("sticker.animate")(animate)
 
