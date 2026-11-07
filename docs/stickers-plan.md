@@ -118,7 +118,9 @@ with still pictures. The app learns from the server whether the add-on is there.
   A new module version only; the server and the hook stay as they are.
 - **0.16.0-beta (done):** animated stickers play in chats. **0.16.1-beta (done; owner, 2026-11-07):**
   in the sticker picker's grids only the highlighted sticker plays (a whole playing pack is too heavy
-  for the phone); the others stay still. Next: the viewer.
+  for the phone); the others stay still. **0.16.2-beta (done):** the viewer plays them, at 384 px
+  (still stickers 512): 384 px made 595-985 KB Lotties and 71-593 KB videos in 0.8-3.5 s, 512 px
+  830-1356 KB and 110-833 KB in 1.3-5.9 s.
 
 ## Steps
 

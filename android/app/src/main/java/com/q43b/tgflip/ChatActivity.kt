@@ -74,7 +74,7 @@ class ChatActivity : AppCompatActivity() {
             VideoActivity.start(this, chatId, it.id, round = true)
         },
         MessageAction(R.string.action_view_sticker, isAvailable = { it.sticker != null && StickerSetting.showsPictures(this) }) {
-            ImageActivity.startSticker(this, chatId, it.id, it.sticker!!.id)
+            ImageActivity.startSticker(this, chatId, it.id, it.sticker!!.id, it.sticker.kind)
         },
         // Its pack in the sticker screen: send from it, or add it to my packs
         MessageAction(R.string.action_view_pack, isAvailable = { it.sticker != null }) {

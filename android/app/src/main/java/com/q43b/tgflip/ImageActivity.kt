@@ -3,9 +3,13 @@ package com.q43b.tgflip
 import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
-import android.graphics.Bitmap
+import android.annotation.SuppressLint
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.graphics.Matrix
+import android.graphics.drawable.Animatable
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -28,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.nio.ByteBuffer
 
 // A photo from a message, on its own screen, fitted to the display. Opened with
 // "View photo" in the message menu. The server shrinks photos to the phone's screen size
@@ -48,7 +53,10 @@ class ImageActivity : AppCompatActivity() {
     private var messageId = 0L
     private var stickerId = 0L  // set when showing a sticker instead of a photo
     private var downloading = false
-    private var bitmap: Bitmap? = null
+    // The photo or sticker shown: a still bitmap, or (Animated stickers, since 0.16.2-beta) a
+    // playing AnimatedImageDrawable; placed by its own width and height either way
+    private var picture: Drawable? = null
+    private var stickerKind: String? = null  // "static", "animated" or "video"
     private var mode = Mode.NONE
     private var zoom = 1f        // 1 = the whole picture fits the screen
     private var rotation = 0     // degrees clockwise: 0, 90, 180, 270
@@ -72,6 +80,7 @@ class ImageActivity : AppCompatActivity() {
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
         stickerId = intent.getLongExtra(EXTRA_STICKER_ID, 0)
+        stickerKind = intent.getStringExtra(EXTRA_KIND)
         image = findViewById(R.id.image)
         modeHint = findViewById(R.id.mode_hint)
         val status = findViewById<TextView>(R.id.status)
@@ -90,8 +99,7 @@ class ImageActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val loaded = withContext(Dispatchers.IO) {
                 try {
-                    val file = file(api, chatId, messageId)
-                    BitmapFactory.decodeFile(file.path)
+                    if (playsSticker()) animatedSticker(api) ?: still(api) else still(api)
                 } catch (e: IOException) {
                     null
                 }
@@ -99,8 +107,9 @@ class ImageActivity : AppCompatActivity() {
             if (loaded == null) {
                 status.setText(R.string.photo_not_loaded)
             } else {
-                bitmap = loaded
-                image.setImageBitmap(loaded)
+                picture = loaded
+                image.setImageDrawable(loaded)
+                (loaded as? Animatable)?.start()
                 status.visibility = View.GONE
                 applyMatrix()
                 softKeys.setRight(getString(R.string.soft_key_menu))
@@ -153,7 +162,7 @@ class ImageActivity : AppCompatActivity() {
     }
 
     private fun showMenu() {
-        if (bitmap == null) return
+        if (picture == null) return
         // A sticker has no full-size original to download
         val items = listOf(R.string.image_zoom, R.string.image_move, R.string.image_rotate) +
             if (stickerId == 0L) listOf(R.string.image_download) else emptyList()
@@ -237,24 +246,74 @@ class ImageActivity : AppCompatActivity() {
     // Places the picture: turned around its center, fitted to the screen, zoomed, then
     // moved. It can only be moved as far as it reaches past the screen's edges.
     private fun applyMatrix() {
-        val bitmap = bitmap ?: return
+        val picture = picture ?: return
+        val width = picture.intrinsicWidth
+        val height = picture.intrinsicHeight
         val viewW = image.width.toFloat()
         val viewH = image.height.toFloat()
         if (viewW == 0f || viewH == 0f) return
         val sideways = rotation % 180 != 0
-        val picW = (if (sideways) bitmap.height else bitmap.width).toFloat()
-        val picH = (if (sideways) bitmap.width else bitmap.height).toFloat()
+        val picW = (if (sideways) height else width).toFloat()
+        val picH = (if (sideways) width else height).toFloat()
         val scale = minOf(viewW / picW, viewH / picH) * zoom
         val maxX = maxOf(0f, (picW * scale - viewW) / 2)
         val maxY = maxOf(0f, (picH * scale - viewH) / 2)
         panX = panX.coerceIn(-maxX, maxX)
         panY = panY.coerceIn(-maxY, maxY)
         val matrix = Matrix()
-        matrix.postTranslate(-bitmap.width / 2f, -bitmap.height / 2f)
+        matrix.postTranslate(-width / 2f, -height / 2f)
         matrix.postRotate(rotation.toFloat())
         matrix.postScale(scale, scale)
         matrix.postTranslate(viewW / 2 + panX, viewH / 2 + panY)
         image.imageMatrix = matrix
+    }
+
+    override fun onStart() {
+        super.onStart()
+        (picture as? Animatable)?.start()
+    }
+
+    override fun onStop() {
+        (picture as? Animatable)?.stop()  // nothing plays while the viewer isn't shown
+        super.onStop()
+    }
+
+    // A moving sticker: Settings > Stickers > Animated (Android 9+), for an animated or video sticker
+    private fun playsSticker() = stickerId != 0L && StickerSetting.plays(this) &&
+        (stickerKind == "animated" || stickerKind == "video")
+
+    private fun still(api: ApiClient): Drawable? =
+        BitmapFactory.decodeFile(file(api, chatId, messageId).path)?.let { BitmapDrawable(resources, it) }
+
+    // On the IO thread: the saved moving copy (<id>_<ANIMATED_PX>_anim.webp), or one from the
+    // server, saved. null when the server sent a still picture (no animated stickers module, or
+    // an older server): then the still one at full size is shown instead.
+    @SuppressLint("NewApi")  // only with StickerSetting.plays, which needs Android 9
+    private fun animatedSticker(api: ApiClient): Drawable? {
+        val dir = MediaCache.folder(this, "stickers")
+        val file = File(dir, "${stickerId}_${ANIMATED_PX}_anim.webp")
+        val bytes = if (file.exists()) {
+            MediaCache.touch(file)
+            file.readBytes()
+        } else {
+            val answer = api.getSticker(stickerId, ANIMATED_PX, chatId, messageId, animated = true) ?: return null
+            if (answer.size < 12 || String(answer, 8, 4, Charsets.US_ASCII) != "WEBP") return null
+            dir.mkdirs()
+            val atomic = AtomicFile(file)
+            val out = atomic.startWrite()
+            try {
+                out.write(answer)
+                atomic.finishWrite(out)
+            } catch (e: IOException) {
+                atomic.failWrite(out)
+            }
+            answer
+        }
+        return try {
+            ImageDecoder.decodeDrawable(ImageDecoder.createSource(ByteBuffer.wrap(bytes)))
+        } catch (e: IOException) {
+            null  // not playable here: the still picture instead
+        }
     }
 
     // The saved copy, or a fresh download that is then saved. A sticker comes at its full
@@ -286,7 +345,11 @@ class ImageActivity : AppCompatActivity() {
         private const val EXTRA_CHAT_ID = "chat_id"
         private const val EXTRA_MESSAGE_ID = "message_id"
         private const val EXTRA_STICKER_ID = "sticker_id"
+        private const val EXTRA_KIND = "sticker_kind"
         private const val STICKER_PX = 512
+        // Moving stickers come smaller than still ones: 384 px on the 480 px wide screen is barely
+        // softer, and 30% lighter to make and play than 512 (measured, 2026-11-07)
+        private const val ANIMATED_PX = 384
         private const val SAVE_FOLDER = "TG Flip"
         private const val ZOOM_STEP = 1.25f
         private const val MAX_ZOOM = 6f
@@ -305,13 +368,15 @@ class ImageActivity : AppCompatActivity() {
             )
         }
 
-        // "View sticker": the same viewer, with the sticker's still picture at full size
-        fun startSticker(activity: Activity, chatId: Long, messageId: Long, stickerId: Long) {
+        // "View sticker": the same viewer, with the sticker's still picture at full size, or
+        // (kind animated/video, Animated stickers on) the moving one
+        fun startSticker(activity: Activity, chatId: Long, messageId: Long, stickerId: Long, kind: String? = null) {
             activity.startActivity(
                 Intent(activity, ImageActivity::class.java)
                     .putExtra(EXTRA_CHAT_ID, chatId)
                     .putExtra(EXTRA_MESSAGE_ID, messageId)
                     .putExtra(EXTRA_STICKER_ID, stickerId)
+                    .putExtra(EXTRA_KIND, kind)
             )
         }
     }
