@@ -248,7 +248,14 @@
     <string name="add_phrase">+ Add phrase</string>
     <string name="setting_quick_phrases">Quick phrases: %1$d</string>
     <string name="app_version">TG Flip %1$s \"%2$s\"</string>
-    <string name="log_title">Under the hood: server log</string>
+    <string name="under_the_hood_title">Under the hood</string>
+    <string name="under_the_hood_live_logs">Live logs</string>
+    <string name="under_the_hood_server_messages">Messages from the server</string>
+    <string name="server_messages_title">Messages from the server</string>
+    <string name="server_messages_loading">Asking the server…</string>
+    <string name="server_messages_none">No messages: this app understands everything the server tells it</string>
+    <string name="server_messages_old_server">This server is older than 0.14.0-beta and sends no messages here</string>
+    <string name="log_title">Live logs: the server\'s log</string>
     <string name="log_live">● Live sharing the log</string>
     <string name="log_connecting">Connecting to the server…</string>
     <string name="log_offline">Not connected, trying again…</string>

@@ -56,6 +56,14 @@
             android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="false" />
         <activity
+            android:name=".UnderTheHoodActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation"
+            android:exported="false" />
+        <activity
+            android:name=".ServerMessagesActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation"
+            android:exported="false" />
+        <activity
             android:name=".LogActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="false" />

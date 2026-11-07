@@ -31,7 +31,7 @@ Built step by step as a way to learn Git/GitHub, async Python, APIs, authenticat
 - Offline reading: the last chats, topics and messages are kept on the phone
 - Cache settings: how long media is kept and how much space it may take (presets or your own numbers), clearing it, an optional separate cache for stickers with its own limits, and deleting all saved data for a fresh start
 - Soft key labels in the phone's own soft key boxes on Japanese Android flip phones (NextFP, like my Kyocera); other phones get the app's own label bar. A Settings switch picks which one shows
-- On the version line in Settings: F2 opens that version's release notes, OK ("under the hood") shows the server's log, live
+- On the version line in Settings: F2 opens that version's release notes, OK opens "Under the hood", a developer mode: the server's live log, and messages from the server (newer servers can tell older apps things there as plain text, which the app can't receive any other way yet)
 - One server for several people: each Telegram account gets its own app token, chats and caches (accounts are added on the PC in Maintenance mode), and several phones can use the same account at the same time. A shared server shows its log only to the accounts you make admins
 - Connection status bar on every screen
 - Settings: server address per connection mode (local network, VPN, public internet over HTTPS), app token, theme (light, dark, follow phone)

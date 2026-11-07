@@ -20,8 +20,8 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONException
 
-// "Under the hood": the server's console log, live (WebSocket /logs). Opened with OK on
-// the version line in Settings. First the server's last lines arrive, then each new one as
+// Live logs: the server's console log, live (WebSocket /logs). Opened from "Under the hood"
+// (UnderTheHoodActivity, OK on the version line in Settings). First the server's last lines arrive, then each new one as
 // it is printed. The last row says whether it is live; while the bottom row is selected the
 // list follows new lines, otherwise it stays where it was. Reconnects by itself while open,
 // except on a shared server where this account isn't an admin (close code LOG_PRIVATE).

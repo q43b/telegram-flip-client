@@ -111,7 +111,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.13.1-beta"
+VERSION = "0.14.0-beta"
 CODENAME = "Almost Liquid"  # the era's name, printed after the version (from 0.13.0-beta)
 
 def shared_server():
@@ -986,6 +986,43 @@ async def server_info():
     shared = shared_server()
     return {"version": VERSION, "codename": CODENAME, "shared": shared,
             "log": not shared or account().admin}
+
+
+# Messages from the server: a fallback, so a newer server can still tell an older app what it
+# needs to know (since 0.14.0-beta). Every kind of information the server tells apps is a
+# notice, registered with @notice(kind): a function giving its text now (None = nothing to say).
+# Apps list the kinds they can receive in their own form in x-app-knows; /server_messages sends
+# the text of every other notice. So a kind gets its own endpoint or event for apps that know
+# it, and is registered here too, for the apps that don't yet.
+notices = []
+
+
+def notice(kind):
+    def register(text_of):
+        notices.append((kind, text_of))
+        return text_of
+    return register
+
+
+@notice("server_info")
+def server_info_text():
+    acc = account()
+    who = f'your account is "{acc.name}"' + (", an admin" if acc.admin else "")
+    mode = "Shared server" if shared_server() else "Private server"
+    return (f'TG Flip server {VERSION} "{CODENAME}". {mode}, {who}. '
+            f"Server cache: {describe_cache_setting()}.")
+
+
+@api.get("/server_messages")
+async def server_messages(x_app_knows: str = Header(default="")):
+    known = {kind.strip() for kind in x_app_knows.split(",") if kind.strip()}
+    messages = []
+    for kind, text_of in notices:
+        if kind not in known:
+            text = text_of()
+            if text:
+                messages.append({"kind": kind, "text": text})
+    return {"messages": messages}
 
 
 # ids: comma-separated chat ids (an app folder); then only those chats, ignoring limit

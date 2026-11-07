@@ -369,6 +369,23 @@ class ApiClient(baseUrl: String?, val token: String) {
     private fun topicParam(topicId: Long?, separator: String) =
         if (topicId == null) "" else "${separator}topic_id=$topicId"
 
+    // "Messages from the server" (Under the hood): the text of everything the server would
+    // tell this app that the app can't receive in its own form (see ServerMessages).
+    // null = a server older than 0.14.0-beta, which has no such messages.
+    fun getServerMessages(): List<String>? {
+        val request = Request.Builder().url(endpoint("/server_messages"))
+            .header("x-app-knows", ServerMessages.KNOWN_KINDS.joinToString(","))
+            .header("x-token", token)
+            .build()
+        http.newCall(request).execute().use { response ->
+            if (response.code == 401) throw BadTokenException()
+            if (response.code == 404) return null
+            if (!response.isSuccessful) throw IOException("Server error ${response.code}")
+            val list = JSONObject(response.body!!.string()).getJSONArray("messages")
+            return List(list.length()) { list.getJSONObject(it).getString("text") }
+        }
+    }
+
     private fun call(request: Request.Builder): String {
         http.newCall(request.header("x-token", token).build()).execute().use { response ->
             if (response.code == 401) throw BadTokenException()

@@ -50,7 +50,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         // The version line counts as the list's last row: Up on the first row goes to it,
         // Down from it goes back to the first row (Down on the last row reaches it anyway).
-        // OK on it opens "under the hood", the server's live log.
+        // OK on it opens "Under the hood", the developer mode (UnderTheHoodActivity).
         list.wrapsDown = false
         list.onUpFromTop = { version.requestFocus() }
         version.setOnKeyListener { _, keyCode, event ->
@@ -60,7 +60,7 @@ class SettingsActivity : AppCompatActivity() {
                     list.requestFocus()
                     list.setSelection(0)
                 }
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> if (fresh) LogActivity.start(this)
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> if (fresh) UnderTheHoodActivity.start(this)
                 else -> return@setOnKeyListener false
             }
             true
