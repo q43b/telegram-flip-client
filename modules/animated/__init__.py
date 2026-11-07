@@ -96,13 +96,25 @@ def at_rate(frames, times, end, fps):
     return kept, [max(20, d) for d in durations]
 
 
+def band_means(image):
+    """The average value of each channel, from the histogram (256 counts per channel). Like
+    ImageStat.Stat(image).mean, but ImageStat isn't in the packaged servers up to 1.0.0 (they
+    carry only the parts of Pillow the server itself imports), so the module can't use it."""
+    histogram = image.histogram()
+    means = []
+    for start in range(0, len(histogram), 256):
+        counts = histogram[start:start + 256]
+        means.append(sum(value * count for value, count in enumerate(counts)) / (sum(counts) or 1))
+    return means
+
+
 def merge_repeats(frames, durations):
     """A frame (almost) the same as the one before is dropped; the one before shows longer."""
-    from PIL import ImageChops, ImageStat
+    from PIL import ImageChops
     kept, kept_durations = [frames[0]], [durations[0]]
     for frame, duration in zip(frames[1:], durations[1:]):
         difference = ImageChops.difference(kept[-1].convert("RGBA"), frame.convert("RGBA"))
-        if max(ImageStat.Stat(difference).mean) < SAME_FRAME:
+        if max(band_means(difference)) < SAME_FRAME:
             kept_durations[-1] += duration
         else:
             kept.append(frame)

@@ -114,7 +114,8 @@ with still pictures. The app learns from the server whether the add-on is there.
   number of frames does (10 fps halves it, but looks choppy). WebP method 6 is far too slow.
 - **Done in module 1.1.0 (with server 0.16.3-beta): heavy stickers are slimmed on the server**: repeated
   frames merged, then 15/12/10 fps until under 150 KB at 144 px (scaled by area for other sizes);
-  chat Lotties 185/323 -> 94/165 KB. The original plan (owner, 2026-11-07):
+  chat Lotties 185/323 -> 94/165 KB. Module 1.1.1: 1.1.0 used Pillow's ImageStat, which the packaged
+  servers don't carry, so it only worked from source; the averages now come from histogram(). The original plan (owner, 2026-11-07):
   Ideas to try: a lower frame rate only for Lotties over a size budget, dropping frames that
   barely differ from the one before (longer durations instead), a per-sticker size budget.
   A new module version only; the server and the hook stay as they are.
