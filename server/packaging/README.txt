@@ -25,7 +25,9 @@ Later runs just start. Stop the server with Ctrl+C or by closing the window.
 
 Several people on one server
 ----------------------------
-Double-click "Maintenance mode.bat" (or run tgflip-server.exe --maintenancemode).
+Double-click "Maintenance mode.bat". It first makes a fresh copy of the program in the
+maintenance folder and runs the menu from there (so the program itself can be updated from it
+later); the maintenance folder can be deleted any time the menu isn't open.
 Its menu:
   a) Add an account: a name, then that person's phone number, the code Telegram
      sends them and their 2FA password, typed in here. It prints the app token for

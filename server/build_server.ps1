@@ -7,8 +7,8 @@ $ErrorActionPreference = "Stop"
 
 $server = $PSScriptRoot
 if (-not $Version) {
-    $line = Select-String -Path (Join-Path $server "server.py") -Pattern '^VERSION = "(.+)"' | Select-Object -First 1
-    if (-not $line) { throw "VERSION not found in server.py" }
+    $line = Select-String -Path (Join-Path $server "tgflip\settings.py") -Pattern '^VERSION = "(.+)"' | Select-Object -First 1
+    if (-not $line) { throw "VERSION not found in tgflip\settings.py" }
     $Version = $line.Matches[0].Groups[1].Value
 }
 $root = Split-Path $server
@@ -47,4 +47,8 @@ if ($secrets) { throw "Refusing to pack secrets: $($secrets.FullName -join ', ')
 New-Item -ItemType Directory -Force (Split-Path $zip) | Out-Null
 if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path $out -DestinationPath $zip
+# Its SHA-256 next to it (the same format as sha256sum), so updating can check the download
+$hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+Set-Content -Path "$zip.sha256" -Value "$hash  $(Split-Path $zip -Leaf)" -Encoding ascii
 Write-Host "Built $zip ($([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB)"
+Write-Host "sha256 $hash"

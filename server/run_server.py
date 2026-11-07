@@ -1,20 +1,39 @@
 """Starts the TG Flip server: first-run setup, Telegram login, then the web server.
 With --maintenancemode, first a menu for the accounts (maintenance.py).
 
+Packaged, maintenance mode runs from a copy of the program (docs/self-update-plan.md), so the
+program itself isn't in use and can be replaced: "Maintenance mode.bat" first runs
+`tgflip-server.exe --prepare-maintenance` (copies the exe and _internal into maintenance/ and
+exits), then `maintenance\tgflip-server.exe --maintenancemode --data <the folder>`. --data says
+where .env, the accounts, sessions, modules and caches are (default: next to the program).
+
 This is what the packaged tgflip-server.exe runs. For development, plain
 `uvicorn server:app --host 0.0.0.0` keeps working as before.
 """
 import asyncio
 import os
+import shutil
+import subprocess
 import sys
 
 from maintenance import ask_cache, ask_cache_size, generate_token
 
-# Settings (.env) and the Telegram session live next to the program,
-# not in whatever folder it happened to be started from
+# Settings (.env) and the Telegram sessions live next to the program (or in --data), not in
+# whatever folder it happened to be started from
 FROZEN = getattr(sys, "frozen", False)  # True inside the packaged exe
 BASE_DIR = os.path.dirname(sys.executable if FROZEN else os.path.abspath(__file__))
-ENV_FILE = os.path.join(BASE_DIR, ".env")
+
+
+def argument(name):
+    """The value after name on the command line, or None."""
+    args = sys.argv[1:]
+    return args[args.index(name) + 1] if name in args and args.index(name) + 1 < len(args) else None
+
+
+DATA_DIR = os.path.abspath(argument("--data") or BASE_DIR)
+FROM_COPY = DATA_DIR != BASE_DIR  # this is maintenance mode's copy (the real program is in DATA_DIR)
+ENV_FILE = os.path.join(DATA_DIR, ".env")
+MAINTENANCE_COPY = "maintenance"
 DEFAULT_PORT = 9436  # "q43b" in leet; 8000 is often taken by other programs
 
 
@@ -78,6 +97,35 @@ def first_run_setup():
     print()
 
 
+def prepare_maintenance():
+    """The packaged program copies itself (exe and _internal) into maintenance/, fresh each time,
+    so maintenance mode is always this version, and exits. Refused while the old copy is still
+    running (it waits for a server it started)."""
+    if not FROZEN:
+        sys.exit("--prepare-maintenance is for the packaged server; here, run_server.py --maintenancemode")
+    target = os.path.join(BASE_DIR, MAINTENANCE_COPY)
+    print("Preparing maintenance mode...")
+    try:
+        if os.path.exists(target):
+            shutil.rmtree(target)  # last time's copy: this version replaces it
+        os.makedirs(target)
+        shutil.copy2(sys.executable, target)
+        contents = os.path.join(BASE_DIR, "_internal")
+        shutil.copytree(contents, os.path.join(target, os.path.basename(contents)))
+    except OSError:
+        print("\nThe maintenance copy is still in use: close the running server (or the other\n"
+              "Maintenance mode window) first, then open Maintenance mode again.")
+        sys.exit(1)
+
+
+def start_real_server():
+    """From maintenance mode's copy: "s) Start the server" runs the real program, in this window,
+    and waits for it (so this copy's files stay in use, never the real program's)."""
+    program = os.path.join(DATA_DIR, os.path.basename(sys.executable))
+    print("Starting the server...\n")
+    return subprocess.call([program], cwd=DATA_DIR)
+
+
 async def serve(server, port, maintenance_mode):
     import uvicorn
 
@@ -90,6 +138,11 @@ async def serve(server, port, maintenance_mode):
             acc.client.session.close()
         if not await maintenance.menu(server):
             return
+        if FROM_COPY:
+            # Not from this copy: the real program (maybe just updated) runs the server
+            for acc in server.ACCOUNTS:
+                await acc.client.disconnect()
+            sys.exit(start_real_server())
         # The list may have changed in the menu
         server.ACCOUNTS[:] = [server.Account(**entry) for entry in accounts.load()]
         # Not loaded at import in this mode, so the menu could replace their files
@@ -108,7 +161,9 @@ async def serve(server, port, maintenance_mode):
 
 
 def main():
-    os.chdir(BASE_DIR)  # the Telegram session file is created here
+    if "--prepare-maintenance" in sys.argv[1:]:
+        return prepare_maintenance()
+    os.chdir(DATA_DIR)  # .env, accounts, the Telegram sessions, modules and caches are here
     if not os.path.exists(ENV_FILE):
         first_run_setup()
 
