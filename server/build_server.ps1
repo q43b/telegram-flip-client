@@ -25,10 +25,11 @@ if (-not (Test-Path $python3dll)) { throw "python3.dll not found at $python3dll"
 # One folder with tgflip-server.exe and its libraries. uvicorn loads parts of itself by
 # name at runtime, which PyInstaller cannot see, so all of it is collected explicitly.
 # Modules use the server's Pillow, and may need parts the server itself doesn't import
-# (the animated module's ImageStat and ImageChops were missing from 1.0.0's exe), so all of
-# Pillow is collected too.
+# (the animated module 1.1.0's ImageStat was missing from the exes up to 1.0.0), so all of
+# Pillow is collected too. The icon (since 1.1.0) is the owner's drawing, art/server-icon.png.
 & $python -m PyInstaller --noconfirm --clean --onedir --console `
     --name tgflip-server `
+    --icon (Join-Path $server "packaging\tgflip-server.ico") `
     --distpath (Join-Path $work "dist") --workpath (Join-Path $work "work") --specpath $work `
     --paths $server `
     --hidden-import server `
