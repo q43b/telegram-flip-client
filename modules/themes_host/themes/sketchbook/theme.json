@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "id": "sketchbook",
+  "name": "Sketchbook",
+  "version": "1.0.0",
+  "author": "q43b",
+  "palettes": {
+    "light": {"background": "#FBF8F0", "text": "#2B2B2B", "text_secondary": "#6B6B6B",
+              "bar": "#EFE9DA", "bar_text": "#2B2B2B", "focus": "#BFE6F2", "focus_outline": "#2B2B2B",
+              "divider": "#9AA0A6", "accent": "#C2410C"},
+    "dark": {"background": "#23221F", "text": "#EDE7D9", "text_secondary": "#A8A294",
+             "bar": "#2E2C28", "bar_text": "#EDE7D9", "focus": "#2F4F5A", "focus_outline": "#EDE7D9",
+             "divider": "#5E5A52", "accent": "#FF9F5A"}
+  },
+  "shapes": {"focus": "frame", "corners": "round", "outline_dp": 1.5, "divider": "dashed", "divider_dp": 1,
+             "active_tab": "box"},
+  "sizes": {"text_sp": 17, "small_sp": 14, "title_sp": 20, "row_padding_dp": 6},
+  "fonts": {"frame": "fonts/Neucha.ttf", "text": null}
+}

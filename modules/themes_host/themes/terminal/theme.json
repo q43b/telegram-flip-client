@@ -2,7 +2,7 @@
   "format": 1,
   "id": "terminal",
   "name": "Terminal",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "author": "q43b",
   "palettes": {
     "light": {"background": "#0E1410", "text": "#7CFC9A", "text_secondary": "#3FA35A",
@@ -14,5 +14,5 @@
   },
   "shapes": {"focus": "marker", "corners": "square", "divider": "none", "active_tab": "box"},
   "sizes": {"text_sp": 15, "row_padding_dp": 4},
-  "fonts": {"frame": null}
+  "fonts": {"frame": "fonts/PTMono.ttf", "text": null}
 }

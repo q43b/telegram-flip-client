@@ -1,0 +1,10 @@
+{
+  "id": "themes_host",
+  "name": "Themes host",
+  "version": "1.0.0",
+  "api": 1,
+  "min_server": "0.15.0-beta",
+  "python": "any",
+  "provides": {"themes_host": 1},
+  "description": "Hosts themes for TG Flip apps to download (app 1.2.1 or newer): Terminal, Classic and Sketchbook"
+}

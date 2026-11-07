@@ -1,6 +1,6 @@
 # Themes and the UI overhaul (plan)
 
-Status: planned 2026-11-07 at v1.1.0; steps 1-3 built in 1.2.0 (step 4, the server module, is next). Owner's choices: the default look is **Pixel** (like the
+Status: planned 2026-11-07 at v1.1.0; steps 1-3 built in 1.2.0, step 4 (themes_host 1.0.0 + app 1.2.1) built and checked on the Kyocera. Owner's choices: the default look is **Pixel** (like the
 app's icons: sky blue, dark outlines, a pixel font); other looks (Classic 2000s phone,
 Sketchbook, Terminal; mockups 2026-11-07) come later as **themes the server hands out**, through a
 `themes` server module, the same way modules work. Sizes must be changeable: the owner may want a
@@ -79,7 +79,24 @@ Press Start 2P (too wide for 480 px), VT323, Silkscreen, Micro 5, Jersey 10 (no 
    built-in + installed, a developer-only "Load a theme from a file" in Under the hood (to test
    the format before the module exists), and "Get themes from the server" shown only when
    `/server_info` capabilities has `themes`.
-4. **Later: `module-themes-v1.0.0`** (server): capability `themes` 1, `GET /modules/themes/list`
-   -> `{themes: [{id, name, version, size, sha256}]}`, `GET /modules/themes/<id>.zip`; ships
-   Classic, Sketchbook and Terminal. The app checks the sha256, refuses paths outside the theme
-   folder and sizes over 2 MB, and keeps the zip's folder as-is.
+4. **`module-themes_host-v1.0.0` + app 1.2.1** (planned 2026-11-07). The module is named
+   `themes_host` (owner): it only *hosts* themes for downloading; themes already on a phone keep
+   working with any server, with or without it.
+   - Capability `themes_host` 1 (not `themes`: app 1.2.0 looks for `themes` and has the old
+     `/modules/themes/...` paths built in, so it must not see a row that can't work).
+     `GET /modules/themes_host/list` -> `{themes: [{id, name, version, size, sha256}]}`,
+     `GET /modules/themes_host/<id>.zip`.
+   - Source: `modules/themes_host/` with `themes/<id>/` per theme (theme.json, fonts, license).
+     At startup each theme folder is checked with the app's rules (2 MB, 32 files, allowed
+     types, plain id, theme.json parses; a bad one is skipped with a log line) and zipped
+     reproducibly (sorted names, fixed timestamps), kept in memory, so a theme's sha256 only
+     changes when the theme does. Hosts any number of themes: one more is one more folder.
+   - Notice `themes_host` for apps that don't know it, without naming themes (more come later):
+     "This server hosts themes. Update TG Flip to 1.2.1 or newer to download them."
+   - Ships Terminal 1.0.0 (PT Mono for the frame), Classic 1.0.0 (the phone's font), Sketchbook
+     1.0.0 (a handwriting font with Cyrillic, picked by test-rendering).
+   - App 1.2.1: looks for `themes_host`, uses the new paths, lists `themes_host` in
+     `ServerMessages.KNOWN_KINDS`.
+5. **Later: themes_host 1.1.0**: adding themes on the server from Maintenance mode, through a
+   module settings menu inside Maintenance mode (modules configuring themselves; the owner will
+   design it).

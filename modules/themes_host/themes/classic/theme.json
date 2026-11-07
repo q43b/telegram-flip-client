@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "id": "classic",
+  "name": "Classic",
+  "version": "1.0.0",
+  "author": "q43b",
+  "palettes": {
+    "light": {"background": "#F4F6FA", "text": "#1B2A44", "text_secondary": "#5A6B85",
+              "bar": "#1F4E9C", "bar_text": "#FFFFFF", "focus": "#FFB000", "focus_outline": "#E08E00",
+              "divider": "#D5DCE8", "accent": "#D9480F"},
+    "dark": {"background": "#101826", "text": "#E6ECF5", "text_secondary": "#93A3BC",
+             "bar": "#1F4E9C", "bar_text": "#FFFFFF", "focus": "#8A5A00", "focus_outline": "#FFB000",
+             "divider": "#22314A", "accent": "#FF8A4C"}
+  },
+  "shapes": {"focus": "fill", "corners": "square", "outline_dp": 2, "divider": "solid", "divider_dp": 1,
+             "active_tab": "box"},
+  "sizes": {"text_sp": 16, "small_sp": 13, "title_sp": 17, "row_padding_dp": 6},
+  "fonts": {"frame": null, "text": null}
+}

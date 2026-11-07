@@ -126,7 +126,7 @@ class Theme(
 }
 
 // The theme in use, and the UI size. The built-in Pixel theme lives in assets/themes/pixel/;
-// installed themes (ThemeInstaller: from a file, or from the server's themes module) in
+// installed themes (ThemeInstaller: from a file, or from a server's themes_host module) in
 // filesDir/themes/<id>/, the same folder format. A chosen theme that's gone or broken falls
 // back to the built-in one.
 object Themes {

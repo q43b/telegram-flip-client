@@ -26,6 +26,7 @@ object ServerMessages {
         "modules",  // since 0.15.1-beta: Under the hood > Modules (ModulesActivity)
         "animated_stickers",  // since 0.16.0-beta: Settings > Stickers > Animated, played in chats
         "admin_messages",  // since 1.0.0: admin news, a dot trail to them (AdminMessages)
+        "themes_host",  // since 1.2.1: Appearance > Get themes from the server (ThemeMenu)
     )
 }
 

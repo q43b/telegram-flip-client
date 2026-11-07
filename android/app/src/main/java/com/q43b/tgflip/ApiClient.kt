@@ -440,9 +440,9 @@ class ApiClient(baseUrl: String?, val token: String) {
         }
     }
 
-    // The themes the server's themes module offers (capability "themes", docs/themes-plan.md)
+    // The themes the server's themes_host module hosts (capability "themes_host", docs/themes-plan.md)
     fun getThemes(): List<ServerTheme> {
-        val list = JSONObject(call(Request.Builder().url(endpoint("/modules/themes/list")))).getJSONArray("themes")
+        val list = JSONObject(call(Request.Builder().url(endpoint("/modules/themes_host/list")))).getJSONArray("themes")
         return List(list.length()) {
             val t = list.getJSONObject(it)
             ServerTheme(t.getString("id"), t.optString("name", t.getString("id")), t.optString("version"),
@@ -452,7 +452,7 @@ class ApiClient(baseUrl: String?, val token: String) {
 
     // A theme's zip (at most ThemeInstaller.MAX_BYTES; the list's size says so first)
     fun getThemeZip(id: String): ByteArray =
-        bytes(endpoint("/modules/themes/${Uri.encode(id)}.zip"), slow) ?: throw IOException("No such theme")
+        bytes(endpoint("/modules/themes_host/${Uri.encode(id)}.zip"), slow) ?: throw IOException("No such theme")
 
     private fun call(request: Request.Builder): String {
         http.newCall(request.header("x-token", token).build()).execute().use { response ->
@@ -483,5 +483,5 @@ data class ServerModule(val name: String, val version: String, val status: Strin
 data class ServerInfo(val version: String, val codename: String, val shared: Boolean, val log: Boolean,
                       val capabilities: Map<String, Int> = emptyMap())
 
-// GET /modules/themes/list: one theme the server offers; size in bytes, sha256 of its zip
+// GET /modules/themes_host/list: one theme the server hosts; size in bytes, sha256 of its zip
 data class ServerTheme(val id: String, val name: String, val version: String, val size: Long, val sha256: String)

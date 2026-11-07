@@ -13,11 +13,13 @@ import java.io.IOException
 
 // The theme menus (docs/themes-plan.md step 3): Appearance > Theme (pick one; an installed one
 // can also be removed), Appearance > Get themes from the server (only when the server's modules
-// provide "themes"), and Under the hood > Load a theme from a file.
+// provide "themes_host", the themes_host module), and Under the hood > Load a theme from a file.
+// 1.2.0 looked for "themes" at /modules/themes/; since 1.2.1 the module is named themes_host
+// (it hosts themes; themes already on the phone work with any server).
 // Changing the theme starts the app over at the chat list and comes back to `back` (the screen
 // the change was made on): screens read some colors once, when they open.
 object ThemeMenu {
-    const val CAPABILITY = "themes"
+    const val CAPABILITY = "themes_host"
 
     fun pick(activity: AppCompatActivity, back: List<Intent>) {
         val current = Themes.current(activity)
@@ -84,7 +86,7 @@ object ThemeMenu {
         }
     }
 
-    // The server's themes (its themes module); installed ones are marked with their version
+    // The server's themes (its themes_host module); installed ones are marked with their version
     fun fromServer(activity: AppCompatActivity, back: List<Intent>) {
         val settings = ServerSettings(activity)
         val api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
