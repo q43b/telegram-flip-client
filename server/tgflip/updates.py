@@ -5,6 +5,7 @@ module-<id>-v<version>. Only releases that have their .sha256 are offered (from 
 and pre-releases only when asked for.
 """
 import json
+import re
 import urllib.request
 
 from tgflip.settings import app_version_key
@@ -20,6 +21,7 @@ class UpdateError(Exception):
 class Release:
     def __init__(self, data, version, zip_name):
         self.tag = data["tag_name"]
+        self.title = data.get("name") or self.tag
         self.version = version
         self.prerelease = bool(data.get("prerelease"))
         self.notes = (data.get("body") or "").strip()
@@ -73,6 +75,14 @@ def newest_server(current, include_prereleases=False, found=None):
 def newest_module(module_id, current, include_prereleases=False, found=None):
     return newest(f"module-{module_id}-v", lambda v: f"tgflip-module-{module_id}-{v}.zip",
                   current, include_prereleases, found)
+
+
+MODULE_TAG = re.compile(r"module-([a-z0-9_]+)-v(.+)")  # module ids: lowercase letters, digits and _
+
+
+def module_ids(found):
+    """Every module id that has a release (any version), from the tags."""
+    return sorted({m.group(1) for data in found if (m := MODULE_TAG.fullmatch(data.get("tag_name", "")))})
 
 
 def download(url, path, progress=None, timeout=60):

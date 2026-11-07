@@ -212,19 +212,57 @@ def check_updates(server):
             print("    " + line)
         if not yes(f"Update {manifest.get('name', module_id)} to {release.version}"):
             continue
-        downloads = "module-download"
+        download_and_install(server, release, replace=True)
+
+
+def get_new(server):
+    """Modules released on GitHub that aren't installed here: pick one, read its notes, install
+    it (stable releases only, unless pre-releases are asked for)."""
+    from tgflip import updates
+    have = {i for i, _, _ in installed(server)}
+    include = yes("Include pre-releases?")
+    print("  Asking GitHub...")
+    try:
+        found = updates.releases()
+    except updates.UpdateError as e:
+        print(f"  {e}.")
+        return
+    offered = [r for r in (updates.newest_module(i, "0.0.0", include, found)
+                           for i in updates.module_ids(found) if i not in have) if r]
+    if not offered:
+        print("  Every module on GitHub is installed already" + ("." if include else " (stable releases)."))
+        return
+    for n, release in enumerate(offered, 1):
+        print(f"  {n}) {release.title} ({release.size / 1024 / 1024:.1f} MB)")
+    choice = ask("Which one (number, empty = none)")
+    if not choice.isdigit() or not 1 <= int(choice) <= len(offered):
+        return
+    release = offered[int(choice) - 1]
+    print(f"\n  {release.title}:")
+    for line in release.notes.splitlines()[:8]:
+        print("    " + line)
+    if yes(f"Install {release.title}"):
+        download_and_install(server, release, replace=False)
+
+
+def download_and_install(server, release, replace):
+    """A module release from GitHub: its .sha256 first, then the zip, then install_zip (which
+    checks the zip against it, then the manifest). Downloads go into module-download/ and are
+    removed afterwards."""
+    from tgflip import updates
+    downloads = "module-download"
+    shutil.rmtree(downloads, ignore_errors=True)
+    os.makedirs(downloads)
+    path = os.path.join(downloads, release.zip_name)
+    try:
+        updates.download(release.sha256_url, path + ".sha256")
+        print(f"  Downloading {release.size / 1024 / 1024:.1f} MB...")
+        updates.download(release.zip_url, path)
+        install_zip(server, path, replace_without_asking=replace)
+    except updates.UpdateError as e:
+        print(f"  {e}. Not installed.")
+    finally:
         shutil.rmtree(downloads, ignore_errors=True)
-        os.makedirs(downloads)
-        path = os.path.join(downloads, release.zip_name)
-        try:
-            updates.download(release.sha256_url, path + ".sha256")
-            print(f"  Downloading {release.size / 1024 / 1024:.1f} MB...")
-            updates.download(release.zip_url, path)
-            install_zip(server, path, replace_without_asking=True)
-        except updates.UpdateError as e:
-            print(f"  {e}. Not updated.")
-        finally:
-            shutil.rmtree(downloads, ignore_errors=True)
 
 
 def menu(server):
@@ -234,6 +272,7 @@ def menu(server):
         print("  o) Switch a module on or off")
         print("  d) Remove a module")
         print("  c) Check for module updates")
+        print("  g) Get a new module from GitHub")
         print("  b) Back")
         choice = ask("Choose").lower()
         if choice == "i":
@@ -242,6 +281,8 @@ def menu(server):
             switch(server)
         elif choice == "c":
             check_updates(server)
+        elif choice == "g":
+            get_new(server)
         elif choice == "d":
             remove(server)
         elif choice in ("b", ""):
