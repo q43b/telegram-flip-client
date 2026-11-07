@@ -23,6 +23,7 @@ import java.io.IOException
 object ServerMessages {
     val KNOWN_KINDS = listOf(
         "server_info",  // since 0.14.1-beta: the first line of Under the hood (UnderTheHoodActivity)
+        "modules",  // since 0.15.1-beta: Under the hood > Modules (ModulesActivity)
     )
 }
 

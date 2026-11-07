@@ -383,6 +383,24 @@ class ApiClient(baseUrl: String?, val token: String) {
         }
     }
 
+    // The server's modules (since 0.15.1-beta the app shows them itself, so "modules" is in
+    // ServerMessages.KNOWN_KINDS). null = a server older than 0.15.0-beta, which has none.
+    fun getModules(): List<ServerModule>? {
+        val request = Request.Builder().url(endpoint("/modules")).header("x-token", token).build()
+        http.newCall(request).execute().use { response ->
+            if (response.code == 401) throw BadTokenException()
+            if (response.code == 404) return null
+            if (!response.isSuccessful) throw IOException("Server error ${response.code}")
+            val list = JSONObject(response.body!!.string()).getJSONArray("modules")
+            return List(list.length()) {
+                val m = list.getJSONObject(it)
+                val provides = m.optJSONObject("provides")
+                ServerModule(m.getString("name"), m.getString("version"), m.getString("status"),
+                    provides?.keys()?.asSequence()?.toList().orEmpty())
+            }
+        }
+    }
+
     // "Messages from the server" (Under the hood): the text of everything the server would
     // tell this app that the app can't receive in its own form (see ServerMessages).
     // null = a server older than 0.14.0-beta, which has no such messages.
@@ -422,4 +440,7 @@ class NoServerException : IOException("No server set")
 data class DeleteOptions(val forMe: Boolean, val forEveryone: Boolean)
 
 // GET /server_info: log = this account's app may watch the live log
+// GET /modules: status is "on", "off" or "failed: <reason>"; provides = capability names
+data class ServerModule(val name: String, val version: String, val status: String, val provides: List<String>)
+
 data class ServerInfo(val version: String, val codename: String, val shared: Boolean, val log: Boolean)

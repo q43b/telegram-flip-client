@@ -1,8 +1,8 @@
 # Plan: server modules
 
-Status: **0.15.0-beta done** (the loader, module API 1, `GET /modules`, `capabilities`, the
+Status: **0.15.0-beta and 0.15.1-beta done** (the loader, module API 1, `GET /modules`, `capabilities`, the
 `modules` notice, maintenance "x) Modules", `server/tools/build_module.py`, the demo module
-**helloworld**). Next: 0.15.1 (the app's Modules row), 0.16.0 (animated stickers). Approach chosen
+**helloworld**; 0.15.1: the app's Modules row). Next: 0.16.0 (animated stickers). Approach chosen
 by the owner: **in-process Python modules** ("approach 1"), behind a small versioned module API.
 How it is built now: CLAUDE.md, "Modules".
 

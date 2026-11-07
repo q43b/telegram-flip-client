@@ -23,8 +23,8 @@ import java.io.IOException
 // "Under the hood", the developer mode: tools for looking inside the app and the server.
 // Opened with OK on the version line in Settings. The first row is about the server
 // (/server_info, since 0.14.1-beta; OK asks again), then one row per tool: Live logs (the
-// server's console log, LogActivity) and Messages from the server (ServerMessagesActivity);
-// more to come. Since 0.14.2-beta the messages row is highlighted while the server has
+// server's console log, LogActivity), Messages from the server (ServerMessagesActivity) and,
+// since 0.15.1-beta, Modules (the server's modules, ModulesActivity); more to come. Since 0.14.2-beta the messages row is highlighted while the server has
 // messages for this app ("● Messages from the server (2)", bold; counted on every return to
 // this screen). Left or Back closes it.
 // New tools: add a row to rows().
@@ -118,6 +118,7 @@ class UnderTheHoodActivity : AppCompatActivity() {
         SettingRow(getString(R.string.under_the_hood_live_logs)) { LogActivity.start(this) },
         SettingRow(getString(R.string.under_the_hood_server_messages)) { ServerMessagesActivity.start(this) }
             .also { messagesRow = it },
+        SettingRow(getString(R.string.under_the_hood_modules)) { ModulesActivity.start(this) },
     )
 
     // Left goes back, like the screens of Settings

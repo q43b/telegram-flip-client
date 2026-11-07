@@ -251,6 +251,11 @@
     <string name="under_the_hood_title">Under the hood</string>
     <string name="under_the_hood_live_logs">Live logs</string>
     <string name="under_the_hood_server_messages">Messages from the server</string>
+    <string name="under_the_hood_modules">Modules</string>
+    <string name="modules_title">Modules on the server</string>
+    <string name="modules_provides">provides: %1$s</string>
+    <string name="modules_none">No modules installed on this server (they are added on the PC, in Maintenance mode)</string>
+    <string name="modules_old_server">This server is older than 0.15.0-beta and has no modules</string>
     <string name="under_the_hood_server_messages_waiting">● Messages from the server (%1$d)</string>
     <string name="under_the_hood_server">🖥 Server %1$s \"%2$s\" · %3$s</string>
     <string name="under_the_hood_private">private</string>
