@@ -160,10 +160,25 @@ async def serve(server, port, maintenance_mode):
     await uvicorn.Server(config).serve()
 
 
+def swap_in_new_bat():
+    """An update leaves its new Maintenance mode.bat waiting as .bat.new (the old one was running
+    then, and Windows reads a running bat line by line); the server puts it in place."""
+    waiting = os.path.join(DATA_DIR, "Maintenance mode.bat.new")
+    if os.path.exists(waiting):
+        try:
+            os.replace(waiting, os.path.join(DATA_DIR, "Maintenance mode.bat"))
+        except OSError:
+            pass  # it's being run right now: next time
+
+
 def main():
     if "--prepare-maintenance" in sys.argv[1:]:
         return prepare_maintenance()
     os.chdir(DATA_DIR)  # .env, accounts, the Telegram sessions, modules and caches are here
+    if FROM_COPY:
+        os.environ["TGFLIP_MAINTENANCE_COPY"] = "1"  # update_menu: the real program may be replaced
+    elif FROZEN:
+        swap_in_new_bat()
     if not os.path.exists(ENV_FILE):
         first_run_setup()
 

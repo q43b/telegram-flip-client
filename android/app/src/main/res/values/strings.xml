@@ -266,6 +266,7 @@
     <string name="under_the_hood_server_asking">🖥 Server: asking…</string>
     <string name="under_the_hood_server_old">🖥 Server older than 0.13.0-beta</string>
     <string name="server_messages_title">Messages from the server</string>
+    <string name="admin_message_prefix">★ For admins: %1$s</string>
     <string name="server_messages_loading">Asking the server…</string>
     <string name="server_messages_none">No messages: this app understands everything the server tells it</string>
     <string name="server_messages_old_server">This server is older than 0.14.0-beta and sends no messages here</string>

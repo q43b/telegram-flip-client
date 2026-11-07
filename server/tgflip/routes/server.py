@@ -1,4 +1,5 @@
-"""About the server itself: /server_info, /modules and the fallback channel /server_messages.
+"""About the server itself: /server_info, /modules, the fallback channel /server_messages and
+the admin channel /admin_messages.
 """
 from fastapi import Header
 import module_loader
@@ -6,7 +7,7 @@ import module_loader
 from tgflip.account import account
 from tgflip.api import api
 from tgflip.cache import describe_cache_setting
-from tgflip.notices import notice, notices
+from tgflip.notices import admin_kinds, notice, notices
 from tgflip.settings import CODENAME, VERSION, shared_server
 
 
@@ -45,13 +46,36 @@ def modules_text():
     return f"Modules on this server: {listed}."
 
 
-@api.get("/server_messages")
-async def server_messages(x_app_knows: str = Header(default="")):
-    known = {kind.strip() for kind in x_app_knows.split(",") if kind.strip()}
+def notice_texts(known, admin):
+    """The texts of the notices whose kind the app doesn't know: the ordinary ones (admin=False)
+    or the admin ones (admin=True). Admin notices only for admin accounts."""
+    if admin and not account().admin:
+        return []
     messages = []
     for kind, text_of in notices:
-        if kind not in known:
+        if kind not in known and (kind in admin_kinds) == admin:
             text = text_of()
             if text:
                 messages.append({"kind": kind, "text": text})
+    return messages
+
+
+def known_kinds(x_app_knows):
+    return {kind.strip() for kind in x_app_knows.split(",") if kind.strip()}
+
+
+@api.get("/server_messages")
+async def server_messages(x_app_knows: str = Header(default="")):
+    known = known_kinds(x_app_knows)
+    messages = notice_texts(known, admin=False)
+    # Apps that don't know the admin channel get its messages here, like any other notice
+    if "admin_messages" not in known:
+        messages += notice_texts(known, admin=True)
     return {"messages": messages}
+
+
+# The admin channel (since 1.0.0): admin-only news, which apps that know "admin_messages"
+# show right away (a notification), not only in Under the hood. Empty for other accounts.
+@api.get("/admin_messages")
+async def admin_messages(x_app_knows: str = Header(default="")):
+    return {"messages": notice_texts(known_kinds(x_app_knows), admin=True)}

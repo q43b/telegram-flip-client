@@ -16,7 +16,7 @@ from tgflip.settings import CODENAME, VERSION, shared_server
 from tgflip.telegram import connect_telegram, watchdog
 # Loaded for what they register: the endpoints (on api and live_router) and the Telegram
 # update handlers (@on), which lifespan then registers on every account
-from tgflip import live  # noqa: F401
+from tgflip import live, update_check  # noqa: F401
 from tgflip.routes import chats, live_connections, media, reactions, server, stickers  # noqa: F401
 
 
@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
     print(f"Server cache: {describe_cache_setting()}")
     clean_caches()
     cleaner = asyncio.create_task(keep_caches_clean())
+    update_checker = asyncio.create_task(update_check.keep_checking())  # in the background
     for acc in ACCOUNTS:
         use_account(acc)  # the tasks started here keep it (they copy the context)
         register_handlers(acc)
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI):
     yield
     await module_loader.stop_all()
     cleaner.cancel()
+    update_checker.cancel()
     for acc in ACCOUNTS:
         acc.watchdog.cancel()
         await acc.client.disconnect()

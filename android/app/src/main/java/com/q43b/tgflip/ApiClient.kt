@@ -406,6 +406,22 @@ class ApiClient(baseUrl: String?, val token: String) {
         }
     }
 
+    // The admin channel (since 1.0.0, AdminMessages): admin-only texts, empty for other
+    // accounts and from servers older than 1.0.0 (404)
+    fun getAdminMessages(): List<String> {
+        val request = Request.Builder().url(endpoint("/admin_messages"))
+            .header("x-app-knows", ServerMessages.KNOWN_KINDS.joinToString(","))
+            .header("x-token", token)
+            .build()
+        http.newCall(request).execute().use { response ->
+            if (response.code == 401) throw BadTokenException()
+            if (response.code == 404) return emptyList()
+            if (!response.isSuccessful) throw IOException("Server error ${response.code}")
+            val list = JSONObject(response.body!!.string()).getJSONArray("messages")
+            return List(list.length()) { list.getJSONObject(it).getString("text") }
+        }
+    }
+
     // "Messages from the server" (Under the hood): the text of everything the server would
     // tell this app that the app can't receive in its own form (see ServerMessages).
     // null = a server older than 0.14.0-beta, which has no such messages.

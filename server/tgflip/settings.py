@@ -11,10 +11,10 @@ load_dotenv()
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.17.0-beta"
+VERSION = "1.0.0"
 
 
-CODENAME = "Almost Liquid"  # the era's name, printed after the version (from 0.13.0-beta)
+CODENAME = "Melted"  # the era's name, printed after the version (from 0.13.0-beta; Melted from 1.0.0)
 
 
 def shared_server():

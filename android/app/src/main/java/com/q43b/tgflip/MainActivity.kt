@@ -159,6 +159,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         visible = true
+        showSettingsDot()  // back from Settings, where they may have been read
         start()
     }
 
@@ -536,6 +537,8 @@ class MainActivity : AppCompatActivity() {
         if (state == LiveConnection.Status.CONNECTED) {
             if (wasConnected) loadChats(quiet = true)
             wasConnected = true
+            // Admin news: a dot on the Settings tab leads the way to them
+            api?.let { AdminMessages.check(this, it, lifecycleScope) { showSettingsDot() } }
         }
     }
 

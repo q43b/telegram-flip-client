@@ -147,4 +147,4 @@ two apps on one account (both get every live event).
 
 - The optional animated-stickers add-on (docs/stickers-plan.md, "Animated mode"), as another
   item in the same maintenance menu; server-wide (one ffmpeg serves every account).
-- Version eras: 0.13.0-beta on is "Almost Liquid"; "Melted" is reserved for v1.0.0.
+- Version eras: 0.13.0-beta to 0.17.0-beta "Almost Liquid"; from v1.0.0 "Melted".

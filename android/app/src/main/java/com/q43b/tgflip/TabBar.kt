@@ -19,4 +19,10 @@ fun Activity.setUpTabBar(active: Tab, openOther: () -> Unit) {
         view.setBackgroundResource(if (isActive) R.color.tab_active else android.R.color.transparent)
         view.setOnClickListener(if (isActive) null else { _ -> openOther() })
     }
+    showSettingsDot()
+}
+
+// "Settings ●" while the server has admin messages not yet read (AdminMessages)
+fun Activity.showSettingsDot() {
+    findViewById<TextView>(R.id.tab_settings).text = AdminMessages.withDot(this, getString(R.string.tab_settings))
 }

@@ -110,6 +110,11 @@ def install(server):
     if not os.path.isfile(path):
         print("  No such file.")
         return
+    install_zip(server, path)
+
+
+def install_zip(server, path, replace_without_asking=False):
+    """Installs the module in the zip at path (its .sha256 next to it), after the checks."""
     if not sha256_ok(path):  # first: a damaged or changed zip isn't even opened
         return
     try:
@@ -117,7 +122,7 @@ def install(server):
             module_id, text = zip_module(z)
             manifest = ml.check_manifest(text, module_id, server.VERSION, server.app_version_key)
             target = os.path.join(ml.MODULES_FOLDER, module_id)
-            if os.path.exists(target):
+            if os.path.exists(target) and not replace_without_asking:
                 old = next((m for i, m, _ in installed(server) if i == module_id), None)
                 old_version = old.get("version", "?") if old else "a version that can't load"
                 if not yes(f"{manifest.get('name', module_id)} {old_version} is installed. "
@@ -181,18 +186,62 @@ def remove(server):
     print(f"Removed {module_id}.")
 
 
+def check_updates(server):
+    """Newer releases of the installed modules (module-<id>-v<version>), downloaded and installed
+    through install_zip, one by one, each after asking."""
+    from tgflip import updates
+    modules = [(i, m) for i, m, _ in installed(server) if m]
+    if not modules:
+        print("  No modules installed.")
+        return
+    include = yes("Include pre-releases?")
+    print("  Asking GitHub...")
+    try:
+        found = updates.releases()
+    except updates.UpdateError as e:
+        print(f"  {e}.")
+        return
+    newer = [(i, m, updates.newest_module(i, m.get("version", "0.0.0"), include, found)) for i, m in modules]
+    newer = [(i, m, r) for i, m, r in newer if r]
+    if not newer:
+        print("  The installed modules are the newest" + ("" if include else " stable") + " versions.")
+        return
+    for module_id, manifest, release in newer:
+        print(f"\n  {manifest.get('name', module_id)}: {manifest.get('version')} -> {release.version}. What's new:")
+        for line in release.notes.splitlines()[:8]:
+            print("    " + line)
+        if not yes(f"Update {manifest.get('name', module_id)} to {release.version}"):
+            continue
+        downloads = "module-download"
+        shutil.rmtree(downloads, ignore_errors=True)
+        os.makedirs(downloads)
+        path = os.path.join(downloads, release.zip_name)
+        try:
+            updates.download(release.sha256_url, path + ".sha256")
+            print(f"  Downloading {release.size / 1024 / 1024:.1f} MB...")
+            updates.download(release.zip_url, path)
+            install_zip(server, path, replace_without_asking=True)
+        except updates.UpdateError as e:
+            print(f"  {e}. Not updated.")
+        finally:
+            shutil.rmtree(downloads, ignore_errors=True)
+
+
 def menu(server):
     while True:
         show(server)
         print("\n  i) Install a module from a zip")
         print("  o) Switch a module on or off")
         print("  d) Remove a module")
+        print("  c) Check for module updates")
         print("  b) Back")
         choice = ask("Choose").lower()
         if choice == "i":
             install(server)
         elif choice == "o":
             switch(server)
+        elif choice == "c":
+            check_updates(server)
         elif choice == "d":
             remove(server)
         elif choice in ("b", ""):

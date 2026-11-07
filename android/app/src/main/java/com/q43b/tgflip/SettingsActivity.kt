@@ -70,6 +70,15 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     // Left closes, mirroring Right that opened it. F2 on the version line: release notes.
+    // The dots for unread admin messages (AdminMessages): on the tab and on the version line,
+    // which leads on to Under the hood
+    override fun onResume() {
+        super.onResume()
+        showSettingsDot()
+        version.text = AdminMessages.withDot(this,
+            getString(R.string.app_version, BuildConfig.VERSION_NAME, BuildConfig.CODENAME))
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             if (event.action == KeyEvent.ACTION_UP) finish()

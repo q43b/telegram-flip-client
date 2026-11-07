@@ -1,8 +1,9 @@
 # Plan: the server updates itself (through maintenance mode)
 
-Status: **parts 1 and 2 done (0.17.0-beta)**: the split into server/tgflip and maintenance running
-from a copy of the program; next part 3 together with the admin channel (one version, 0.18.0: they belong together). Owner,
-2026-11-07.
+Status: **done**: parts 1 and 2 in 0.17.0-beta (the split, maintenance from a copy), part 3 and the
+admin channel in 1.0.0 ("Melted"; first planned as 0.18.0). How it is built now: CLAUDE.md ("Self-update", "The admin channel").
+The first real self-update: 1.0.0 to the release after it. Updating from 0.17.0 to 1.0.0 is still
+by hand (0.17.0's menu has no u). Owner, 2026-11-07.
 
 ## Why
 
@@ -107,8 +108,8 @@ having to open Under the hood:
   every other app gets them in /server_messages as before. So: **admin channel, falling back to
   the fallback channel** for older apps.
 - **App:** knows `admin_messages`; for admin accounts it checks them (on start, and when the live
-  connection comes back) and shows a **notification right away**, without opening Under the hood:
-  a dialog or a line on the chat list the first time each message is seen (remembered, so it
-  isn't shown again and again), which can lead to the message itself.
-- First admin message: `server_update` ("A newer server version is out: 0.18.1-beta. Update it
+  connection comes back). No pop-up (owner): unread ones show a dot on the Settings tab, then on the
+  version line, then on Messages from the server in Under the hood, where they are listed and
+  become read.
+- First admin message: `server_update` ("A newer server version is out: 1.0.1. Update it
   in Maintenance mode on the PC").

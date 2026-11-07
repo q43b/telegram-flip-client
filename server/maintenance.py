@@ -12,6 +12,7 @@ from dotenv import set_key
 
 import accounts
 import module_menu
+import update_menu
 
 ENV_FILE = ".env"  # run_server.py works in the program's folder
 
@@ -230,6 +231,8 @@ async def menu(server):
     """The menu. True = start the server afterwards, False = quit."""
     entries = accounts.load()
     print("\nTG Flip server: maintenance mode")
+    if os.environ.get("TGFLIP_MAINTENANCE_COPY"):
+        update_menu.repair()  # an update cut off halfway: the version from before it, back in place
     while True:
         show(entries)
         print("\n  a) Add an account")
@@ -239,6 +242,7 @@ async def menu(server):
         print(f"  p) Private or shared server (now: {'shared' if server.shared_server() else 'private'})")
         print(f"  c) Server cache (now: {server.describe_cache_setting()})")
         print("  x) Modules")
+        print("  u) Update the server")
         print("  s) Start the server")
         print("  q) Quit")
         choice = ask("Choose").lower()
@@ -254,6 +258,8 @@ async def menu(server):
             toggle_mode(server)
         elif choice == "c":
             change_cache(server)
+        elif choice == "u":
+            update_menu.menu()
         elif choice == "x":
             module_menu.menu(server)
         elif choice == "s":

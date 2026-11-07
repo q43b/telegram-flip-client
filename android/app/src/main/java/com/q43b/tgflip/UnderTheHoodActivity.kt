@@ -78,7 +78,9 @@ class UnderTheHoodActivity : AppCompatActivity() {
         val api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
         lifecycleScope.launch {
             messageCount = try {
-                withContext(Dispatchers.IO) { api.getServerMessages() }?.size ?: 0
+                // the server's messages for this app, and the admin messages not yet read
+                (withContext(Dispatchers.IO) { api.getServerMessages() }?.size ?: 0) +
+                    AdminMessages.unread(this@UnderTheHoodActivity)
             } catch (e: IOException) {
                 0
             }
@@ -86,7 +88,7 @@ class UnderTheHoodActivity : AppCompatActivity() {
         }
     }
 
-    // "Server 0.14.0-beta "Almost Liquid" · private"
+    // "Server 1.0.0 "Melted" · private"
     private fun loadServerInfo() {
         serverLine = getString(R.string.under_the_hood_server_asking)
         redraw()

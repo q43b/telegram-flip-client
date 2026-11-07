@@ -25,6 +25,7 @@ object ServerMessages {
         "server_info",  // since 0.14.1-beta: the first line of Under the hood (UnderTheHoodActivity)
         "modules",  // since 0.15.1-beta: Under the hood > Modules (ModulesActivity)
         "animated_stickers",  // since 0.16.0-beta: Settings > Stickers > Animated, played in chats
+        "admin_messages",  // since 1.0.0: admin news, a dot trail to them (AdminMessages)
     )
 }
 
@@ -56,7 +57,13 @@ class ServerMessagesActivity : AppCompatActivity() {
         val api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
         lifecycleScope.launch {
             val shown = try {
-                val messages = withContext(Dispatchers.IO) { api.getServerMessages() }
+                val messages = withContext(Dispatchers.IO) {
+                    api.getServerMessages()?.let { others -> api.getAdminMessages() to others }
+                }?.let { (admin, others) ->
+                    // Shown here: the admin ones are read now, and their dots go
+                    AdminMessages.markRead(this@ServerMessagesActivity, admin)
+                    admin.map { getString(R.string.admin_message_prefix, it) } + others
+                }
                 when {
                     messages == null -> listOf(getString(R.string.server_messages_old_server))
                     messages.isEmpty() -> listOf(getString(R.string.server_messages_none))

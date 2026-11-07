@@ -48,6 +48,12 @@ Its menu:
      Installed modules live in the modules folder here. A module is a program
      with access to every account on this server: only install modules from
      the TG Flip releases page.
+  u) Update the server: finds a newer version on GitHub (pre-releases only if
+     you say so), or installs a zip you downloaded; checks it against its
+     .sha256, puts it in place and keeps the old version for r) Roll back.
+     Your settings, accounts, modules and caches are never touched. Close
+     the running server first. When a newer version is out, the server says
+     so in its log, and admin accounts' apps show a dot on Settings.
   s) Start the server, q) Quit
 Each account has its own app token, Telegram login (tg_session*.session) and
 cached media. The list is in accounts.json.
