@@ -112,7 +112,9 @@ with still pictures. The app learns from the server whether the add-on is there.
   (often smaller than the WebM), made in 0.1-1.1 s; Lottie stickers 185-323 KB, made in about
   0.5 s. Transparency is kept for both. The WebP quality setting barely changes the size; the
   number of frames does (10 fps halves it, but looks choppy). WebP method 6 is far too slow.
-- **Later module version (owner, 2026-11-07): optimize heavy Lottie stickers on the server.**
+- **Done in module 1.1.0 (with server 0.16.3-beta): heavy stickers are slimmed on the server**: repeated
+  frames merged, then 15/12/10 fps until under 150 KB at 144 px (scaled by area for other sizes);
+  chat Lotties 185/323 -> 94/165 KB. The original plan (owner, 2026-11-07):
   Ideas to try: a lower frame rate only for Lotties over a size budget, dropping frames that
   barely differ from the one before (longer durations instead), a per-sticker size budget.
   A new module version only; the server and the hook stay as they are.

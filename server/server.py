@@ -112,7 +112,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.16.2-beta"
+VERSION = "0.16.3-beta"
 CODENAME = "Almost Liquid"  # the era's name, printed after the version (from 0.13.0-beta)
 
 def shared_server():
@@ -1522,8 +1522,11 @@ animation_failed = set()  # (document id, size) a module couldn't animate: not a
 
 async def animated_sticker(document_id, size, chat_id, message_id):
     """The animated WebP of an animated or video sticker, made by a module and cached, or None
-    (no such module, a static sticker, or it failed): then the still picture is used."""
-    path = cache_path(STICKER_CACHE, f"{document_id}_anim_{size}.webp")
+    (no such module, a static sticker, or it failed): then the still picture is used. The cached
+    file is named after the module version that made it (since 0.16.3-beta:
+    <id>_anim_<size>_animated-1.1.0.webp), so updating the module makes them again."""
+    maker = module_loader.hook_maker(STICKER_ANIMATE)
+    path = cache_path(STICKER_CACHE, f"{document_id}_anim_{size}_{maker}.webp")
     if in_cache(path):
         with open(path, "rb") as f:
             webp = f.read()
@@ -1548,6 +1551,11 @@ async def animated_sticker(document_id, size, chat_id, message_id):
           f"{len(webp) / 1024:.0f} KB in {time.monotonic() - started:.1f} s")
     with open(path, "wb") as f:
         f.write(webp)
+    # Older versions of it (another module version, or from before 0.16.3) are no use any more
+    folder, mine = os.path.split(path)
+    for old in os.listdir(folder):
+        if old.startswith(f"{document_id}_anim_{size}") and old.endswith(".webp") and old != mine:
+            os.remove(os.path.join(folder, old))
     stored()
     sent(path)
     return bytes(webp)

@@ -156,7 +156,6 @@ PROJECT_BRIEF.md           Goals, decisions, milestones
 - **Home network only for now.** The home connection is behind carrier-grade NAT, and the remote-access options tried (Tailscale, tunnels, a rented server) are blocked or ruled out where I live. The app's VPN and Public modes are ready for when a route exists.
 - **Text, photos, videos and voice in chats:** GIFs and files show as "[media]"; animated stickers play only with the server's Animated stickers module: in chats, in the sticker picker (the highlighted one) and in the full-size sticker viewer. Voice messages play and record on Android 10 and newer (Settings already has a switch for Android 7–9, for a compatible format that comes later).
 - The packaged server is Windows-only.
-- Planned: slimmer animated Lottie stickers.
 
 ## Credits
 

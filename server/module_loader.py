@@ -310,6 +310,15 @@ def has_hook(name):
     return any(module.on for module, _ in hooks.get(name, []))
 
 
+def hook_maker(name):
+    """"<id>-<version>" of the first module that is on and answers this hook, or None. For
+    naming what the server caches from a hook, so a module update makes it again."""
+    for module, _ in hooks.get(name, []):
+        if module.on:
+            return f"{module.id}-{module.version}"
+    return None
+
+
 async def call_hook(name, *args, thread=False):
     """The first answer (not None) of the functions registered for this hook, or None: then the
     server does what it always did. A failing hook is skipped. thread=True (for hooks that do
