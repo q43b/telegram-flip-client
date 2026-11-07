@@ -64,6 +64,6 @@ object ServerSettingsDialog {
                 onSaved()
             }
         if (cancelable) builder.setNegativeButton(android.R.string.cancel, null)
-        return builder.show()
+        return builder.show().also { Themer.apply(it) }
     }
 }

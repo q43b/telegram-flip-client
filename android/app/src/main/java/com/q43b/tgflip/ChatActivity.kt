@@ -31,7 +31,6 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
@@ -439,6 +438,7 @@ class ChatActivity : AppCompatActivity() {
                     .setNegativeButton(android.R.string.cancel) { _, _ -> cleanup?.delete() }
                     .setCancelable(false)
                     .show()
+                    .also { Themer.apply(it) }
             } finally {
                 sending = false
             }
@@ -502,6 +502,7 @@ class ChatActivity : AppCompatActivity() {
                     .setPositiveButton(R.string.voice_retry) { _, _ -> sendPhoto(uri, optimized) }
                     .setNegativeButton(android.R.string.cancel, null)
                     .show()
+                    .also { Themer.apply(it) }
             } finally {
                 sending = false
             }
@@ -536,6 +537,7 @@ class ChatActivity : AppCompatActivity() {
                     .setNegativeButton(R.string.voice_discard) { _, _ -> file.delete() }
                     .setCancelable(false)
                     .show()
+                    .also { Themer.apply(it) }
             } finally {
                 sending = false
             }
@@ -1138,11 +1140,13 @@ class ChatActivity : AppCompatActivity() {
         return body
     }
 
-    // "14:05 ☎ Missed call" in italics: red when someone's call went unanswered, else blue
+    // "14:05 ☎ Missed call" in italics: the theme's accent when someone's call went unanswered,
+    // else its quieter text color
     private fun formatCall(message: Message, call: CallInfo): CharSequence {
         val line = SpannableString("${formatDate(message.date)} ${MessageFormat.call(this, call, message.out)}")
-        val color = if (MessageFormat.isUnanswered(call, message.out)) R.color.call_unanswered else R.color.call_answered
-        line.setSpan(ForegroundColorSpan(ContextCompat.getColor(this, color)), 0, line.length, 0)
+        val p = Themes.current(this).palette(this)
+        val color = if (MessageFormat.isUnanswered(call, message.out)) p.accent else p.textSecondary
+        line.setSpan(ForegroundColorSpan(color), 0, line.length, 0)
         line.setSpan(StyleSpan(Typeface.ITALIC), 0, line.length, 0)
         return line
     }

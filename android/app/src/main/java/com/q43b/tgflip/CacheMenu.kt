@@ -147,6 +147,7 @@ object CacheMenu {
             .setPositiveButton(R.string.cache_delete) { _, _ -> onYes() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+            .also { Themer.apply(it) }
     }
 
     // The usual choices by name, a custom number as "45 days"

@@ -4,6 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:fontFamily="monospace"
+    android:tag="theme:mono"
     android:paddingHorizontal="4dp"
     android:paddingVertical="2dp"
     android:textSize="11sp" />

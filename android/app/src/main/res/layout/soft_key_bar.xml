@@ -4,6 +4,7 @@
      hides the whole bar when neither does. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/soft_key_bar"
+    android:tag="theme:bar"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@color/soft_key_bar"

@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "id": "terminal",
+  "name": "Terminal",
+  "version": "0.2.0",
+  "author": "q43b",
+  "palettes": {
+    "light": {"background": "#0E1410", "text": "#7CFC9A", "text_secondary": "#3FA35A",
+              "bar": "#16261B", "bar_text": "#7CFC9A", "focus": "#1E3A26", "focus_outline": "#7CFC9A",
+              "divider": "#2E5E3A", "accent": "#FFD166"},
+    "dark": {"background": "#0E1410", "text": "#7CFC9A", "text_secondary": "#3FA35A",
+             "bar": "#16261B", "bar_text": "#7CFC9A", "focus": "#1E3A26", "focus_outline": "#7CFC9A",
+             "divider": "#2E5E3A", "accent": "#FFD166"}
+  },
+  "shapes": {"focus": "marker", "corners": "square", "divider": "none", "active_tab": "box"},
+  "sizes": {"text_sp": 15, "row_padding_dp": 4},
+  "fonts": {"frame": null}
+}

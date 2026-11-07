@@ -32,6 +32,7 @@ object IncomingCallAlert {
             .setMessage(activity.getString(R.string.incoming_call_message, name))
             .setPositiveButton(android.R.string.ok, null)
             .show()
+            .also { Themer.apply(it) }
     }
 
     private fun close() {

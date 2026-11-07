@@ -1,0 +1,55 @@
+{
+  "format": 1,
+  "id": "pixel",
+  "name": "Pixel",
+  "version": "1.0.0",
+  "author": "q43b",
+  "palettes": {
+    "light": {
+      "background": "#99D9EA",
+      "text": "#0B1E3A",
+      "text_secondary": "#2E5A78",
+      "bar": "#0B1E3A",
+      "bar_text": "#FFFFFF",
+      "focus": "#FFFFFF",
+      "focus_outline": "#0B1E3A",
+      "divider": "#5FA9C0",
+      "accent": "#C2410C",
+      "connecting": "#5F6B78",
+      "connected": "#2E7D32",
+      "offline": "#C62828"
+    },
+    "dark": {
+      "background": "#0B1E3A",
+      "text": "#DDF3FA",
+      "text_secondary": "#8FBFD0",
+      "bar": "#99D9EA",
+      "bar_text": "#0B1E3A",
+      "focus": "#1E3D66",
+      "focus_outline": "#99D9EA",
+      "divider": "#234A6E",
+      "accent": "#FF9F5A",
+      "connecting": "#4A5563",
+      "connected": "#2E7D32",
+      "offline": "#B42323"
+    }
+  },
+  "shapes": {
+    "focus": "frame",
+    "corners": "notch",
+    "outline_dp": 2,
+    "divider": "solid",
+    "divider_dp": 1,
+    "active_tab": "bar"
+  },
+  "sizes": {
+    "text_sp": 16,
+    "small_sp": 13,
+    "title_sp": 18,
+    "row_padding_dp": 6
+  },
+  "fonts": {
+    "frame": "fonts/PixelifySans.ttf",
+    "text": null
+  }
+}

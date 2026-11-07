@@ -34,6 +34,7 @@ object MessageMenu {
             .setTitle(title)
             .setItems(items.toTypedArray()) { _, which -> onPick(which) }
             .show()
+            .also { Themer.apply(it) }
             .listView.wrapAround()
     }
 
@@ -58,5 +59,6 @@ object MessageMenu {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+            .also { Themer.apply(it) }
     }
 }

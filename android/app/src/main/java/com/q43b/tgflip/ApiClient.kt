@@ -1,5 +1,6 @@
 package com.q43b.tgflip
 
+import android.net.Uri
 import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -439,6 +440,20 @@ class ApiClient(baseUrl: String?, val token: String) {
         }
     }
 
+    // The themes the server's themes module offers (capability "themes", docs/themes-plan.md)
+    fun getThemes(): List<ServerTheme> {
+        val list = JSONObject(call(Request.Builder().url(endpoint("/modules/themes/list")))).getJSONArray("themes")
+        return List(list.length()) {
+            val t = list.getJSONObject(it)
+            ServerTheme(t.getString("id"), t.optString("name", t.getString("id")), t.optString("version"),
+                t.optLong("size"), t.getString("sha256"))
+        }
+    }
+
+    // A theme's zip (at most ThemeInstaller.MAX_BYTES; the list's size says so first)
+    fun getThemeZip(id: String): ByteArray =
+        bytes(endpoint("/modules/themes/${Uri.encode(id)}.zip"), slow) ?: throw IOException("No such theme")
+
     private fun call(request: Request.Builder): String {
         http.newCall(request.header("x-token", token).build()).execute().use { response ->
             if (response.code == 401) throw BadTokenException()
@@ -467,3 +482,6 @@ data class ServerModule(val name: String, val version: String, val status: Strin
 // capabilities: what the server's modules add, e.g. {"animated_stickers": 1}
 data class ServerInfo(val version: String, val codename: String, val shared: Boolean, val log: Boolean,
                       val capabilities: Map<String, Int> = emptyMap())
+
+// GET /modules/themes/list: one theme the server offers; size in bytes, sha256 of its zip
+data class ServerTheme(val id: String, val name: String, val version: String, val size: Long, val sha256: String)

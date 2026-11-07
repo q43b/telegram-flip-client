@@ -1,9 +1,11 @@
 package com.q43b.tgflip
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.view.KeyEvent
 import android.widget.ArrayAdapter
 import android.widget.ListView
@@ -45,6 +47,7 @@ class SettingsGroupActivity : AppCompatActivity() {
     private var rows = emptyList<SettingRow>()
     private var cacheBytes = 0L  // the media cache's size, for "Clear media cache (size)"
     private var stickerBytes = 0L  // the sticker cache's, while it is separate
+    private var serverThemes = false  // Appearance: the server's modules provide themes
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,6 +84,18 @@ class SettingsGroupActivity : AppCompatActivity() {
 
     private fun refresh() {
         showRows()
+        if (group == Group.APPEARANCE) {
+            // "Get themes from the server" only where it can work; quietly nothing otherwise
+            lifecycleScope.launch {
+                serverThemes = try {
+                    withContext(Dispatchers.IO) { ApiClient(settings.getAddress(), settings.getToken().orEmpty()).getServerInfo() }
+                        ?.capabilities?.containsKey(ThemeMenu.CAPABILITY) == true
+                } catch (e: IOException) {
+                    false
+                }
+                showRows()
+            }
+        }
         if (group == Group.MEDIA_CACHE) {
             lifecycleScope.launch {
                 cacheBytes = withContext(Dispatchers.IO) { MediaCache.sizeBytes(this@SettingsGroupActivity) }
@@ -127,16 +142,54 @@ class SettingsGroupActivity : AppCompatActivity() {
         return listOf(mode) + servers
     }
 
-    // Only the theme for now
+    // The theme (docs/themes-plan.md), light or dark, the UI size, and the server's themes
     private fun appearanceRows(): List<SettingRow> {
-        val theme = getString(ThemeSetting.label(ThemeSetting.load(this)))
-        return listOf(SettingRow(getString(R.string.setting_theme, theme)) {
-            MessageMenu.choose(this, getString(R.string.group_appearance_title),
-                ThemeSetting.choices.map { getString(it.second) }) { which ->
-                // Android redraws this screen in the new theme, which also refreshes the rows
-                ThemeSetting.save(this, ThemeSetting.choices[which].first)
+        val lightDark = getString(ThemeSetting.label(ThemeSetting.load(this)))
+        val theme = Themes.current(this)
+        // After a theme change the app starts over and comes back here
+        val back = listOf(Intent(this, SettingsActivity::class.java), intentFor(this, Group.APPEARANCE))
+        val fromServer = SettingRow(getString(R.string.theme_server_row)) { ThemeMenu.fromServer(this, back) }
+        return listOf(
+            SettingRow(getString(R.string.setting_look, theme.name)) { ThemeMenu.pick(this, back) },
+            SettingRow(getString(R.string.setting_theme, lightDark)) {
+                MessageMenu.choose(this, getString(R.string.group_appearance_title),
+                    ThemeSetting.choices.map { getString(it.second) }) { which ->
+                    // Android redraws this screen in the new theme, which also refreshes the rows
+                    ThemeSetting.save(this, ThemeSetting.choices[which].first)
+                }
+            },
+            // Every size in the theme times this: smaller fits more on the screen
+            SettingRow(getString(R.string.setting_ui_size, Themes.uiSize(this))) {
+                val labels = Themes.UI_SIZES.map { getString(R.string.ui_size_choice, it) } + getString(R.string.cache_custom)
+                MessageMenu.choose(this, getString(R.string.ui_size_title), labels) { which ->
+                    if (which < Themes.UI_SIZES.size) {
+                        setUiSize(Themes.UI_SIZES[which])
+                    } else {
+                        askUiSize()
+                    }
+                }
+            },
+        ) + listOfNotNull(fromServer.takeIf { serverThemes })
+    }
+
+    // Custom UI size: a whole percent within Themes.UI_SIZE_RANGE; anything else changes nothing
+    private fun askUiSize() {
+        val range = Themes.UI_SIZE_RANGE
+        MessageMenu.askText(this, getString(R.string.ui_size_custom, range.first, range.last),
+            Themes.uiSize(this).toString(), InputType.TYPE_CLASS_NUMBER) { text ->
+            val percent = text.toIntOrNull()
+            if (percent != null && percent in range) {
+                setUiSize(percent)
+            } else {
+                Toast.makeText(this, getString(R.string.ui_size_invalid, range.first, range.last), Toast.LENGTH_LONG).show()
             }
-        })
+        }
+    }
+
+    private fun setUiSize(percent: Int) {
+        Themes.saveUiSize(this, percent)
+        Themer.apply(this)
+        refresh()
     }
 
     // How stickers show, and from which packs they may download (docs/stickers-plan.md).
@@ -223,10 +276,9 @@ class SettingsGroupActivity : AppCompatActivity() {
     companion object {
         private const val EXTRA_GROUP = "group"
 
-        fun start(activity: Activity, group: Group) {
-            activity.startActivity(
-                Intent(activity, SettingsGroupActivity::class.java).putExtra(EXTRA_GROUP, group.ordinal)
-            )
-        }
+        fun start(activity: Activity, group: Group) = activity.startActivity(intentFor(activity, group))
+
+        fun intentFor(context: Context, group: Group): Intent =
+            Intent(context, SettingsGroupActivity::class.java).putExtra(EXTRA_GROUP, group.ordinal)
     }
 }

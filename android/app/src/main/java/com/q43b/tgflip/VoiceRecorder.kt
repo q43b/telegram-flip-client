@@ -70,6 +70,7 @@ class VoiceRecorder(
                 true
             }
             .show()
+            .also { Themer.apply(it) }
         ticker = activity.lifecycleScope.launch {
             while (true) {
                 delay(1000)

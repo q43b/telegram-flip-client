@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Themer: a TextView's own text size (px) before the UI size scaled it -->
+    <item name="theme_original_size" type="id" />
+</resources>

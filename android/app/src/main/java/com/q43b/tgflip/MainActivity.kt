@@ -81,10 +81,8 @@ class MainActivity : AppCompatActivity() {
 
         settings = ServerSettings(this)
         cache = LocalCache(this)
-        // Gray that suits both light and dark theme
-        val attrs = obtainStyledAttributes(intArrayOf(android.R.attr.textColorSecondary))
-        previewColor = attrs.getColor(0, Color.GRAY)
-        attrs.recycle()
+        // The theme's quieter text color (docs/themes-plan.md)
+        previewColor = Themes.current(this).palette(this).textSecondary
         connection = findViewById(R.id.connection)
         status = findViewById(R.id.status)
         chatList = findViewById(R.id.chat_list)
@@ -479,7 +477,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         // Down on the last chat goes on to the buttons, so only Up wraps
-        builder.show().listView.wrapAround(wrapsDown = false)
+        builder.show().also { Themer.apply(it) }.listView.wrapAround(wrapsDown = false)
     }
 
     // Only the folder goes; its chats stay in Telegram as they are
@@ -493,6 +491,7 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+            .also { Themer.apply(it) }
     }
 
     // "Name (3)"; topic groups get a "›" because they open a list of topics.

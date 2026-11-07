@@ -11,6 +11,7 @@ import android.view.KeyEvent
 import android.widget.ArrayAdapter
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -24,7 +25,8 @@ import java.io.IOException
 // Opened with OK on the version line in Settings. The first row is about the server
 // (/server_info, since 0.14.1-beta; OK asks again), then one row per tool: Live logs (the
 // server's console log, LogActivity), Messages from the server (ServerMessagesActivity) and,
-// since 0.15.1-beta, Modules (the server's modules, ModulesActivity); more to come. Since 0.14.2-beta the messages row is highlighted while the server has
+// since 0.15.1-beta, Modules (the server's modules, ModulesActivity), and since 1.2.0 Load a
+// theme from a file (a theme zip on the phone, ThemeMenu.installFile); more to come. Since 0.14.2-beta the messages row is highlighted while the server has
 // messages for this app ("● Messages from the server (2)", bold; counted on every return to
 // this screen). Left or Back closes it.
 // New tools: add a row to rows().
@@ -34,6 +36,14 @@ class UnderTheHoodActivity : AppCompatActivity() {
     private var serverLine = ""
     private var messageCount = 0  // server messages waiting for this app
     private var messagesRow: SettingRow? = null
+
+    // A theme zip on the phone (docs/themes-plan.md): for trying a theme before any server has it
+    private val pickTheme = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            ThemeMenu.installFile(this, uri, listOf(Intent(this, SettingsActivity::class.java),
+                Intent(this, UnderTheHoodActivity::class.java)))
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -121,6 +131,7 @@ class UnderTheHoodActivity : AppCompatActivity() {
         SettingRow(getString(R.string.under_the_hood_server_messages)) { ServerMessagesActivity.start(this) }
             .also { messagesRow = it },
         SettingRow(getString(R.string.under_the_hood_modules)) { ModulesActivity.start(this) },
+        SettingRow(getString(R.string.under_the_hood_load_theme)) { pickTheme.launch("*/*") },
     )
 
     // Left goes back, like the screens of Settings

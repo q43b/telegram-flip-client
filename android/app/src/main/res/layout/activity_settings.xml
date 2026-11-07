@@ -22,18 +22,17 @@
         android:layout_weight="1" />
 
     <!-- Small gray 'TG Flip 1.0.0 "Melted"' line. Down from the last row reaches
-         it; there F2 opens this version's release notes and OK "Under the hood". The background only
-         shows while it has focus. -->
+         it; there F2 opens this version's release notes and OK "Under the hood". Its focus frame and colors
+         come from the theme (Themer, role secondary). -->
     <TextView
         android:id="@+id/app_version"
+        android:tag="theme:secondary"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?android:attr/selectableItemBackground"
         android:focusable="true"
         android:gravity="center"
         android:padding="4dp"
-        android:textAppearance="?android:attr/textAppearanceSmall"
-        android:textColor="?android:attr/textColorSecondary" />
+        android:textAppearance="?android:attr/textAppearanceSmall" />
 
     <include layout="@layout/tab_bar" />
 
