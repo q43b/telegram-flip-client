@@ -116,9 +116,9 @@ with still pictures. The app learns from the server whether the add-on is there.
   Ideas to try: a lower frame rate only for Lotties over a size budget, dropping frames that
   barely differ from the one before (longer durations instead), a per-sticker size budget.
   A new module version only; the server and the hook stay as they are.
-- **0.16.0-beta (done):** animated stickers play in chats. **0.16.1-beta (owner, 2026-11-07):** in the
-  sticker picker's grids only the highlighted sticker plays (a whole playing pack is too heavy for
-  the phone); the others stay still. Then the viewer.
+- **0.16.0-beta (done):** animated stickers play in chats. **0.16.1-beta (done; owner, 2026-11-07):**
+  in the sticker picker's grids only the highlighted sticker plays (a whole playing pack is too heavy
+  for the phone); the others stay still. Next: the viewer.
 
 ## Steps
 

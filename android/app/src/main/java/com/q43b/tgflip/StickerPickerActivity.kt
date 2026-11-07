@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.BaseAdapter
+import android.widget.AdapterView
 import android.widget.GridView
 import android.widget.ImageView
 import android.widget.TextView
@@ -27,7 +28,9 @@ import java.io.IOException
 // shows its stickers as a grid (all four arrows move), OK on a sticker picks it and goes back
 // to the chat, which sends it. Back (or Left) in the grid returns to the packs. The grid's
 // pictures are the chat's (same StickerLoader size and files); in data saver mode, or while
-// a picture loads, the sticker's emoji shows instead.
+// a picture loads, the sticker's emoji shows instead. With Settings > Stickers > Animated
+// (since 0.16.1-beta) only the highlighted sticker plays (a second loader, mover); the others
+// stay still, since a whole playing pack is too heavy for the phone.
 // "View sticker pack" (message menu on a sticker) opens straight at that sticker's pack; Back
 // then closes, and while the pack isn't mine F1 ("Add pack") adds it to my packs.
 // F2 ("Menu") on a sticker in a grid: add it to / remove it from my Telegram Favorites and my
@@ -40,6 +43,7 @@ class StickerPickerActivity : AppCompatActivity() {
     private lateinit var packList: WrapListView
     private lateinit var grid: GridView
     private lateinit var loader: StickerLoader
+    private var mover: StickerLoader? = null  // plays the highlighted sticker; null unless Animated
     private var packs = emptyList<StickerPack>()
     private var stickers = emptyList<StickerInfo>()
     private lateinit var softKeys: SoftKeyBar
@@ -70,6 +74,19 @@ class StickerPickerActivity : AppCompatActivity() {
         grid = findViewById(R.id.sticker_grid)
         loader = StickerLoader(this, lifecycleScope) { (grid.adapter as? BaseAdapter)?.notifyDataSetChanged() }
             .also { it.api = api }
+        if (StickerSetting.plays(this)) {
+            mover = StickerLoader(this, lifecycleScope, plays = true) {
+                (grid.adapter as? BaseAdapter)?.notifyDataSetChanged()
+            }.also { it.api = api }
+            // A new highlight: the old one goes back to its still picture, the new one plays
+            grid.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    (grid.adapter as? BaseAdapter)?.notifyDataSetChanged()
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
+            }
+        }
         onBackPressedDispatcher.addCallback(this, backToPacks)
         packList.setOnItemClickListener { _, _, position, _ -> openPack(packs[position]) }
         grid.setOnItemClickListener { _, _, position, _ -> pick(stickers[position]) }
@@ -88,6 +105,16 @@ class StickerPickerActivity : AppCompatActivity() {
 
     // Left closes the grid like Back; in the pack list it closes the screen. F1 adds the open
     // pack while it isn't mine.
+    override fun onStart() {
+        super.onStart()
+        mover?.resume()
+    }
+
+    override fun onStop() {
+        mover?.pause()  // nothing plays while the picker isn't shown
+        super.onStop()
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.isLeftSoftKey()) {
             if (event.action == KeyEvent.ACTION_UP) addPack()
@@ -311,7 +338,11 @@ class StickerPickerActivity : AppCompatActivity() {
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val cell = convertView ?: layoutInflater.inflate(R.layout.sticker_cell, parent, false)
             val sticker = stickers[position]
-            val picture = if (pictures) loader.drawable(sticker.id, null, null) else null
+            // The highlighted one plays (its still picture shows while the moving one loads)
+            val playing = if (pictures && position == grid.selectedItemPosition) {
+                mover?.drawable(sticker.id, null, null, sticker.kind)
+            } else null
+            val picture = if (pictures) playing ?: loader.drawable(sticker.id, null, null) else null
             cell.findViewById<ImageView>(R.id.picture).setImageDrawable(picture)
             cell.findViewById<TextView>(R.id.emoji).apply {
                 text = sticker.emoji.ifEmpty { "🏷" }
