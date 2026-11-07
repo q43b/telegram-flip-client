@@ -111,7 +111,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.14.1-beta"
+VERSION = "0.14.2-beta"
 CODENAME = "Almost Liquid"  # the era's name, printed after the version (from 0.13.0-beta)
 
 def shared_server():

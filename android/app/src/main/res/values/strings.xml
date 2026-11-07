@@ -251,6 +251,7 @@
     <string name="under_the_hood_title">Under the hood</string>
     <string name="under_the_hood_live_logs">Live logs</string>
     <string name="under_the_hood_server_messages">Messages from the server</string>
+    <string name="under_the_hood_server_messages_waiting">● Messages from the server (%1$d)</string>
     <string name="under_the_hood_server">🖥 Server %1$s \"%2$s\" · %3$s</string>
     <string name="under_the_hood_private">private</string>
     <string name="under_the_hood_shared">shared (its log is private)</string>
