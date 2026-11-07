@@ -106,6 +106,20 @@ with still pictures. The app learns from the server whether the add-on is there.
   screen play (stopped when a row scrolls away), in the chat, in the sticker grid and in the
   viewer. Custom emoji stay still in text; animating them in reaction lines is a later step.
 
+### Measured with module animated 1.0.0 (2026-11-07), and what comes later
+
+- At 144 px (the chat's 96dp on the Kyocera), 20 fps, WebP quality 70: video stickers 20-185 KB
+  (often smaller than the WebM), made in 0.1-1.1 s; Lottie stickers 185-323 KB, made in about
+  0.5 s. Transparency is kept for both. The WebP quality setting barely changes the size; the
+  number of frames does (10 fps halves it, but looks choppy). WebP method 6 is far too slow.
+- **Later module version (owner, 2026-11-07): optimize heavy Lottie stickers on the server.**
+  Ideas to try: a lower frame rate only for Lotties over a size budget, dropping frames that
+  barely differ from the one before (longer durations instead), a per-sticker size budget.
+  A new module version only; the server and the hook stay as they are.
+- **0.16.0-beta (done):** animated stickers play in chats. **0.16.1-beta (owner, 2026-11-07):** in the
+  sticker picker's grids only the highlighted sticker plays (a whole playing pack is too heavy for
+  the phone); the others stay still. Then the viewer.
+
 ## Steps
 
 1. **0.10.0 foundation**: server `sticker` field, document registry, `/sticker` (still

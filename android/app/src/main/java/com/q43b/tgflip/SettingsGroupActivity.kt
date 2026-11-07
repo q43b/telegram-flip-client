@@ -2,6 +2,7 @@ package com.q43b.tgflip
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.ArrayAdapter
@@ -18,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.io.IOException
 
 // One row of a settings group: what it shows, and what OK on it does
 class SettingRow(val label: String, val open: () -> Unit)
@@ -138,7 +140,8 @@ class SettingsGroupActivity : AppCompatActivity() {
     }
 
     // How stickers show, and from which packs they may download (docs/stickers-plan.md).
-    // Animated and "only chosen packs" are listed but not built yet: choosing them says so.
+    // Animated is chosen only where it can work: Android 9+, and a server whose modules provide
+    // animated_stickers (asked when chosen). "Only chosen packs" isn't built yet: it says so.
     private fun stickerRows(): List<SettingRow> {
         val mode = StickerSetting.mode(this)
         val packs = StickerSetting.packs(this)
@@ -147,7 +150,7 @@ class SettingsGroupActivity : AppCompatActivity() {
                 val modes = StickerSetting.Mode.entries
                 MessageMenu.choose(this, getString(R.string.stickers_title), modes.map { getString(it.label) }) { which ->
                     if (modes[which] == StickerSetting.Mode.ANIMATED) {
-                        Toast.makeText(this, R.string.coming_later, Toast.LENGTH_SHORT).show()
+                        chooseAnimated()
                     } else {
                         StickerSetting.saveMode(this, modes[which])
                         saved()
@@ -189,6 +192,28 @@ class SettingsGroupActivity : AppCompatActivity() {
     )
 
     private fun onOff(on: Boolean) = getString(if (on) R.string.on else R.string.off)
+
+    private fun chooseAnimated() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            Toast.makeText(this, R.string.stickers_animated_android, Toast.LENGTH_LONG).show()
+            return
+        }
+        val api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        lifecycleScope.launch {
+            val capable = try {
+                withContext(Dispatchers.IO) { api.getServerInfo() }?.capabilities?.containsKey(StickerSetting.CAPABILITY) == true
+            } catch (e: IOException) {
+                Toast.makeText(this@SettingsGroupActivity, R.string.error_no_server, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (capable) {
+                StickerSetting.saveMode(this@SettingsGroupActivity, StickerSetting.Mode.ANIMATED)
+                saved()
+            } else {
+                Toast.makeText(this@SettingsGroupActivity, R.string.stickers_animated_needs_module, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     private fun saved() {
         refresh()

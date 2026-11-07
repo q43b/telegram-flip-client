@@ -5,7 +5,9 @@ A module only uses its context, never the server's insides, and the context only
 servers, so modules written for 0.15.x keep working. Anything wrong with one module (manifest,
 API, server or Python version, an error in its code) disables only that module, with one log line.
 """
+import asyncio
 import importlib.util
+import inspect
 import json
 import os
 import re
@@ -303,14 +305,24 @@ async def stop_all():
                 print(f"Module {module.id}: on stop: {type(e).__name__}: {e}")
 
 
-async def call_hook(name, *args):
+def has_hook(name):
+    """True if a module that is on answers this hook."""
+    return any(module.on for module, _ in hooks.get(name, []))
+
+
+async def call_hook(name, *args, thread=False):
     """The first answer (not None) of the functions registered for this hook, or None: then the
-    server does what it always did. A failing hook is skipped."""
+    server does what it always did. A failing hook is skipped. thread=True (for hooks that do
+    heavy work, like converting a sticker) runs plain functions in a worker thread, so the
+    server keeps answering meanwhile; async ones are awaited as they are."""
     for module, function in hooks.get(name, []):
         if not module.on:
             continue
         try:
-            answer = function(*args)
+            if thread and not inspect.iscoroutinefunction(function):
+                answer = await asyncio.to_thread(function, *args)
+            else:
+                answer = function(*args)
             if hasattr(answer, "__await__"):
                 answer = await answer
         except Exception as e:

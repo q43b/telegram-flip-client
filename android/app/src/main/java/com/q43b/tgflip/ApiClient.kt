@@ -347,9 +347,12 @@ class ApiClient(baseUrl: String?, val token: String) {
     // A sticker or custom emoji as a still PNG at most size×size, or null when there is
     // nothing to show. chatId and messageId: the message a sticker came in, in case the server
     // has to look again; null for a custom emoji (found by its id alone).
-    fun getSticker(id: Long, size: Int, chatId: Long?, messageId: Long?): ByteArray? {
+    // animated = true: an animated WebP if the server can make one (its animated stickers
+    // module), otherwise it answers with the still PNG as always (so do older servers)
+    fun getSticker(id: Long, size: Int, chatId: Long?, messageId: Long?, animated: Boolean = false): ByteArray? {
         val from = if (chatId != null && messageId != null) "&chat_id=$chatId&message_id=$messageId" else ""
-        return bytes(endpoint("/sticker/$id?size=$size$from"))
+        val anim = if (animated) "&animated=true" else ""
+        return bytes(endpoint("/sticker/$id?size=$size$from$anim"))
     }
 
     // A voice message's OGG/Opus file
@@ -378,8 +381,10 @@ class ApiClient(baseUrl: String?, val token: String) {
             if (response.code == 404) return null
             if (!response.isSuccessful) throw IOException("Server error ${response.code}")
             val json = JSONObject(response.body!!.string())
+            val capabilities = json.optJSONObject("capabilities")  // since server 0.15.0-beta
             return ServerInfo(json.getString("version"), json.optString("codename"),
-                json.getBoolean("shared"), json.getBoolean("log"))
+                json.getBoolean("shared"), json.getBoolean("log"),
+                capabilities?.keys()?.asSequence()?.associateWith { capabilities.getInt(it) }.orEmpty())
         }
     }
 
@@ -443,4 +448,6 @@ data class DeleteOptions(val forMe: Boolean, val forEveryone: Boolean)
 // GET /modules: status is "on", "off" or "failed: <reason>"; provides = capability names
 data class ServerModule(val name: String, val version: String, val status: String, val provides: List<String>)
 
-data class ServerInfo(val version: String, val codename: String, val shared: Boolean, val log: Boolean)
+// capabilities: what the server's modules add, e.g. {"animated_stickers": 1}
+data class ServerInfo(val version: String, val codename: String, val shared: Boolean, val log: Boolean,
+                      val capabilities: Map<String, Int> = emptyMap())

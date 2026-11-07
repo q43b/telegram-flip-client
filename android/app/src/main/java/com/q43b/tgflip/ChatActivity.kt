@@ -157,7 +157,10 @@ class ChatActivity : AppCompatActivity() {
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         if (intent.hasExtra(EXTRA_TOPIC_ID)) topicId = intent.getLongExtra(EXTRA_TOPIC_ID, 0)
         voice = VoicePlayer(this, lifecycleScope, ::refreshRow).also { it.api = api }
-        stickers = StickerLoader(this, lifecycleScope) { messageAdapter.notifyDataSetChanged() }.also { it.api = api }
+        // Animated (Settings > Stickers, since 0.16.0-beta): animated and video stickers play
+        stickers = StickerLoader(this, lifecycleScope, plays = StickerSetting.plays(this)) {
+            messageAdapter.notifyDataSetChanged()
+        }.also { it.api = api }
         // Custom emoji pictures are part of the rows' text, so rows are rebuilt when they
         // arrive (at most a few times a second while many come in)
         customEmoji = StickerLoader(this, lifecycleScope, StickerLoader.EMOJI_SIZE_DP) { redrawRowsSoon() }
@@ -175,7 +178,7 @@ class ChatActivity : AppCompatActivity() {
             val message = messageAt(position)
             val sticker = message?.sticker
             if (sticker == null || !StickerSetting.showsPictures(this)) null
-            else stickers.drawable(sticker.id, chatId, message.id)
+            else stickers.drawable(sticker.id, chatId, message.id, sticker.kind)
         }
         messageList.adapter = messageAdapter
         // OK on a message opens its menu (OkListView takes OK before the keyboard app);
@@ -217,6 +220,7 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        stickers.resume()
         wasConnected = false
         if (api.hasServer) {
             live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent).also { it.start() }
@@ -234,6 +238,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        stickers.pause()  // nothing plays while the chat isn't shown
         voice.stop()
         recorder.cancel()
         live?.stop()

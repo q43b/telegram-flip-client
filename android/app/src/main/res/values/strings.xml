@@ -89,7 +89,9 @@
     <string name="stickers_title">Stickers and custom emoji</string>
     <string name="stickers_data_saver">Data saver (as text)</string>
     <string name="stickers_still">Still pictures</string>
-    <string name="stickers_animated">Animated (coming later)</string>
+    <string name="stickers_animated">Animated</string>
+    <string name="stickers_animated_android">Animated stickers need Android 9 or newer</string>
+    <string name="stickers_animated_needs_module">This server can\'t animate stickers: it needs the Animated stickers module (installed on the PC, in Maintenance mode)</string>
     <string name="setting_sticker_packs">Sticker packs: %1$s</string>
     <string name="sticker_packs_title">Download stickers from</string>
     <string name="sticker_packs_any">Any pack</string>

@@ -1,13 +1,15 @@
 package com.q43b.tgflip
 
 import android.content.Context
+import android.os.Build
 import androidx.annotation.StringRes
 
 // Settings > Media and Cache: how stickers (and later custom emoji) show, and from which
 // packs they may download. See docs/stickers-plan.md.
 // - DATA_SAVER: nothing downloads and saved pictures aren't used either; stickers are text.
 // - STILL: still pictures (the default).
-// - ANIMATED: stickers play; not built yet, so it is offered as "coming later".
+// - ANIMATED (since 0.16.0-beta): stickers play, where the server has its animated stickers
+//   module (capability animated_stickers) and the phone has Android 9 or newer.
 object StickerSetting {
     enum class Mode(val key: String, @StringRes val label: Int) {
         DATA_SAVER("off", R.string.stickers_data_saver),
@@ -32,8 +34,14 @@ object StickerSetting {
     fun packs(context: Context): Packs =
         Packs.entries.firstOrNull { it.key == prefs(context).getString(KEY_PACKS, null) } ?: Packs.ANY
 
-    // Pictures are wanted (still now; animated will play later)
+    // Pictures are wanted (still or animated)
     fun showsPictures(context: Context) = mode(context) != Mode.DATA_SAVER
+
+    // Animated stickers are asked for and played: Animated chosen, on Android 9+ (where
+    // AnimatedImageDrawable exists)
+    fun plays(context: Context) = mode(context) == Mode.ANIMATED && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+
+    const val CAPABILITY = "animated_stickers"
 
     private fun prefs(context: Context) = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 }

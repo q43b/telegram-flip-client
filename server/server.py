@@ -112,7 +112,7 @@ def start_log_capture():
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "0.15.1-beta"
+VERSION = "0.16.0-beta"
 CODENAME = "Almost Liquid"  # the era's name, printed after the version (from 0.13.0-beta)
 
 def shared_server():
@@ -1487,33 +1487,88 @@ def still_sticker(data, size):
 # sticker_cache/. chat_id and message_id say where it came from, in case the server has to
 # read the message again; without them the id is taken as a custom emoji's (they can be
 # asked by id alone). 404 when there is nothing to show (the app then shows text).
+async def sticker_download(document_id, chat_id, message_id, still):
+    """A sticker's document and its file: for still=True the picture a still is made from (the
+    sticker itself if static, else Telegram's preview), otherwise the whole file (WebP, TGS or
+    WebM). A file reference that expired is fetched again once. 404 when unknown."""
+    document = account().sticker_documents.get(document_id)
+    try:
+        if document is None:
+            document = await sticker_document(document_id, chat_id, message_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="Unknown sticker")
+        thumb = -1 if still and document.mime_type != "image/webp" else None
+        try:
+            return document, await client.download_media(document, file=bytes, thumb=thumb)
+        except errors.FileReferenceExpiredError:
+            document = await sticker_document(document_id, chat_id, message_id)
+            if document is None:
+                raise HTTPException(status_code=404, detail="Sticker no longer available")
+            return document, await client.download_media(document, file=bytes, thumb=thumb)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+
+
+# The hook a module answers to make animated stickers move (since 0.16.0-beta, the animated
+# module): sticker.animate(data, kind, size) with the sticker's whole file as bytes, kind
+# "animated" (TGS, Lottie) or "video" (WebM), and the size in px; returns an animated WebP of at
+# most size x size, as bytes, or None. Only plain values cross, so module API 1 never depends
+# on Telethon's objects.
+STICKER_ANIMATE = "sticker.animate"
+animation_failed = set()  # (document id, size) a module couldn't animate: not asked again
+
+
+async def animated_sticker(document_id, size, chat_id, message_id):
+    """The animated WebP of an animated or video sticker, made by a module and cached, or None
+    (no such module, a static sticker, or it failed): then the still picture is used."""
+    path = cache_path(STICKER_CACHE, f"{document_id}_anim_{size}.webp")
+    if in_cache(path):
+        with open(path, "rb") as f:
+            webp = f.read()
+        sent(path)
+        return webp
+    if (document_id, size) in animation_failed:
+        return None
+    known = account().sticker_documents.get(document_id)
+    if known is not None and STICKER_KINDS.get(known.mime_type) not in ("animated", "video"):
+        return None  # static: nothing to animate, and nothing downloaded to find out
+    document, data = await sticker_download(document_id, chat_id, message_id, still=False)
+    kind = STICKER_KINDS.get(document.mime_type)
+    if kind not in ("animated", "video") or not data:
+        return None
+    started = time.monotonic()
+    webp = await module_loader.call_hook(STICKER_ANIMATE, data, kind, size, thread=True)
+    if not isinstance(webp, (bytes, bytearray)) or not webp:
+        animation_failed.add((document_id, size))
+        return None
+    name = {"animated": "Lottie (TGS)", "video": "video (WebM)"}[kind]
+    print(f"Animated a {name} sticker at {size} px: {len(data) / 1024:.0f} KB -> "
+          f"{len(webp) / 1024:.0f} KB in {time.monotonic() - started:.1f} s")
+    with open(path, "wb") as f:
+        f.write(webp)
+    stored()
+    sent(path)
+    return bytes(webp)
+
+
 @api.get("/sticker/{document_id}")
 @recovering
 async def get_sticker(document_id: int, size: int = 128, chat_id: Optional[int] = None,
-                      message_id: Optional[int] = None):
+                      message_id: Optional[int] = None, animated: bool = False):
     if size not in STICKER_SIZES:
         raise HTTPException(status_code=400, detail="size must be 32-512")
     headers = {"Cache-Control": "private, max-age=604800"}  # a sticker never changes
+    # animated=true (apps from 0.16.0-beta, with a module answering sticker.animate): an
+    # animated WebP; otherwise, or if it can't be made, the still PNG as always
+    if animated and module_loader.has_hook(STICKER_ANIMATE):
+        webp = await animated_sticker(document_id, size, chat_id, message_id)
+        if webp is not None:
+            return Response(webp, media_type="image/webp", headers=headers)
     path = cache_path(STICKER_CACHE, f"{document_id}_still_{size}.png")
     if not in_cache(path):
-        document = account().sticker_documents.get(document_id)
-        try:
-            if document is None:
-                document = await sticker_document(document_id, chat_id, message_id)
-            if document is None:
-                raise HTTPException(status_code=404, detail="Unknown sticker")
-            static = document.mime_type == "image/webp"
-            try:
-                data = await client.download_media(document, file=bytes, thumb=None if static else -1)
-            except errors.FileReferenceExpiredError:
-                document = await sticker_document(document_id, chat_id, message_id)
-                if document is None:
-                    raise HTTPException(status_code=404, detail="Sticker no longer available")
-                data = await client.download_media(document, file=bytes, thumb=None if static else -1)
-        except ValueError:
-            raise HTTPException(status_code=404, detail="Chat not found")
-        except errors.RPCError as e:
-            bad_request(e)
+        _, data = await sticker_download(document_id, chat_id, message_id, still=True)
         picture = still_sticker(data, size) if data else None
         if picture is None:
             raise HTTPException(status_code=404, detail="No picture for this sticker")

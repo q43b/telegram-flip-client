@@ -1,0 +1,5 @@
+# Bundled into this module's lib/ by server/tools/build_module.py (ready-built wheels, no
+# dependencies). Both are built for Python's stable ABI (abi3), so they keep working on newer
+# Pythons: PyAV from 3.12, rlottie-python from 3.7.
+av==19.0.2
+rlottie-python==1.3.8

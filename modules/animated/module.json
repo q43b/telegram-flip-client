@@ -1,0 +1,11 @@
+{
+  "id": "animated",
+  "name": "Animated stickers",
+  "version": "1.0.0",
+  "api": 1,
+  "min_server": "0.16.0-beta",
+  "python": "abi3",
+  "python_min": "3.12",
+  "provides": {"animated_stickers": 1},
+  "description": "Makes animated (Lottie) and video stickers move: turns them into animated WebP for the app (rlottie-python, PyAV)"
+}
