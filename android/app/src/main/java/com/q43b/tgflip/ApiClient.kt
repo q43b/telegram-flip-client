@@ -369,6 +369,20 @@ class ApiClient(baseUrl: String?, val token: String) {
     private fun topicParam(topicId: Long?, separator: String) =
         if (topicId == null) "" else "${separator}topic_id=$topicId"
 
+    // About the server (since 0.14.1-beta the app receives this itself, so "server_info" is
+    // in ServerMessages.KNOWN_KINDS). null = a server older than 0.13.0-beta, which lacks it.
+    fun getServerInfo(): ServerInfo? {
+        val request = Request.Builder().url(endpoint("/server_info")).header("x-token", token).build()
+        http.newCall(request).execute().use { response ->
+            if (response.code == 401) throw BadTokenException()
+            if (response.code == 404) return null
+            if (!response.isSuccessful) throw IOException("Server error ${response.code}")
+            val json = JSONObject(response.body!!.string())
+            return ServerInfo(json.getString("version"), json.optString("codename"),
+                json.getBoolean("shared"), json.getBoolean("log"))
+        }
+    }
+
     // "Messages from the server" (Under the hood): the text of everything the server would
     // tell this app that the app can't receive in its own form (see ServerMessages).
     // null = a server older than 0.14.0-beta, which has no such messages.
@@ -406,3 +420,6 @@ class BadTokenException : IOException("Bad token")
 class NoServerException : IOException("No server set")
 
 data class DeleteOptions(val forMe: Boolean, val forEveryone: Boolean)
+
+// GET /server_info: log = this account's app may watch the live log
+data class ServerInfo(val version: String, val codename: String, val shared: Boolean, val log: Boolean)

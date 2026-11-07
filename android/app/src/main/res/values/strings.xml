@@ -251,6 +251,12 @@
     <string name="under_the_hood_title">Under the hood</string>
     <string name="under_the_hood_live_logs">Live logs</string>
     <string name="under_the_hood_server_messages">Messages from the server</string>
+    <string name="under_the_hood_server">🖥 Server %1$s \"%2$s\" · %3$s</string>
+    <string name="under_the_hood_private">private</string>
+    <string name="under_the_hood_shared">shared (its log is private)</string>
+    <string name="under_the_hood_shared_admin">shared, you are an admin</string>
+    <string name="under_the_hood_server_asking">🖥 Server: asking…</string>
+    <string name="under_the_hood_server_old">🖥 Server older than 0.13.0-beta</string>
     <string name="server_messages_title">Messages from the server</string>
     <string name="server_messages_loading">Asking the server…</string>
     <string name="server_messages_none">No messages: this app understands everything the server tells it</string>

@@ -21,7 +21,9 @@ import java.io.IOException
 // servers can still reach older apps). When the app learns to receive a kind properly (its own
 // endpoint or event), add its name here, and it stops showing up as a message.
 object ServerMessages {
-    val KNOWN_KINDS = emptyList<String>()
+    val KNOWN_KINDS = listOf(
+        "server_info",  // since 0.14.1-beta: the first line of Under the hood (UnderTheHoodActivity)
+    )
 }
 
 // "Messages from the server" in Under the hood: those texts, one per row, loaded when the

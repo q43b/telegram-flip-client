@@ -10,14 +10,22 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.IOException
 
 // "Under the hood", the developer mode: tools for looking inside the app and the server.
-// Opened with OK on the version line in Settings. Each row opens one tool: Live logs (the
+// Opened with OK on the version line in Settings. The first row is about the server
+// (/server_info, since 0.14.1-beta; OK asks again), then one row per tool: Live logs (the
 // server's console log, LogActivity) and Messages from the server (ServerMessagesActivity);
 // more to come. Left or Back closes it.
 // New tools: add a row to rows().
 class UnderTheHoodActivity : AppCompatActivity() {
     private var rows = emptyList<SettingRow>()
+    private lateinit var adapter: ArrayAdapter<String>
+    private var serverLine = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,14 +37,49 @@ class UnderTheHoodActivity : AppCompatActivity() {
             insets
         }
         findViewById<TextView>(R.id.group_title).setText(R.string.under_the_hood_title)
-        rows = rows()
         val list = findViewById<WrapListView>(R.id.group_list)
-        list.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, rows.map { it.label })
+        adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
+        list.adapter = adapter
         list.setOnItemClickListener { _, _, position, _ -> rows[position].open() }
         list.requestFocus()
+        loadServerInfo()
+    }
+
+    private fun redraw() {
+        rows = rows()
+        adapter.clear()
+        adapter.addAll(rows.map { it.label })
+    }
+
+    // "Server 0.14.0-beta "Almost Liquid" · private"
+    private fun loadServerInfo() {
+        serverLine = getString(R.string.under_the_hood_server_asking)
+        redraw()
+        val settings = ServerSettings(this)
+        val api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        lifecycleScope.launch {
+            serverLine = try {
+                val info = withContext(Dispatchers.IO) { api.getServerInfo() }
+                when {
+                    info == null -> getString(R.string.under_the_hood_server_old)
+                    else -> getString(R.string.under_the_hood_server, info.version, info.codename,
+                        getString(when {
+                            !info.shared -> R.string.under_the_hood_private
+                            info.log -> R.string.under_the_hood_shared_admin
+                            else -> R.string.under_the_hood_shared
+                        }))
+                }
+            } catch (e: BadTokenException) {
+                getString(R.string.error_bad_token)
+            } catch (e: IOException) {
+                getString(R.string.error_no_server)
+            }
+            redraw()
+        }
     }
 
     private fun rows() = listOf(
+        SettingRow(serverLine) { loadServerInfo() },
         SettingRow(getString(R.string.under_the_hood_live_logs)) { LogActivity.start(this) },
         SettingRow(getString(R.string.under_the_hood_server_messages)) { ServerMessagesActivity.start(this) },
     )
