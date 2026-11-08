@@ -26,7 +26,8 @@ import java.io.IOException
 // (/server_info, since 0.14.1-beta; OK asks again), then one row per tool: Live logs (the
 // server's console log, LogActivity), Messages from the server (ServerMessagesActivity) and,
 // since 0.15.1-beta, Modules (the server's modules, ModulesActivity), and since 1.2.0 Load a
-// theme from a file (a theme zip on the phone, ThemeMenu.installFile); more to come. Since 0.14.2-beta the messages row is highlighted while the server has
+// theme from a file (a theme zip on the phone, ThemeMenu.installFile) and, since 1.3.0, Local
+// cache (what the app keeps on the phone, with deleting: LocalCacheActivity); more to come. Since 0.14.2-beta the messages row is highlighted while the server has
 // messages for this app ("● Messages from the server (2)", bold; counted on every return to
 // this screen). Left or Back closes it.
 // New tools: add a row to rows().
@@ -131,6 +132,7 @@ class UnderTheHoodActivity : AppCompatActivity() {
         SettingRow(getString(R.string.under_the_hood_server_messages)) { ServerMessagesActivity.start(this) }
             .also { messagesRow = it },
         SettingRow(getString(R.string.under_the_hood_modules)) { ModulesActivity.start(this) },
+        SettingRow(getString(R.string.under_the_hood_local_cache)) { LocalCacheActivity.start(this) },
         SettingRow(getString(R.string.under_the_hood_load_theme)) { pickTheme.launch("*/*") },
     )
 

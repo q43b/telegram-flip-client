@@ -96,6 +96,13 @@ object MediaCache {
         }
     }
 
+    // Under the hood > Local cache (since 1.3.0): one folder per kind of file, and deleting one
+    fun kindFolders(context: Context): List<File> = root(context).listFiles()?.filter { it.isDirectory }.orEmpty()
+
+    fun deleteKind(context: Context, kind: String) = synchronized(this) {
+        folder(context, kind).deleteRecursively()
+    }
+
     fun clearStickers(context: Context) = synchronized(this) {
         folder(context, STICKERS).deleteRecursively()
     }

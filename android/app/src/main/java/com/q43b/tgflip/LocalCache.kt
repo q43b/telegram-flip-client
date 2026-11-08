@@ -47,6 +47,18 @@ class LocalCache(context: Context) {
     // Pack ids are digits or a plain word; anything else can't become a file name
     private fun stickersName(pack: String) = "stickers_" + pack.filter { it.isLetterOrDigit() || it == '_' }
 
+    // Under the hood > Local cache (since 1.3.0): every saved list by file name ("chats",
+    // "topics_<chat>", "messages_<chat>[_<topic>]", "sticker_packs", "stickers_<pack>") and its size
+    class Saved(val name: String, val bytes: Long)
+
+    fun saved(): List<Saved> = synchronized(LOCK) {
+        dir.listFiles()?.filter { it.name.endsWith(".json") }
+            ?.map { Saved(it.name.removeSuffix(".json"), it.length()) }.orEmpty()
+    }
+
+    // One saved list; screens show it again from the server's answer next time they get one
+    fun delete(name: String) = synchronized(LOCK) { file(name).delete() }
+
     // Settings > Cache > Delete all saved data
     fun clear() = synchronized(LOCK) {
         dir.deleteRecursively()

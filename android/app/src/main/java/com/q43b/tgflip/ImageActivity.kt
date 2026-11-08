@@ -52,6 +52,7 @@ class ImageActivity : AppCompatActivity() {
     private var chatId = 0L
     private var messageId = 0L
     private var stickerId = 0L  // set when showing a sticker instead of a photo
+    private var fileMode: File? = null  // set when showing a file from the media cache (Local cache), no server
     private var downloading = false
     // The photo or sticker shown: a still bitmap, or (Animated stickers, since 0.16.2-beta) a
     // playing AnimatedImageDrawable; placed by its own width and height either way
@@ -81,6 +82,7 @@ class ImageActivity : AppCompatActivity() {
         messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
         stickerId = intent.getLongExtra(EXTRA_STICKER_ID, 0)
         stickerKind = intent.getStringExtra(EXTRA_KIND)
+        fileMode = intent.getStringExtra(EXTRA_FILE)?.let(::File)
         image = findViewById(R.id.image)
         modeHint = findViewById(R.id.mode_hint)
         val status = findViewById<TextView>(R.id.status)
@@ -99,7 +101,9 @@ class ImageActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val loaded = withContext(Dispatchers.IO) {
                 try {
-                    if (playsSticker()) animatedSticker(api) ?: still(api) else still(api)
+                    val saved = fileMode
+                    if (saved != null) fromFile(saved)
+                    else if (playsSticker()) animatedSticker(api) ?: still(api) else still(api)
                 } catch (e: IOException) {
                     null
                 }
@@ -163,9 +167,9 @@ class ImageActivity : AppCompatActivity() {
 
     private fun showMenu() {
         if (picture == null) return
-        // A sticker has no full-size original to download
+        // A sticker has no full-size original to download, nor has a file opened from the cache
         val items = listOf(R.string.image_zoom, R.string.image_move, R.string.image_rotate) +
-            if (stickerId == 0L) listOf(R.string.image_download) else emptyList()
+            if (stickerId == 0L && fileMode == null) listOf(R.string.image_download) else emptyList()
         MessageMenu.choose(this, getString(R.string.photo), items.map(::getString)) { which ->
             when (items[which]) {
                 R.string.image_zoom -> setMode(Mode.ZOOM)
@@ -282,6 +286,19 @@ class ImageActivity : AppCompatActivity() {
     private fun playsSticker() = stickerId != 0L && StickerSetting.plays(this) &&
         (stickerKind == "animated" || stickerKind == "video")
 
+    // A file from the media cache as it is (Under the hood > Local cache): a still picture, or a
+    // moving one (animated WebP) from Android 9 on; nothing is asked from the server, and the
+    // file isn't marked as used
+    private fun fromFile(file: File): Drawable? = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ImageDecoder.decodeDrawable(ImageDecoder.createSource(file))
+        } else {
+            BitmapFactory.decodeFile(file.path)?.let { BitmapDrawable(resources, it) }
+        }
+    } catch (e: IOException) {
+        null
+    }
+
     private fun still(api: ApiClient): Drawable? =
         BitmapFactory.decodeFile(file(api, chatId, messageId).path)?.let { BitmapDrawable(resources, it) }
 
@@ -346,6 +363,7 @@ class ImageActivity : AppCompatActivity() {
         private const val EXTRA_MESSAGE_ID = "message_id"
         private const val EXTRA_STICKER_ID = "sticker_id"
         private const val EXTRA_KIND = "sticker_kind"
+        private const val EXTRA_FILE = "file"
         private const val STICKER_PX = 512
         // Moving stickers come smaller than still ones: 384 px on the 480 px wide screen is barely
         // softer, and 30% lighter to make and play than 512 (measured, 2026-11-07)
@@ -366,6 +384,11 @@ class ImageActivity : AppCompatActivity() {
                     .putExtra(EXTRA_CHAT_ID, chatId)
                     .putExtra(EXTRA_MESSAGE_ID, messageId)
             )
+        }
+
+        // A picture or sticker file from the media cache (Under the hood > Local cache), as saved
+        fun startFile(activity: Activity, path: String) {
+            activity.startActivity(Intent(activity, ImageActivity::class.java).putExtra(EXTRA_FILE, path))
         }
 
         // "View sticker": the same viewer, with the sticker's still picture at full size, or
