@@ -8,7 +8,7 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 
-// Keeps the last chats, topics and messages the server sent, so screens can show them
+// Keeps the last chats, topics, messages and sticker lists the server sent, so screens can show them
 // at once and while offline. One small JSON file per list.
 // Stored in noBackupFilesDir: private to the app and never copied into phone backups,
 // since it holds message text. Reads and writes files, so call from a background thread.
@@ -29,6 +29,23 @@ class LocalCache(context: Context) {
     // Only the newest ones, so a busy chat's file stays small
     fun saveMessages(chatId: Long, topicId: Long?, messages: List<Message>) =
         save(messagesName(chatId, topicId), messages.takeLast(MAX_MESSAGES).map(Message::toJson))
+
+    // The sticker picker's lists (since 1.2.3): my packs, and each opened pack's stickers
+    // ("recent", "faved", "local" or a pack's id), so the picker works offline; the pictures
+    // themselves are in the media cache (StickerLoader)
+    fun loadStickerPacks(): List<StickerPack>? = load("sticker_packs") {
+        StickerPack(it.optString("id"), it.optString("title"), it.optInt("count"))
+    }
+
+    fun saveStickerPacks(packs: List<StickerPack>) =
+        save("sticker_packs", packs.map { JSONObject().put("id", it.id).put("title", it.title).put("count", it.count) })
+
+    fun loadStickers(pack: String): List<StickerInfo>? = load(stickersName(pack), StickerInfo::fromJson)
+
+    fun saveStickers(pack: String, stickers: List<StickerInfo>) = save(stickersName(pack), stickers.map(StickerInfo::toJson))
+
+    // Pack ids are digits or a plain word; anything else can't become a file name
+    private fun stickersName(pack: String) = "stickers_" + pack.filter { it.isLetterOrDigit() || it == '_' }
 
     // Settings > Cache > Delete all saved data
     fun clear() = synchronized(LOCK) {

@@ -23,8 +23,8 @@ android {
         targetSdk = 37
         // versionCode must go up with every release, or Android won't install it as an update.
         // versionName matches the git tag, without the "v" (tag v0.1.0-alpha).
-        versionCode = 55
-        versionName = "1.2.2"
+        versionCode = 56
+        versionName = "1.2.3"
         // The era's name, shown after the version (from 0.13.0-beta): Almost Liquid for
         // 0.13.0-beta to 0.17.0-beta, Melted from 1.0.0; release titles use it too
         buildConfigField("String", "CODENAME", "\"Melted\"")

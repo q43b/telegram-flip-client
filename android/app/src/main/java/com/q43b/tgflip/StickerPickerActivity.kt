@@ -38,6 +38,7 @@ import java.io.IOException
 // remove my own description of it (shown in data saver mode).
 class StickerPickerActivity : AppCompatActivity() {
     private lateinit var api: ApiClient
+    private lateinit var cache: LocalCache  // the lists, saved for offline (the pictures are in the media cache)
     private lateinit var title: TextView
     private lateinit var status: TextView
     private lateinit var packList: WrapListView
@@ -68,6 +69,7 @@ class StickerPickerActivity : AppCompatActivity() {
         }
         val settings = ServerSettings(this)
         api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        cache = LocalCache(this)
         title = findViewById(R.id.picker_title)
         status = findViewById(R.id.status)
         packList = findViewById(R.id.pack_list)
@@ -131,47 +133,74 @@ class StickerPickerActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    // The saved list first (since 1.2.3, so the picker works offline), then the server's, which
+    // replaces it and is saved; offline the saved one stays, with a note
     private fun loadPacks() {
         title.setText(R.string.stickers_picker_title)
         showStatus(getString(R.string.stickers_loading))
         lifecycleScope.launch {
+            val saved = withContext(Dispatchers.IO) { cache.loadStickerPacks() }
+            if (saved != null) showPackList(saved)
             val mine = try {
-                withContext(Dispatchers.IO) { api.getStickerPacks() }
+                withContext(Dispatchers.IO) { api.getStickerPacks().also { cache.saveStickerPacks(it) } }
             } catch (e: IOException) {
-                showStatus(getString(R.string.stickers_not_loaded))
+                showStatus(getString(if (saved != null) R.string.offline_saved else R.string.stickers_not_loaded))
                 return@launch
             }
-            packs = listOf(
-                StickerPack(RECENT, getString(R.string.stickers_recent), 0),
-                StickerPack(FAVED, getString(R.string.stickers_faved), 0),
-                StickerPack(LOCAL, getString(R.string.stickers_local), 0),
-            ) + mine
-            packList.adapter = ArrayAdapter(this@StickerPickerActivity, android.R.layout.simple_list_item_1,
-                packs.map { if (it.count > 0) "${it.title} (${it.count})" else it.title })
+            if (mine != saved) showPackList(mine)
+            if (packList.visibility == View.VISIBLE) status.visibility = View.GONE
+        }
+    }
+
+    // Recent, Favorites and Local favourites, then my packs; the highlighted row stays where it was
+    private fun showPackList(mine: List<StickerPack>) {
+        val selected = packList.selectedItemPosition
+        packs = listOf(
+            StickerPack(RECENT, getString(R.string.stickers_recent), 0),
+            StickerPack(FAVED, getString(R.string.stickers_faved), 0),
+            StickerPack(LOCAL, getString(R.string.stickers_local), 0),
+        ) + mine
+        packList.adapter = ArrayAdapter(this@StickerPickerActivity, android.R.layout.simple_list_item_1,
+            packs.map { if (it.count > 0) "${it.title} (${it.count})" else it.title })
+        if (selected > 0) packList.setSelection(selected.coerceAtMost(packs.size - 1))
+        if (packList.visibility == View.VISIBLE) {  // not while a pack is open over it
             status.visibility = View.GONE
             packList.requestFocus()
         }
     }
 
+    // Like the pack list: the saved stickers at once, then the server's (only while this pack
+    // is still the one open)
     private fun openPack(pack: StickerPack) {
         title.text = pack.title
         openPackId = pack.id
         showStatus(getString(R.string.stickers_loading))
         lifecycleScope.launch {
+            val saved = withContext(Dispatchers.IO) { cache.loadStickers(pack.id) }
+            if (!saved.isNullOrEmpty()) {
+                showGrid(saved)
+                backToPacks.isEnabled = true
+            }
             val found = try {
-                withContext(Dispatchers.IO) { api.getStickerPack(pack.id) }
+                fetchPack(pack.id)
             } catch (e: IOException) {
-                showStatus(getString(R.string.stickers_not_loaded))
+                if (openPackId == pack.id) {
+                    showStatus(getString(if (saved.isNullOrEmpty()) R.string.stickers_not_loaded else R.string.offline_saved))
+                }
                 return@launch
             }
-            if (found.isEmpty()) {
-                showStatus(getString(R.string.stickers_empty))
-                return@launch
+            if (openPackId != pack.id) return@launch  // closed meanwhile
+            when {
+                found.isEmpty() -> showStatus(getString(R.string.stickers_empty))
+                found != saved -> showGrid(found, grid.selectedItemPosition.coerceAtLeast(0))
             }
-            showGrid(found)
             backToPacks.isEnabled = true
         }
     }
+
+    // One pack's stickers from the server, saved for offline
+    private suspend fun fetchPack(pack: String): List<StickerInfo> =
+        withContext(Dispatchers.IO) { api.getStickerPack(pack).also { cache.saveStickers(pack, it) } }
 
     // Straight at a sticker's pack (from a chat); Back closes the screen, there is no pack list
     private fun openPackOf(stickerId: Long, chatId: Long, messageId: Long) {
@@ -186,6 +215,7 @@ class StickerPickerActivity : AppCompatActivity() {
             }
             title.text = pack.title
             openPackId = pack.id
+            withContext(Dispatchers.IO) { cache.saveStickers(pack.id, found) }
             if (!pack.installed) {
                 addablePack = pack.id
                 softKeys.setLeft(getString(R.string.soft_key_add_pack))
@@ -209,15 +239,16 @@ class StickerPickerActivity : AppCompatActivity() {
     private fun stickerMenu(position: Int) {
         val sticker = stickers.getOrNull(position) ?: return
         lifecycleScope.launch {
+            // Offline: as last saved
             val faved = favedIds ?: try {
-                withContext(Dispatchers.IO) { api.getStickerPack(FAVED) }.map { it.id }.toSet().also { favedIds = it }
+                fetchPack(FAVED).map { it.id }.toSet().also { favedIds = it }
             } catch (e: IOException) {
-                emptySet()
+                withContext(Dispatchers.IO) { cache.loadStickers(FAVED) }?.map { it.id }?.toSet().orEmpty()
             }
             val local = localIds ?: try {
-                withContext(Dispatchers.IO) { api.getStickerPack(LOCAL) }.map { it.id }.toSet().also { localIds = it }
+                fetchPack(LOCAL).map { it.id }.toSet().also { localIds = it }
             } catch (e: IOException) {
-                emptySet()
+                withContext(Dispatchers.IO) { cache.loadStickers(LOCAL) }?.map { it.id }?.toSet().orEmpty()
             }
             val description = StickerDescriptions.get(this@StickerPickerActivity, sticker.id)
             val actions = mutableListOf<Pair<String, () -> Unit>>()
@@ -254,7 +285,7 @@ class StickerPickerActivity : AppCompatActivity() {
                 favedIds = null  // ask again next time (Telegram may have dropped an old one)
                 showToast(if (unfave) R.string.sticker_unfaved else R.string.sticker_faved)
                 if (openPackId == FAVED) {
-                    val found = withContext(Dispatchers.IO) { api.getStickerPack(FAVED) }
+                    val found = fetchPack(FAVED)
                     if (found.isEmpty()) showStatus(getString(R.string.stickers_empty)) else showGrid(found, position)
                 }
             } catch (e: IOException) {
@@ -271,7 +302,7 @@ class StickerPickerActivity : AppCompatActivity() {
                 localIds = null
                 showToast(if (remove) R.string.sticker_unfaved_local else R.string.sticker_faved_local)
                 if (openPackId == LOCAL) {
-                    val found = withContext(Dispatchers.IO) { api.getStickerPack(LOCAL) }
+                    val found = fetchPack(LOCAL)
                     if (found.isEmpty()) showStatus(getString(R.string.stickers_empty)) else showGrid(found, position)
                 }
             } catch (e: IOException) {
