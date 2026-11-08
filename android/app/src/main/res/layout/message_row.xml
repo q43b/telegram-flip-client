@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A chat screen row: the message's text, and for a sticker its picture on the right, the
-     text wrapping in the space left of it (hidden otherwise, the text then takes the whole
-     row). The text looks like Android's simple_list_item_1. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- A chat screen row. A message is one row, or two when it carries media: the message row (time,
+     sender, caption, reactions) and under it a media row, drawn as part of the same message (see
+     MessageRowAdapter): indented behind a bar in the theme's media color, with no divider between
+     the two. The row also holds a sticker picture on the right when it is a sticker's media row,
+     the text wrapping in the space left of it. MessageRowLayout draws the divider at the bottom.
+     The text looks like Android's simple_list_item_1. -->
+<com.q43b.tgflip.MessageRowLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
@@ -10,6 +13,15 @@
     android:orientation="horizontal"
     android:paddingStart="?android:attr/listPreferredItemPaddingStart"
     android:paddingEnd="?android:attr/listPreferredItemPaddingEnd">
+
+    <!-- Only on media rows -->
+    <View
+        android:id="@+id/bar"
+        android:layout_width="4dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/text"
@@ -33,4 +45,4 @@
         android:scaleType="fitCenter"
         android:visibility="gone" />
 
-</LinearLayout>
+</com.q43b.tgflip.MessageRowLayout>

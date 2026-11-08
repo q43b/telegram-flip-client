@@ -77,7 +77,8 @@ class StickerPickerActivity : AppCompatActivity() {
         loader = StickerLoader(this, lifecycleScope) { (grid.adapter as? BaseAdapter)?.notifyDataSetChanged() }
             .also { it.api = api }
         if (StickerSetting.plays(this)) {
-            mover = StickerLoader(this, lifecycleScope, plays = true) {
+            mover = StickerLoader(this, lifecycleScope, plays = true,
+                animatedKept = if (StickerSetting.pickerAll(this)) StickerSetting.PICKER_ALL_KEPT else 12) {
                 (grid.adapter as? BaseAdapter)?.notifyDataSetChanged()
             }.also { it.api = api }
             // A new highlight: the old one goes back to its still picture, the new one plays
@@ -361,6 +362,7 @@ class StickerPickerActivity : AppCompatActivity() {
 
     private inner class StickerGridAdapter : BaseAdapter() {
         private val pictures = StickerSetting.showsPictures(this@StickerPickerActivity)
+        private val allPlay = StickerSetting.pickerAll(this@StickerPickerActivity)
 
         override fun getCount() = stickers.size
         override fun getItem(position: Int) = stickers[position]
@@ -369,8 +371,9 @@ class StickerPickerActivity : AppCompatActivity() {
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val cell = convertView ?: layoutInflater.inflate(R.layout.sticker_cell, parent, false)
             val sticker = stickers[position]
-            // The highlighted one plays (its still picture shows while the moving one loads)
-            val playing = if (pictures && position == grid.selectedItemPosition) {
+            // The highlighted one plays, or every one in view with Settings > Stickers > all play (the
+            // still picture shows while the moving one loads)
+            val playing = if (pictures && (allPlay || position == grid.selectedItemPosition)) {
                 mover?.drawable(sticker.id, null, null, sticker.kind)
             } else null
             val picture = if (pictures) playing ?: loader.drawable(sticker.id, null, null) else null

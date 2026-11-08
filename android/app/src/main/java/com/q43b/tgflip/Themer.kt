@@ -130,6 +130,17 @@ object Themer {
         }
     }
 
+    // For rows that draw their own divider: the theme's divider and its height in px, or null for none
+    fun newDivider(context: Context): Pair<Drawable, Int>? {
+        val theme = Themes.current(context)
+        if (theme.shapes.divider == "none") return null
+        val height = maxOf(1, px(context, theme.shapes.dividerDp))
+        return Divider(theme.palette(context).divider, dashed = theme.shapes.divider == "dashed") to height
+    }
+
+    // A list row's top and bottom padding as styleRow sets it, in px
+    fun rowPaddingPx(context: Context) = px(context, Themes.current(context).sizes.rowPaddingDp * Themes.scale(context))
+
     private val BAR_ROLES = setOf("title", "bar", "tab", "connection")
 
     // A drawable shown only in the focused state (and the extra states given), else nothing
@@ -148,7 +159,11 @@ object Themer {
         // version line or the message box, the list keeps its selected row but shows nothing
         list.selector = whileFocused(Focus(context, theme, p), android.R.attr.state_pressed)
         list.isDrawSelectorOnTop = false
-        if (list is ListView) {
+        if (list is ListView && list.tag == "theme:own_divider") {
+            // The rows draw their dividers themselves (chat rows: none between a message and its media)
+            list.divider = null
+            list.dividerHeight = 0
+        } else if (list is ListView) {
             val divider = if (theme.shapes.divider == "none") 0 else maxOf(1, px(context, theme.shapes.dividerDp))
             list.divider = if (divider == 0) null else Divider(p.divider, dashed = theme.shapes.divider == "dashed")
             list.dividerHeight = divider

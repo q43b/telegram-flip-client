@@ -53,6 +53,13 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var messageList: OkListView
     private lateinit var messageAdapter: ArrayAdapter<CharSequence>
     private val rows = mutableListOf<CharSequence>()  // the adapter's own list, for updating one row
+
+    // What each row of the list is: the message it belongs to (an index into messages, -1 for the
+    // "Load older messages" row) and whether it is that message's media row. A message with media
+    // has two rows, kept together by MessageRowAdapter.
+    private class RowRef(val messageIndex: Int, val media: Boolean)
+    private val refs = mutableListOf<RowRef>()
+    private var lastGroup = -2  // the message that had the focus when the rows were last drawn
     private lateinit var messageInput: EditText
     private lateinit var softKeys: SoftKeyBar
     private val messages = mutableListOf<Message>()
@@ -185,13 +192,15 @@ class ChatActivity : AppCompatActivity() {
         messageList.wrapsDown = false  // Down on the newest message goes to the message box
         findViewById<TextView>(R.id.chat_title).text = intent.getStringExtra(EXTRA_TITLE)
         // Sticker pictures under sticker messages, unless Settings says data saver
-        messageAdapter = MessageRowAdapter(this, rows) { position ->
-            val message = messageAt(position)
-            val sticker = message?.sticker
-            if (sticker == null || !StickerSetting.showsPictures(this)) null
-            else stickers.drawable(sticker.id, chatId, message.id, sticker.kind)
-        }
+        messageAdapter = MessageRowAdapter(this, rows, ::rowInfo)
         messageList.adapter = messageAdapter
+        // The partner row of the focused row gets a faint tint: redraw when the focus moves to another
+        // message, or leaves the list
+        messageList.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = redrawIfGroupChanged()
+            override fun onNothingSelected(parent: AdapterView<*>?) = redrawIfGroupChanged()
+        }
+        messageList.setOnFocusChangeListener { _, _ -> lastGroup = -2; redrawIfGroupChanged() }
         // OK on a message opens its menu (OkListView takes OK before the keyboard app);
         // the click listener covers touch taps
         messageList.onOk = ::onRowChosen
@@ -308,9 +317,13 @@ class ChatActivity : AppCompatActivity() {
 
     // F2: Media and Stickers are placeholders for version 2; Quick phrases works
     private fun showSoftKeyMenu() {
-        val items = listOf(R.string.quick_phrases, R.string.menu_stickers, R.string.menu_media, R.string.menu_record_voice)
+        // On a sticker's media row the menu starts with its pack
+        val sticker = focusedRef()?.takeIf { it.media }?.let { messages[it.messageIndex] }?.takeIf { it.sticker != null }
+        val items = listOfNotNull(sticker?.let { R.string.action_view_pack }) +
+            listOf(R.string.quick_phrases, R.string.menu_stickers, R.string.menu_media, R.string.menu_record_voice)
         MessageMenu.choose(this, getString(R.string.soft_key_menu), items.map(::getString)) { which ->
             when (items[which]) {
+                R.string.action_view_pack -> pickSticker.launch(StickerPickerActivity.PackOf(sticker!!.sticker!!.id, chatId, sticker.id))
                 R.string.quick_phrases -> showQuickPhrases()
                 R.string.menu_record_voice -> startRecording()
                 R.string.menu_media -> showMediaMenu()
@@ -762,13 +775,69 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // The "Load older messages" row, when shown, sits above the messages and shifts them by one
-    private val headerRows get() = if (hasOlder) 1 else 0
+    // Does a message get a media row under its message row? (Calls have their own line.)
+    private fun hasMedia(m: Message) =
+        m.call == null && (m.image != null || m.video != null || m.round != null || m.voice != null || m.file != null || m.sticker != null)
 
-    private fun messageAt(position: Int) = messages.getOrNull(position - headerRows)
+    // The position of a message's own row (its media row, if it has one, follows it)
+    private fun positionOf(messageIndex: Int) = refs.indexOfFirst { it.messageIndex == messageIndex && !it.media }
 
+    // The message the highlighted row belongs to (null on the "Load older messages" row), and whether
+    // it is its media row
+    private fun focusedRef(): RowRef? {
+        val position = messageList.selectedItemPosition
+        return refs.getOrNull(position)?.takeIf { it.messageIndex >= 0 }
+    }
+
+    // How a row is drawn: see MessageRowAdapter
+    private fun rowInfo(position: Int): MessageRowAdapter.Info {
+        val ref = refs.getOrNull(position)
+        if (ref == null || ref.messageIndex < 0) return MessageRowAdapter.Info()
+        val message = messages.getOrNull(ref.messageIndex) ?: return MessageRowAdapter.Info()
+        val focused = focusedRef()
+        val focusedHere = messageList.hasFocus() && focused != null && focused.messageIndex == ref.messageIndex
+        val sticker = message.sticker
+        return MessageRowAdapter.Info(
+            media = ref.media,
+            partnerBelow = refs.getOrNull(position + 1)?.messageIndex == ref.messageIndex,
+            partnerAbove = refs.getOrNull(position - 1)?.messageIndex == ref.messageIndex,
+            partnerFocused = focusedHere && position != messageList.selectedItemPosition,
+            sticker = if (!ref.media || sticker == null || !StickerSetting.showsPictures(this)) null
+            else stickers.drawable(sticker.id, chatId, message.id, sticker.kind),
+        )
+    }
+
+    private fun redrawIfGroupChanged() {
+        val group = if (messageList.hasFocus()) focusedRef()?.messageIndex ?: -1 else -1
+        if (group == lastGroup) return
+        lastGroup = group
+        messageAdapter.notifyDataSetChanged()
+    }
+
+    // OK on a message's own row opens its menu; OK on its media row does the media's main action
     private fun onRowChosen(position: Int) {
-        if (hasOlder && position == 0) loadOlder() else messageAt(position)?.let(::showMessageMenu)
+        val ref = refs.getOrNull(position) ?: return
+        if (ref.messageIndex < 0) {
+            loadOlder()
+            return
+        }
+        val message = messages[ref.messageIndex]
+        if (ref.media) openMedia(message) else showMessageMenu(message)
+    }
+
+    // The main action of a media row: view the photo, play the video, play or stop the voice message,
+    // download the file, view the sticker (or its pack, when pictures are off)
+    private fun openMedia(m: Message) {
+        when {
+            m.image != null -> ImageActivity.start(this, chatId, m.id)
+            m.video != null -> VideoActivity.start(this, chatId, m.id)
+            m.round != null -> VideoActivity.start(this, chatId, m.id, round = true)
+            m.file != null -> downloadFile(m)
+            m.voice != null -> if (voice.currentId == m.id) voice.stop() else voice.play(chatId, m.id)
+            m.sticker != null ->
+                if (StickerSetting.showsPictures(this)) ImageActivity.startSticker(this, chatId, m.id, m.sticker.id, m.sticker.kind)
+                else pickSticker.launch(StickerPickerActivity.PackOf(m.sticker.id, chatId, m.id))
+        }
     }
 
     // Asks for one more page, then keeps the highlight on the message that was at the top,
@@ -809,7 +878,7 @@ class ChatActivity : AppCompatActivity() {
     private fun highlight(id: Long): Boolean {
         val index = messages.indexOfFirst { it.id == id }
         if (index < 0) return false
-        messageList.setSelection(index + headerRows)
+        messageList.setSelection(positionOf(index))
         messageList.requestFocus()
         return true
     }
@@ -845,7 +914,7 @@ class ChatActivity : AppCompatActivity() {
         if (loaded.isEmpty()) showStatus(getString(R.string.no_messages)) else status.visibility = View.GONE
         // Newest message is at the bottom; start there, unless asked to keep a message in view
         val keepIndex = messages.indexOfFirst { it.id == keepId }
-        messageList.setSelection(if (keepIndex >= 0) keepIndex + headerRows else messageAdapter.count - 1)
+        messageList.setSelection(if (keepIndex >= 0) positionOf(keepIndex) else messageAdapter.count - 1)
         messageList.requestFocus()
     }
 
@@ -992,7 +1061,13 @@ class ChatActivity : AppCompatActivity() {
     private fun addMessage(message: Message, follow: Boolean): Boolean {
         if (messages.any { it.id == message.id }) return false
         messages.add(message)
-        messageAdapter.add(formatMessage(message))
+        rows.add(formatMessage(message))
+        refs.add(RowRef(messages.size - 1, false))
+        if (hasMedia(message)) {
+            rows.add(mediaLine(message))
+            refs.add(RowRef(messages.size - 1, true))
+        }
+        messageAdapter.notifyDataSetChanged()
         if (follow) messageList.setSelection(messageAdapter.count - 1)
         saveMessages()
         return true
@@ -1024,16 +1099,31 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun refreshRows() {
-        messageAdapter.clear()
-        if (hasOlder) messageAdapter.add(getString(R.string.load_older))
-        messageAdapter.addAll(messages.map(::formatMessage))
+        rows.clear()
+        refs.clear()
+        if (hasOlder) {
+            rows.add(getString(R.string.load_older))
+            refs.add(RowRef(-1, false))
+        }
+        messages.forEachIndexed { i, m ->
+            rows.add(formatMessage(m))
+            refs.add(RowRef(i, false))
+            if (hasMedia(m)) {
+                rows.add(mediaLine(m))
+                refs.add(RowRef(i, true))
+            }
+        }
+        lastGroup = -2
+        messageAdapter.notifyDataSetChanged()
     }
 
     // Only this message's line, e.g. while its voice message plays
     private fun refreshRow(messageId: Long) {
         val index = messages.indexOfFirst { it.id == messageId }
         if (index < 0) return
-        rows[index + headerRows] = formatMessage(messages[index])
+        refs.forEachIndexed { position, ref ->
+            if (ref.messageIndex == index) rows[position] = if (ref.media) mediaLine(messages[index]) else formatMessage(messages[index])
+        }
         messageAdapter.notifyDataSetChanged()
     }
 
@@ -1207,13 +1297,8 @@ class ChatActivity : AppCompatActivity() {
     private fun formatMessage(message: Message): CharSequence {
         val call = message.call
         if (call != null) return formatCall(message, call)
-        val text = voiceLine(message)?.let { if (message.text.isEmpty()) it else "$it ${message.text}" }
-            ?: message.image?.let { MessageFormat.photo(this, message.text) }
-            ?: message.video?.let { MessageFormat.video(this, it, message.text) }
-            ?: message.round?.let { MessageFormat.round(this, it) }
-            ?: message.file?.let { fileLines(it, message.text) }
-            ?: message.sticker?.let(::stickerLine)
-            ?: message.text.ifEmpty { getString(R.string.media) }
+        // With media only the caption stays here; the media has its own row below (mediaLine)
+        val text = if (hasMedia(message)) message.text else message.text.ifEmpty { getString(R.string.media) }
         var time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
         if (message.read == true) time += " ${getString(R.string.read_mark)}"  // the other person has read it
         val line = SpannableStringBuilder("$time ")
@@ -1236,13 +1321,16 @@ class ChatActivity : AppCompatActivity() {
         return withReactions(body, message.reactions)
     }
 
-    // A file message starts on a new line after the time and sender, with the file's own line(s)
-    // ("📄 File: name · size", wrapped as long as the name needs) and the caption on a line below,
-    // so the name never runs into other text
-    private fun fileLines(file: FileInfo, caption: String): String {
-        val line = MessageFormat.file(this, file, "")
-        return if (caption.isEmpty()) "\n$line" else "\n$line\n$caption"
-    }
+    // The media row under a message that has media: "🖼 Photo", "🎬 Video 0:45 · 12 MB", "🎤 Voice message
+    // 0:12" (counting along while it plays), "📄 File: name · size", "🏷 Sticker 😂"
+    private fun mediaLine(message: Message): String =
+        voiceLine(message)
+            ?: message.image?.let { MessageFormat.photo(this, "") }
+            ?: message.video?.let { MessageFormat.video(this, it, "") }
+            ?: message.round?.let { MessageFormat.round(this, it) }
+            ?: message.file?.let { MessageFormat.file(this, it, "") }
+            ?: message.sticker?.let(::stickerLine)
+            ?: ""
 
     // "🏷 Sticker 😂", and in data saver mode (no picture) my description: "🏷 Sticker 😂: cat laughing"
     private fun stickerLine(sticker: StickerInfo): String {

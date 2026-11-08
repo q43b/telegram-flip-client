@@ -202,6 +202,14 @@ class SettingsGroupActivity : AppCompatActivity() {
     private fun stickerRows(): List<SettingRow> {
         val mode = StickerSetting.mode(this)
         val packs = StickerSetting.packs(this)
+        // Only with Animated: which stickers of an open pack play
+        val pickerAll = if (mode == StickerSetting.Mode.ANIMATED) listOf(
+            SettingRow(getString(R.string.setting_picker_all,
+                getString(if (StickerSetting.pickerAll(this)) R.string.picker_all_on else R.string.picker_all_off))) {
+                StickerSetting.savePickerAll(this, !StickerSetting.pickerAll(this))
+                saved()
+            },
+        ) else emptyList()
         return listOf(
             SettingRow(getString(R.string.setting_stickers, getString(mode.label))) {
                 val modes = StickerSetting.Mode.entries
@@ -222,7 +230,7 @@ class SettingsGroupActivity : AppCompatActivity() {
                     }
                 }
             },
-        )
+        ) + pickerAll
     }
 
     // Things that save keypresses: quick phrases for now

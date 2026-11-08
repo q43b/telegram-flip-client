@@ -29,6 +29,7 @@
     <!-- Takes OK before the keyboard app does; see OkListView.kt -->
     <com.q43b.tgflip.OkListView
         android:id="@+id/message_list"
+        android:tag="theme:own_divider"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />

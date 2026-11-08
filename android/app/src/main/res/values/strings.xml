@@ -304,6 +304,9 @@
     <string name="menu_media_title">Send media</string>
     <string name="menu_send_photo">🖼 Send photo</string>
     <string name="menu_send_video">🎬 Send video</string>
+    <string name="setting_picker_all">Sticker pack screen: %1$s</string>
+    <string name="picker_all_on">All visible play</string>
+    <string name="picker_all_off">Only the highlighted plays</string>
     <string name="menu_send_file">📄 Send file</string>
     <string name="read_mark">✓✓</string>
     <string name="action_request_reads">👁 Request reads</string>

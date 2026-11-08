@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat media rows and sticker picker mockups</title>
+<style>
+  :root { --bg:#f4f3ef; --card:#fff; --ink:#1d1d1b; --muted:#6b6a64; --line:#d3d1c7; --accent:#185fa5; --accent-bg:#e6f1fb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1c1a; --card:#2a2a27; --ink:#eeede6; --muted:#a3a198; --line:#4a4944; --accent:#85b7eb; --accent-bg:#0c447c; }
+  }
+  body { margin:0; padding:20px 16px 40px; background:var(--bg); color:var(--ink); font-family:system-ui,sans-serif; }
+  h1 { font-size:20px; font-weight:500; margin:0 0 4px; }
+  h2 { font-size:16px; font-weight:500; margin:28px 0 10px; }
+  p.note { color:var(--muted); font-size:14px; margin:0 0 12px; max-width:760px; }
+  .row { display:flex; flex-wrap:wrap; gap:16px; }
+  .col { flex:1 1 230px; max-width:300px; }
+  .screen { background:var(--card); border:1px solid var(--line); border-radius:6px; font-family:ui-monospace,Consolas,monospace; font-size:13px; line-height:1.4; display:flex; flex-direction:column; min-height:360px; }
+  .bar { padding:4px 8px; border-bottom:1px solid var(--line); color:var(--muted); }
+  .soft { display:flex; justify-content:space-between; padding:4px 8px; border-top:1px solid var(--line); color:var(--muted); margin-top:auto; }
+  .m { padding:6px 8px; border-bottom:1px dashed var(--line); }
+  .sel { background:var(--accent-bg); color:var(--accent); }
+  .blk { border-left:4px solid var(--accent); background:rgba(24,95,165,.10); padding:3px 6px; margin:3px 0; }
+  .hint { color:var(--muted); }
+  .chip { border:1px solid var(--line); padding:4px 8px; margin:2px 8px 6px 20px; }
+  .chip.sel { border-color:var(--accent); }
+  .cap { font-size:13px; color:var(--muted); margin:8px 2px 0; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px; }
+  .c { aspect-ratio:1; border:1px solid var(--line); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:24px; }
+  .c.on { border:3px solid var(--accent); background:var(--accent-bg); }
+  @keyframes bob { 0%,100% { transform:translateY(0) scale(1); } 50% { transform:translateY(-4px) scale(1.2); } }
+  .p span { display:inline-block; animation:bob 1s ease-in-out infinite; }
+  .p:nth-child(2n) span { animation-delay:.25s; } .p:nth-child(3n) span { animation-delay:.5s; }
+  .grp { border-bottom:1px dashed var(--line); }
+  .grp .m { border-bottom:none; padding-bottom:2px; }
+  .grp .tail { margin:0 8px 6px 14px; padding:4px 8px; border:1px solid var(--line); border-left:4px solid var(--accent); }
+  .grp .tail::before { content:"©4 "; color:var(--accent); margin-left:-2px; }
+  .grp.sel .m, .grp.sel .tail { background:rgba(24,95,165,.10); }
+  .grp.sel .m.focus { background:var(--accent-bg); color:var(--accent); outline:2px solid var(--accent); outline-offset:-2px; }
+  .grp.sel .tail.focus { background:var(--accent-bg); color:var(--accent); outline:2px solid var(--accent); outline-offset:-2px; }
+  .grp .rx { padding:0 8px 6px; color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<h1>Chat rows with media, and the sticker pack screen</h1>
+<p class="note">Rough sketches of the flip phone screen (the blue row is the d-pad highlight). Nothing is built yet.</p>
+
+<h2>Chat screen</h2>
+<div class="row">
+  <div class="col">
+    <div class="screen"><div class="bar">Anna</div>
+      <div class="m">14:02 Anna: lunch at noon?</div>
+      <div class="m">14:03 ✓✓ You: 🖼 Photo: map</div>
+      <div class="m sel">14:05 Anna:<br>📄 File: Lab report draft.docx · 1.2 MB - comments welcome</div>
+      <div class="m">14:06 Anna: 🎬 Video 0:45 · 12 MB: look at this</div>
+      <div class="soft"><span>Mark read</span><span>Menu</span></div></div>
+    <div class="cap">Today: the media label shares the lines with time, sender and caption</div>
+  </div>
+  <div class="col">
+    <div class="screen"><div class="bar">Anna</div>
+      <div class="m">14:02 Anna:<br>lunch at noon?</div>
+      <div class="m">14:03 ✓✓ You:<div class="blk">🖼 Photo<br><span class="hint">map</span></div></div>
+      <div class="m sel">14:05 Anna:<div class="blk">📄 Lab report draft.docx<br><span class="hint">1.2 MB · .docx</span></div>comments welcome</div>
+      <div class="m">14:06 Anna:<div class="blk">🎬 Video 0:45 · 12 MB</div>look at this</div>
+      <div class="soft"><span>Mark read</span><span>Menu</span></div></div>
+    <div class="cap"><b>A</b>: a media block inside the row, its own colour and bar, caption below</div>
+  </div>
+  <div class="col">
+    <div class="screen"><div class="bar">Anna</div>
+      <div class="m">14:02 Anna: lunch at noon?</div>
+      <div class="m" style="border-bottom:none">14:03 ✓✓ You:</div>
+      <div class="chip">🖼 Photo · map</div>
+      <div class="m" style="border-bottom:none">14:05 Anna: comments welcome</div>
+      <div class="chip sel">📄 Lab report draft.docx · 1.2 MB</div>
+      <div class="m" style="border-bottom:none">14:06 Anna: look at this</div>
+      <div class="chip">🎬 Video 0:45 · 12 MB</div>
+      <div class="soft"><span>Mark read</span><span>Media menu</span></div></div>
+    <div class="cap"><b>B</b>: media is its own selectable row. OK on it = Download; OK on the text = message menu with message actions only</div>
+  </div>
+</div>
+
+<h2>B with the pieces tied together</h2>
+<p class="note">The split rows stay one message: no divider between the message line and its media row (only after the pair), the media row is indented with a connector and the same accent bar, and when one of the two has the focus it gets the strong highlight with a frame while the other gets only a faint tint, so you always see which one OK acts on. Reactions and the read mark stay on the message line.</p>
+<div class="row">
+  <div class="col">
+    <div class="screen"><div class="bar">Anna</div>
+      <div class="grp"><div class="m">14:02 Anna: lunch at noon?</div></div>
+      <div class="grp"><div class="m">14:03 ✓✓ You:</div><div class="tail">🖼 Photo · map</div></div>
+      <div class="grp sel"><div class="m">14:05 Anna: comments welcome<br>👍 2</div><div class="tail focus">📄 Lab report draft.docx · 1.2 MB</div></div>
+      <div class="grp"><div class="m">14:06 Anna: look at this</div><div class="tail">🎬 Video 0:45 · 12 MB</div></div>
+      <div class="soft"><span>Mark read</span><span>Media menu</span></div></div>
+    <div class="cap">Focus on the file row: that row is the strong blue with a frame, the text row above only a faint tint (same message), OK = Download, F2 = media extras</div>
+  </div>
+  <div class="col">
+    <div class="screen"><div class="bar">Anna</div>
+      <div class="grp"><div class="m">14:02 Anna: lunch at noon?</div></div>
+      <div class="grp"><div class="m">14:03 ✓✓ You:</div><div class="tail">🖼 Photo · map</div></div>
+      <div class="grp sel"><div class="m focus">14:05 Anna: comments welcome<br>👍 2</div><div class="tail">📄 Lab report draft.docx · 1.2 MB</div></div>
+      <div class="grp"><div class="m">14:06 Anna: look at this</div><div class="tail">🎬 Video 0:45 · 12 MB</div></div>
+      <div class="soft"><span>Mark read</span><span>Menu</span></div></div>
+    <div class="cap">Focus on the text row: strong blue with a frame, the media row below only a faint tint, OK = message menu</div>
+  </div>
+</div>
+
+<h2>Sticker pack screen</h2>
+<div class="row">
+  <div class="col">
+    <div class="screen" style="min-height:0"><div class="bar">Pixel pals (8)</div>
+      <div class="grid">
+        <div class="c">❤️</div><div class="c">⭐</div><div class="c">😀</div><div class="c">☀️</div>
+        <div class="c">☁️</div><div class="c on p"><span>✅</span></div><div class="c">🌙</div><div class="c">🔥</div>
+      </div></div>
+    <div class="cap">Today: only the highlighted sticker plays (d-pad phones)</div>
+  </div>
+  <div class="col">
+    <div class="screen" style="min-height:0"><div class="bar">Pixel pals (8)</div>
+      <div class="grid">
+        <div class="c p"><span>❤️</span></div><div class="c p"><span>⭐</span></div><div class="c p"><span>😀</span></div><div class="c p"><span>☀️</span></div>
+        <div class="c p"><span>☁️</span></div><div class="c on p"><span>✅</span></div><div class="c p"><span>🌙</span></div><div class="c p"><span>🔥</span></div>
+      </div></div>
+    <div class="cap">New setting: all visible stickers play (touchscreen phones)</div>
+  </div>
+</div>
+</body>
+</html>

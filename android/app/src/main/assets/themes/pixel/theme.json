@@ -15,6 +15,7 @@
       "focus_outline": "#0B1E3A",
       "divider": "#5FA9C0",
       "accent": "#C2410C",
+      "media": "#1B6B8A",
       "connecting": "#5F6B78",
       "connected": "#2E7D32",
       "offline": "#C62828"
@@ -29,6 +30,7 @@
       "focus_outline": "#99D9EA",
       "divider": "#234A6E",
       "accent": "#FF9F5A",
+      "media": "#99D9EA",
       "connecting": "#4A5563",
       "connected": "#2E7D32",
       "offline": "#B42323"

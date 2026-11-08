@@ -29,6 +29,7 @@ class Theme(
         val bar: Int, val barText: Int,
         val focus: Int, val focusOutline: Int, val divider: Int, val accent: Int,
         val connecting: Int, val connected: Int, val offline: Int,
+        val media: Int = text,  // the bar and text of media rows in chats; a theme without it uses the text color
     )
 
     class Shapes(
@@ -87,8 +88,10 @@ class Theme(
             } catch (e: IllegalArgumentException) {
                 fallback  // not a color: keep the base theme's
             }
+            val text = color("text", base.text)
             return Palette(
-                background = color("background", base.background), text = color("text", base.text),
+                background = color("background", base.background), text = text,
+                media = color("media", text),
                 textSecondary = color("text_secondary", base.textSecondary),
                 bar = color("bar", base.bar), barText = color("bar_text", base.barText),
                 focus = color("focus", base.focus), focusOutline = color("focus_outline", base.focusOutline),
