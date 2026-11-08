@@ -1,0 +1,135 @@
+{
+  "name": "showcase",
+  "me": {"id": 1000, "first_name": "Alex", "last_name": "Demo", "username": "alex_demo", "phone": "10000000000", "color": 5},
+
+  "people": [
+    {"id": 1001, "first_name": "Mia", "last_name": "Chen", "username": "mia_chen", "phone": "10000000001", "color": 0},
+    {"id": 1002, "first_name": "Leo", "last_name": "Park", "username": "leo_park", "phone": "10000000002", "color": 3},
+    {"id": 1003, "first_name": "Sam", "last_name": "Rivera", "username": "sam_r", "phone": "10000000003", "color": 2},
+    {"id": 1004, "first_name": "Dana", "last_name": "Wu", "username": "dana_wu", "color": 6},
+    {"id": 1005, "first_name": "Иван", "last_name": "Смирнов", "username": "ivan_s", "phone": "10000000005", "color": 4},
+    {"id": 1006, "first_name": "Pixel", "last_name": "Bot", "username": "pixel_helper_bot", "bot": true, "color": 1},
+    {"id": 1007, "first_name": "Dad", "phone": "10000000007", "color": 1},
+    {"id": 1008, "first_name": "Noah", "last_name": "Kim", "username": "noah_k", "color": 5}
+  ],
+
+  "sticker_set": {
+    "id": 5000, "title": "Pixel pals", "short_name": "pixel_pals",
+    "items": [
+      {"key": "heart", "emoji": "❤", "draw": "heart"},
+      {"key": "star", "emoji": "⭐", "draw": "star"},
+      {"key": "smile", "emoji": "😀", "draw": "smile"},
+      {"key": "sun", "emoji": "☀", "draw": "sun"},
+      {"key": "cloud", "emoji": "☁", "draw": "cloud"},
+      {"key": "check", "emoji": "✅", "draw": "check"}
+    ]
+  },
+  "custom_emoji": [
+    {"key": "party", "emoji": "🎉", "draw": "star"},
+    {"key": "cool", "emoji": "😎", "draw": "smile"}
+  ],
+  "reactions": ["👍", "❤", "🔥", "😂", "🎉", "😮"],
+  "live": {"events": [
+    {"chat": "Mia Chen", "after": "10s", "from": 1001, "text": "Wait, I forgot to say: the cafe is on Pine street"},
+    {"chat": "Study group", "after": "16s", "from": 1002, "text": "Slides are posted in the shared folder"},
+    {"chat": "Mia Chen", "after": "22s", "react": true, "message": "love", "emoji": "❤"},
+    {"chat": "Study group", "after": "30s", "from": 1003, "text": "Anyone up for a quick call?"}
+  ]},
+  "faved": ["heart"],
+  "recent": ["smile", "heart", "star"],
+
+  "chats": [
+    {"kind": "private", "person": 1001, "unread": 2,
+     "auto_replies": [
+       {"from": 1001, "after": "3s", "text": "Great, see you at noon!"},
+       {"from": 1001, "after": "4s", "text": "Oh, and bring a charger if you can"}
+     ], "messages": [
+      {"from": 1001, "ago": "1d2h", "text": "Did you see the new sticker pack?"},
+      {"from": "me", "ago": "1d1h50m", "text": "Not yet! Send me the link?"},
+      {"from": 1001, "ago": "1d1h48m", "text": "Here it is: t.me/addstickers/pixel_pals"},
+      {"from": "me", "ago": "1d1h", "text": "Love them, the heart is my favourite", "key": "love"},
+      {"from": 1001, "ago": "20m", "text": "Are we still on for lunch?", "edited": true},
+      {"from": 1001, "ago": "3m", "text": "Also, can you bring the notes from yesterday?"}
+    ]},
+
+    {"kind": "group", "id": 2001, "title": "Study group", "members": [1001, 1002, 1003, 1004], "owner": 1002, "admins": [1001],
+     "unread": 3, "messages": [
+      {"from": 1002, "ago": "5h", "text": "Reminder: the lab report is due on Friday"},
+      {"from": 1004, "ago": "4h50m", "text": "Thanks! I'll start tonight", "reactions": [{"emoji": "👍", "count": 3, "mine": true}]},
+      {"from": 1001, "ago": "4h", "text": "Here is the whiteboard from today", "media": {"type": "photo", "picture": "city", "w": 1280, "h": 960}},
+      {"from": "me", "ago": "3h55m", "text": "That diagram saved me", "reactions": [{"emoji": "❤", "count": 2}]},
+      {"from": 1003, "ago": "2h", "text": "Anyone up for the library tomorrow?", "key": "library"},
+      {"from": 1002, "ago": "1h40m", "text": "I am. 10 o'clock?", "reply": "library"},
+      {"from": "me", "ago": "1h30m", "text": "Works for me", "reply": "library", "reactions": [{"custom": "party", "count": 1}]},
+      {"from": 1003, "ago": "40m", "text": "See you there [[ce:cool]]"},
+      {"from": 1002, "ago": "25m", "text": "Bring coffee, it will be a long day"},
+      {"from": 1004, "ago": "24m", "text": "I can do that"},
+      {"from": 1001, "ago": "22m", "text": "Same!"}
+    ]},
+
+    {"kind": "forum", "id": 2002, "title": "Pixel Art Club", "members": [1001, 1002, 1003, 1004, 1008], "owner": 1008, "admins": [1002], "participants": 128,
+     "topics": [
+       {"key": "showcase", "title": "Showcase", "unread": 2, "icon_color": 7322096},
+       {"key": "tips", "title": "Tips and tricks", "unread": 1, "icon_color": 16766590},
+       {"key": "offtopic", "title": "Off topic", "unread": 0, "icon_color": 13338331}
+     ],
+     "messages": [
+      {"from": 1008, "ago": "2d", "text": "Welcome to the club! Please read the pinned rules."},
+      {"from": 1002, "ago": "1d20h", "topic": "showcase", "text": "My first 16x16 sprite!", "media": {"type": "photo", "picture": "sunset", "w": 1280, "h": 960}},
+      {"from": 1003, "ago": "1d19h", "topic": "showcase", "text": "Great palette", "reactions": [{"emoji": "🔥", "count": 4}]},
+      {"from": 1001, "ago": "1d", "topic": "tips", "text": "Tip: limit yourself to 8 colors, it forces good choices", "key": "tip"},
+      {"from": 1004, "ago": "23h", "topic": "tips", "text": "Do you use dithering?", "reply": "tip"},
+      {"from": 1008, "ago": "6h", "topic": "offtopic", "text": "What are you all listening to today?"},
+      {"from": 1003, "ago": "3h", "topic": "showcase", "text": "Animated version coming soon", "media": {"type": "photo", "picture": "mountains", "w": 1280, "h": 960}},
+      {"from": 1002, "ago": "50m", "topic": "showcase", "text": "Can't wait [[ce:party]]"},
+      {"from": 1001, "ago": "40m", "topic": "tips", "text": "Save your palette as a file, you will thank yourself later"}
+    ]},
+
+    {"kind": "private", "person": 1005, "messages": [
+      {"from": 1005, "ago": "6h", "text": "Привет! Как дела?"},
+      {"from": "me", "ago": "5h50m", "text": "Привет, всё хорошо! А у тебя?"},
+      {"from": 1005, "ago": "5h45m", "text": "Тоже отлично. Ты видел новую версию приложения?"},
+      {"from": "me", "ago": "5h40m", "text": "Да, теперь есть темы оформления", "reactions": [{"emoji": "👍", "count": 1}]},
+      {"from": 1005, "ago": "1h", "text": "Супер, скину скриншот попозже"}
+    ]},
+
+    {"kind": "channel", "id": 2003, "title": "Daily Pixel", "participants": 5400, "unread": 1, "messages": [
+      {"ago": "3d", "text": "Welcome to Daily Pixel: one small picture, every day."},
+      {"ago": "1d", "text": "Today: a quiet evening", "media": {"type": "photo", "picture": "sunset", "w": 1280, "h": 960}, "reactions": [{"emoji": "❤", "count": 214}, {"emoji": "🔥", "count": 87}]},
+      {"ago": "2h10m", "text": "Today: morning in the mountains", "media": {"type": "photo", "picture": "mountains", "w": 1280, "h": 960}, "reactions": [{"emoji": "❤", "count": 96}, {"emoji": "😮", "count": 12}]}
+    ]},
+
+    {"kind": "private", "person": 1007, "messages": [
+      {"from": "me", "ago": "2d", "text": "Home on Sunday!"},
+      {"from": 1007, "ago": "1d", "text": "Great, mom is cooking"},
+      {"from": 1007, "ago": "3h30m", "media": {"type": "voice", "duration": 27}},
+      {"from": 1007, "ago": "3h", "media": {"type": "call", "video": false, "reason": "missed"}}
+    ]},
+
+    {"kind": "private", "person": 1003, "messages": [
+      {"from": 1003, "ago": "6h", "text": "Look what I found"},
+      {"from": 1003, "ago": "5h58m", "media": {"type": "sticker", "key": "star"}},
+      {"from": 1003, "ago": "5h55m", "text": "And a short clip from today", "media": {"type": "video", "duration": 12, "w": 480, "h": 270, "size": 2400000}},
+      {"from": "me", "ago": "5h40m", "media": {"type": "sticker", "key": "heart"}, "reactions": [{"emoji": "😂", "count": 1}]},
+      {"from": 1003, "ago": "5h30m", "text": "Okay the party one is my favourite [[ce:party]]", "reactions": [{"custom": "party", "count": 1, "mine": true}]},
+      {"from": "me", "ago": "5h", "media": {"type": "call", "video": true, "reason": "hangup", "duration": 754}}
+    ]},
+
+    {"kind": "private", "person": 1006, "messages": [
+      {"from": "me", "ago": "1d1h", "text": "/start"},
+      {"from": 1006, "ago": "1d1h", "text": "Hi! I am the Pixel helper bot. Send me a size like 16x16 and I will make you an empty canvas."},
+      {"from": "me", "ago": "1d", "text": "32x32"}
+    ]},
+
+    {"kind": "private", "person": 1008, "messages": [
+      {"from": 1008, "ago": "2d4h", "text": "Recorded this on the way", "media": {"type": "video", "duration": 45, "w": 640, "h": 360, "size": 8400000}},
+      {"from": "me", "ago": "2d4h", "text": "Nice!"},
+      {"from": 1008, "ago": "2d3h", "media": {"type": "round", "duration": 15, "size": 1200000}}
+    ]},
+
+    {"kind": "private", "person": "me", "messages": [
+      {"from": "me", "ago": "4d", "text": "Buy: milk, batteries for the remote, pixel graph paper"},
+      {"from": "me", "ago": "3d", "text": "Idea for the next sprite", "media": {"type": "photo", "picture": "coffee", "w": 1280, "h": 960}}
+    ]}
+  ]
+}

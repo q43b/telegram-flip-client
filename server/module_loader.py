@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -24,6 +25,47 @@ ID = re.compile(r"[a-z0-9_]{1,40}")
 
 modules = []  # every installed module, as Module, in the order loaded
 hooks = {}  # hook name -> [functions], in the order registered
+filters = {}  # filter name -> [(module, function)], in load order (since 1.4.0, see ModuleContext.filter)
+
+# What a module's "uses" may name (module.json), shown when it is installed or updated: a module
+# runs inside the server, so this is for the owner's eyes, but a module can only register what it
+# declared (FILTER_USES). Unknown names are shown as they are.
+KNOWN_USES = {
+    "traffic.http": "read and change the answers the server gives to apps",
+    "traffic.live": "read and change the live events the server sends to apps",
+    "telegram.transport": "act as the Telegram connection of accounts of its own kind (a made-up Telegram instead of the real one)",
+}
+# filter name -> the use it needs
+FILTER_USES = {"http.json": "traffic.http", "live.event": "traffic.live"}
+
+
+class _Drop:
+    """DROP: what a live.event filter returns to keep that event from being sent."""
+
+    def __repr__(self):
+        return "DROP"
+
+
+DROP = _Drop()
+
+
+class Traffic:
+    """What a filter is told about what it's looking at (module API 1, since server 1.4.0). New
+    attributes may be added later, never removed. Not every attribute fits every filter (None):
+    - path, method, status: the request and its answer (http.json)
+    - account: the name of the account (accounts.json)
+    - host: the app's address
+    - client_version: the app's version ("0.11.2-alpha"), or None when unknown (an app that
+      doesn't tell: before 0.7.1, or one that hasn't opened a live connection yet)
+    """
+
+    def __init__(self, path=None, method=None, status=None, account=None, host=None, client_version=None):
+        self.path = path
+        self.method = method
+        self.status = status
+        self.account = account
+        self.host = host
+        self.client_version = client_version
 
 
 class ModuleError(Exception):
@@ -52,10 +94,15 @@ class Module:
     def version(self):
         return self.manifest.get("version", "?")
 
+    @property
+    def uses(self):
+        return self.manifest.get("uses", [])
+
     def info(self):
         """As GET /modules shows it."""
         return {"id": self.id, "name": self.name, "version": self.version,
-                "provides": self.provides or self.manifest.get("provides", {}), "status": self.status}
+                "provides": self.provides or self.manifest.get("provides", {}), "status": self.status,
+                "uses": self.uses}
 
 
 def python_tag():
@@ -105,6 +152,9 @@ def check_manifest(text, folder_name, server_version, version_key):
             raise ModuleError(f"needs Python {manifest['python_min']} or newer")
     elif python != "any" and python != python_tag():
         raise ModuleError(f"built for {python}, this server runs {python_tag()}")
+    uses = manifest.get("uses", [])
+    if not isinstance(uses, list) or not all(isinstance(u, str) for u in uses):
+        raise ModuleError('"uses" must be a list of names, like ["traffic.http"]')
     provides = manifest.get("provides", {})
     if not isinstance(provides, dict) or not all(
             isinstance(k, str) and isinstance(v, int) for k, v in provides.items()):
@@ -144,12 +194,15 @@ class ModuleContext:
         self.version = module.version
         self.folder = os.path.abspath(module.folder)
         self.server_version = server.VERSION
+        self.DROP = DROP  # what a live.event filter returns to drop the event
+        self.version_key = server.app_version_key  # compares app versions: "0.11.2-alpha" < "0.1.0-beta"
         # Served at /modules/<id>/..., token required and the current account set
         self.router = APIRouter()
         # Notices and hooks take effect only once setup succeeded (commit), so a module that
         # fails halfway leaves nothing behind
         self._notices = []
         self._hooks = []
+        self._filters = []
 
     def commit(self):
         """Makes the notices and hooks count. They stay silent whenever the module isn't on
@@ -159,6 +212,8 @@ class ModuleContext:
             self._server.notice(kind)(lambda text_of=text_of: text_of() if module.on else None)
         for name, function in self._hooks:
             hooks.setdefault(name, []).append((module, function))
+        for name, function in self._filters:
+            filters.setdefault(name, []).append((module, function))
 
     def log(self, text):
         print(f"[{self.id}] {text}")
@@ -176,6 +231,28 @@ class ModuleContext:
     def hook(self, name):
         def register(function):
             self._hooks.append((name, function))
+            return function
+        return register
+
+    def filter(self, name):
+        """A filter (since server 1.4.0): unlike a hook, whose first answer wins, every module's
+        filter for a name runs, one after the other in load order, each getting what the one
+        before made. It returns the new value, or None to leave it as it is (changing the value in
+        place works too). A filter that fails is skipped. The module's module.json must say it
+        uses what the filter touches ("uses", shown to the owner when installing).
+        - "http.json" (traffic.http): function(info, data) -> data. Runs on every JSON answer
+          of the server's endpoints (not files), after the endpoint; info is a Traffic.
+        - "live.event" (traffic.live): function(info, event) -> event, or context.DROP. Runs on
+          every live event, once for each app connection it goes to (info.client_version says
+          which app), on its own copy."""
+        if name not in FILTER_USES:
+            raise ModuleError(f"there is no filter {name!r}")
+        needed = FILTER_USES[name]
+        if needed not in self._module.uses:
+            raise ModuleError(f'the filter {name} needs "uses": ["{needed}"] in module.json')
+
+        def register(function):
+            self._filters.append((name, function))
             return function
         return register
 
@@ -237,7 +314,8 @@ def load_folders(server):
                 continue
             load(server, module)
             module.status = "on"
-            print(f"Module {module.name} {module.version} is on")
+            uses = f" (uses {', '.join(module.uses)})" if module.uses else ""
+            print(f"Module {module.name} {module.version} is on{uses}")
         except Exception as e:  # anything at all: only this module stops
             module.status = f"failed: {e if isinstance(e, ModuleError) else f'{type(e).__name__}: {e}'}"
             print(f"Module {name} {module.status}")
@@ -303,6 +381,38 @@ async def stop_all():
                 await function()
             except Exception as e:
                 print(f"Module {module.id}: on stop: {type(e).__name__}: {e}")
+
+
+def has_filter(name):
+    """True if a module that is on has a filter of this name."""
+    return any(module.on for module, _ in filters.get(name, []))
+
+
+_filter_failed = {}  # (module id, filter name) -> when it was last reported
+
+
+async def call_filters(name, value, info):
+    """value through every filter of this name that's on, in order (see ModuleContext.filter);
+    DROP as soon as one answers DROP. A failing filter is skipped and reported at most once a
+    minute, so a filter that fails on every request doesn't fill the log."""
+    for module, function in filters.get(name, []):
+        if not module.on:
+            continue
+        try:
+            answer = function(info, value)
+            if hasattr(answer, "__await__"):
+                answer = await answer
+        except Exception as e:
+            key = (module.id, name)
+            if time.monotonic() - _filter_failed.get(key, -60) >= 60:
+                _filter_failed[key] = time.monotonic()
+                print(f"Filter {name} of module {module.id} failed: {type(e).__name__}: {e}")
+            continue
+        if answer is DROP:
+            return DROP
+        if answer is not None:
+            value = answer
+    return value
 
 
 def has_hook(name):

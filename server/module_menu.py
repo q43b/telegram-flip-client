@@ -49,8 +49,9 @@ def show(server):
     for number, (name, manifest, status) in enumerate(modules, 1):
         if manifest:
             provides = ", ".join(manifest.get("provides", {})) or "nothing"
+            uses = manifest.get("uses", [])
             print(f"  {number}. {manifest.get('name', name)} {manifest.get('version', '?')}: {status}"
-                  f" (provides {provides})")
+                  f" (provides {provides}{'; uses ' + ', '.join(uses) if uses else ''})")
         else:
             print(f"  {number}. {name}: {status}")
     return modules
@@ -103,6 +104,27 @@ def zip_module(z):
     return module_id, text
 
 
+def confirm_uses(manifest, old):
+    """What a module says it uses (module.json "uses"), confirmed by the owner when it is
+    installed, and again, with "no" as the default, when an update adds something to what the
+    installed version used. True to go on. Not security (a module runs inside the server and can
+    do anything): the owner should know what a module does with their messages."""
+    before = old.get("uses", []) if old else []
+    added = [use for use in manifest.get("uses", []) if use not in before]
+    if not added:
+        return True
+    name = manifest.get("name", manifest["id"])
+    if old:
+        print(f"\n  WARNING: this update of {name} asks for more than the version installed:")
+    else:
+        print(f"\n  WARNING: {name} asks to:")
+    for use in added:
+        print(f"    - {ml.KNOWN_USES.get(use) or 'do something this server does not know (' + use + ')'}")
+    print("  A module runs inside the server and could do anything, so allow this only if you trust\n"
+          "  where the module came from.")
+    return yes("Allow this")
+
+
 def install(server):
     path = ask("Path of the module's zip (you can drag the file into this window)").strip('"').strip("'")
     if not path:
@@ -122,8 +144,11 @@ def install_zip(server, path, replace_without_asking=False):
             module_id, text = zip_module(z)
             manifest = ml.check_manifest(text, module_id, server.VERSION, server.app_version_key)
             target = os.path.join(ml.MODULES_FOLDER, module_id)
+            old = next((m for i, m, _ in installed(server) if i == module_id), None)
+            if not confirm_uses(manifest, old):
+                print("  Not installed.")
+                return
             if os.path.exists(target) and not replace_without_asking:
-                old = next((m for i, m, _ in installed(server) if i == module_id), None)
                 old_version = old.get("version", "?") if old else "a version that can't load"
                 if not yes(f"{manifest.get('name', module_id)} {old_version} is installed. "
                            f"Replace it with {manifest['version']}"):

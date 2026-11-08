@@ -67,9 +67,11 @@ class ModulesActivity : AppCompatActivity() {
             module.status == "off" -> "○"
             else -> "⚠"
         }
-        val line = "$mark ${module.name} ${module.version} · ${module.status}"
-        if (module.provides.isEmpty()) return line
-        return line + "\n" + getString(R.string.modules_provides, module.provides.joinToString(", "))
+        var line = "$mark ${module.name} ${module.version} · ${module.status}"
+        if (module.provides.isNotEmpty()) line += "\n" + getString(R.string.modules_provides, module.provides.joinToString(", "))
+        // What it may do with the traffic (since server 1.4.0: module.json "uses")
+        if (module.uses.isNotEmpty()) line += "\n" + getString(R.string.modules_uses, module.uses.joinToString(", "))
+        return line
     }
 
     private fun show(rows: List<String>) {

@@ -135,13 +135,15 @@ async def serve(server, port, maintenance_mode):
         # Loading server.py opened every account's session file; close them, so the menu can
         # log an account out (which deletes its file: Windows refuses while it is open)
         for acc in server.ACCOUNTS:
-            acc.client.session.close()
+            if acc.client is not None:  # (demo accounts have none until the server starts)
+                acc.client.session.close()
         if not await maintenance.menu(server):
             return
         if FROM_COPY:
             # Not from this copy: the real program (maybe just updated) runs the server
             for acc in server.ACCOUNTS:
-                await acc.client.disconnect()
+                if acc.client is not None:
+                    await acc.client.disconnect()
             sys.exit(start_real_server())
         # The list may have changed in the menu
         server.ACCOUNTS[:] = [server.Account(**entry) for entry in accounts.load()]
@@ -149,12 +151,14 @@ async def serve(server, port, maintenance_mode):
         server.load_modules()
     # The first account may still need its first login (first-run setup); later accounts are
     # logged in when added, in --maintenancemode
-    server.use_account(server.ACCOUNTS[0])
-    me = await server.connect_telegram()
-    if me is None:
-        # Only on the first run, or after logging out: asks for phone, code, 2FA password
-        print("Logging in to Telegram (only needed once).")
-        await server.client.start()
+    first = next((acc for acc in server.ACCOUNTS if acc.real), None)  # (demo accounts don't log in)
+    if first is not None:
+        server.use_account(first)
+        me = await server.connect_telegram()
+        if me is None:
+            # Only on the first run, or after logging out: asks for phone, code, 2FA password
+            print("Logging in to Telegram (only needed once).")
+            await server.client.start()
     # Same event loop as the login above; the server's own startup reuses this connection
     config = uvicorn.Config(server.app, host="0.0.0.0", port=port)
     await uvicorn.Server(config).serve()

@@ -35,6 +35,11 @@ class ApiClient(baseUrl: String?, val token: String) {
         // nothing answers at all, so give up sooner than OkHttp's default 10 s
         .connectTimeout(5, TimeUnit.SECONDS)
         .pingInterval(30, TimeUnit.SECONDS)  // notices a dead WebSocket (e.g. Wi-Fi dropped)
+        // The app's version on every request (since 1.4.0; before, only on the live connections),
+        // so modules that adapt to the app's version (the server's filters) know it exactly
+        .addInterceptor { chain ->
+            chain.proceed(chain.request().newBuilder().header("x-app-version", BuildConfig.VERSION_NAME).build())
+        }
         .build()
 
     // Opens /ws. The listener must send the token as the first message.
@@ -385,7 +390,8 @@ class ApiClient(baseUrl: String?, val token: String) {
             val capabilities = json.optJSONObject("capabilities")  // since server 0.15.0-beta
             return ServerInfo(json.getString("version"), json.optString("codename"),
                 json.getBoolean("shared"), json.getBoolean("log"),
-                capabilities?.keys()?.asSequence()?.associateWith { capabilities.getInt(it) }.orEmpty())
+                capabilities?.keys()?.asSequence()?.associateWith { capabilities.getInt(it) }.orEmpty(),
+                json.optString("kind", "telegram"), json.optBoolean("demo", false))  // since server 1.5.0
         }
     }
 
@@ -401,8 +407,10 @@ class ApiClient(baseUrl: String?, val token: String) {
             return List(list.length()) {
                 val m = list.getJSONObject(it)
                 val provides = m.optJSONObject("provides")
+                val uses = m.optJSONArray("uses")  // since server 1.4.0
                 ServerModule(m.getString("name"), m.getString("version"), m.getString("status"),
-                    provides?.keys()?.asSequence()?.toList().orEmpty())
+                    provides?.keys()?.asSequence()?.toList().orEmpty(),
+                    uses?.let { list -> List(list.length()) { i -> list.getString(i) } }.orEmpty())
             }
         }
     }
@@ -477,11 +485,15 @@ data class DeleteOptions(val forMe: Boolean, val forEveryone: Boolean)
 
 // GET /server_info: log = this account's app may watch the live log
 // GET /modules: status is "on", "off" or "failed: <reason>"; provides = capability names
-data class ServerModule(val name: String, val version: String, val status: String, val provides: List<String>)
+data class ServerModule(val name: String, val version: String, val status: String, val provides: List<String>,
+                        val uses: List<String> = emptyList())
 
 // capabilities: what the server's modules add, e.g. {"animated_stickers": 1}
+// kind, demo (since server 1.5.0): the account's kind ("telegram", or a module's, like "mockgram") and
+// whether it is a demo account (not Telegram)
 data class ServerInfo(val version: String, val codename: String, val shared: Boolean, val log: Boolean,
-                      val capabilities: Map<String, Int> = emptyMap())
+                      val capabilities: Map<String, Int> = emptyMap(), val kind: String = "telegram",
+                      val demo: Boolean = false)
 
 // GET /modules/themes_host/list: one theme the server hosts; size in bytes, sha256 of its zip
 data class ServerTheme(val id: String, val name: String, val version: String, val size: Long, val sha256: String)

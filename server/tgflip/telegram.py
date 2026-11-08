@@ -57,6 +57,8 @@ async def recover():
     """Reconnects the current account from scratch. Several requests failing at once trigger
     one reconnect."""
     acc = account()
+    if not acc.real:
+        return  # a demo account has no Telegram connection to repair
     async with acc.reconnect_lock:
         if time.monotonic() - acc.last_recovery < 10:
             return  # another request just did it

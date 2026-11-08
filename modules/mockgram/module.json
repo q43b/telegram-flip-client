@@ -1,0 +1,11 @@
+{
+  "id": "mockgram",
+  "name": "Mockgram",
+  "version": "1.0.0",
+  "api": 1,
+  "min_server": "1.4.0",
+  "python": "any",
+  "provides": {"mockgram": 1},
+  "uses": ["telegram.transport"],
+  "description": "A made-up Telegram for demo accounts (kind mockgram): invented chats and people, for screenshots"
+}

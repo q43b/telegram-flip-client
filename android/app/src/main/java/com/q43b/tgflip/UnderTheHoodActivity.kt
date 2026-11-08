@@ -115,7 +115,7 @@ class UnderTheHoodActivity : AppCompatActivity() {
                             !info.shared -> R.string.under_the_hood_private
                             info.log -> R.string.under_the_hood_shared_admin
                             else -> R.string.under_the_hood_shared
-                        }))
+                        })) + if (info.demo) "\n" + getString(R.string.under_the_hood_demo, info.kind) else ""
                 }
             } catch (e: BadTokenException) {
                 getString(R.string.error_bad_token)

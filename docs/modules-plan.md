@@ -6,6 +6,9 @@ Status: **0.15.0-beta, 0.15.1-beta and 0.16.0-beta done** (the loader, module AP
 by the owner: **in-process Python modules** ("approach 1"), behind a small versioned module API.
 How it is built now: CLAUDE.md, "Modules".
 
+Later ideas (2026-11-08): modules that see and change traffic (a lite/legacy client module, a placeholder-Telegram module for
+screenshots): `traffic-plan.md`; the conclusion there is that API 1 grows, no API 2 needed.
+
 ## Why
 
 Some features are big or not for everyone: animated stickers need PyAV and rlottie (~28 MB).
@@ -87,6 +90,10 @@ modules/
 | `context.cache_path(name)` | a cached file: `module_cache/<id>/<session>/name`, counted by the server cache's days and size limits |
 | `context.data_folder` | the module's own lasting files: `module_data/<id>/` (not cleaned) |
 | `@context.on_start`, `@context.on_stop` | async functions run after the server connected / before it stops |
+| `@context.filter(name)` (server 1.4.0) | a filter: every module's function for a name runs in load order, each getting the previous one's result (see `traffic-plan.md`); needs `"uses"` in module.json |
+| `context.DROP`, `context.version_key(text)` (1.4.0) | what a `live.event` filter returns to drop an event; compares app versions (`"0.11.2-alpha" < "0.1.0-beta"`) |
+| `@context.hook("account.make")` (1.4.0) | answer-style: `function(info) -> client or None`, asked at startup for every account whose `kind` isn't `telegram` (`info`: name, kind, settings, session); a module answers only for the kinds it owns |
+| `"uses"` in module.json (1.4.0) | what the module touches (`traffic.http`, `traffic.live`): shown to the owner when it is installed, and again when an update adds one |
 
 **Hooks** are how a module changes an existing feature instead of only adding new endpoints. The
 server calls, at fixed points, the functions modules registered under that name; the first one

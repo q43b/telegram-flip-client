@@ -4,6 +4,7 @@ in the server window for the accounts list, before the server starts.
 Accounts are added here, on the PC, so Telegram's login codes never cross the network. The
 planned animated-stickers add-on will be installed from this menu too.
 """
+import json
 import os
 import secrets
 import string
@@ -34,7 +35,9 @@ def generate_token():
 def show(entries):
     print("\nAccounts:")
     for number, e in enumerate(entries, 1):
-        print(f"  {number}. {e['name']}" + ("  (admin)" if e["admin"] else ""))
+        kind = e.get("kind", "telegram")
+        print(f"  {number}. {e['name']}" + ("" if kind == "telegram" else f"  [demo: {kind}]")
+              + ("  (admin)" if e["admin"] else ""))
 
 
 def pick(entries, what):
@@ -58,11 +61,15 @@ def new_name(entries, prompt):
     return name
 
 
-def free_files(entries):
-    """A session and a local favourites file name no account uses and no file has yet."""
+def free_files(entries, kind="telegram"):
+    """A session and a local favourites file name no account uses and no file has yet. A demo
+    account (another kind) has no session file: its session name only names its cache folders."""
     taken = {e["session"] for e in entries} | {e["local_favorites"] for e in entries}
     for n in range(2, 1000):
-        session, favorites = f"tg_session_{n}", f"local_favorites_{n}.json"
+        if kind == "telegram":
+            session, favorites = f"tg_session_{n}", f"local_favorites_{n}.json"
+        else:
+            session, favorites = f"{kind}_{n}", f"local_favorites_{kind}_{n}.json"
         if (session not in taken and favorites not in taken
                 and not os.path.exists(session + ".session") and not os.path.exists(favorites)):
             return session, favorites
@@ -98,16 +105,50 @@ async def log_in(server, entry):
         await acc.client.disconnect()
 
 
+def ask_settings():
+    """A demo account's settings for its module: a JSON object, or nothing. (True, settings),
+    or (False, None) when what was typed isn't an object."""
+    text = ask('Settings for it as JSON, like {"scene": "showcase"} (Enter = none)')
+    if not text:
+        return True, {}
+    try:
+        settings = json.loads(text)
+    except ValueError as e:
+        print(f"  That is not valid JSON ({e}).")
+        return False, None
+    if not isinstance(settings, dict):
+        print("  The settings must be an object, like {\"scene\": \"showcase\"}.")
+        return False, None
+    return True, settings
+
+
 async def add(server, entries):
     name = new_name(entries, "Name for the new account (shown only in the server's log)")
     if name is None:
         return
-    session, favorites = free_files(entries)
+    kind = ask("Kind of account (Enter = a Telegram account; or a kind a module offers, like mockgram)").lower() or "telegram"
+    if not accounts.KIND.fullmatch(kind):
+        print("  A kind is lowercase letters, digits and _.")
+        return
+    session, favorites = free_files(entries, kind)
     token = generate_token()
     while any(e["token"] == token for e in entries):
         token = generate_token()
     entry = {"name": name, "token": token, "session": session,
              "local_favorites": favorites, "admin": False}
+    if kind != "telegram":
+        # A demo account: no phone login, nothing from Telegram. A module of that kind makes
+        # its client when the server starts.
+        ok, settings = ask_settings()
+        if not ok:
+            return
+        entry.update({"kind": kind, "settings": settings})
+        accounts.save(entries + [entry])
+        entries.append(entry)
+        print(f"\nAdded the demo account \"{name}\" ({kind}). Its app token: {token}")
+        print(f"It only works while a module that makes \"{kind}\" accounts is installed and on")
+        print("(x) Modules). Enter the token in the app like any account's.")
+        return
     if not await log_in(server, entry):
         remove_session_file(session)
         return
@@ -128,7 +169,8 @@ async def remove(server, entries):
     if ask(f"Type its name, \"{entry['name']}\", to remove it") != entry["name"]:
         print("  Not removed.")
         return
-    log_out = yes("Also log it out of Telegram (ends this server's session for that account)?")
+    real = entry.get("kind", "telegram") == "telegram"  # a demo account has no Telegram login
+    log_out = real and yes("Also log it out of Telegram (ends this server's session for that account)?")
     if log_out:
         acc = server.Account(**entry)
         server.use_account(acc)
@@ -143,7 +185,7 @@ async def remove(server, entries):
     entries.remove(entry)
     accounts.save(entries)
     print(f"Removed \"{entry['name']}\". Its app can't connect any more.")
-    if not log_out:
+    if real and not log_out:
         print(f"Its Telegram login stays in {entry['session']}.session; delete that file to "
               "forget it (Telegram's own list of sessions still shows it until ended there).")
 

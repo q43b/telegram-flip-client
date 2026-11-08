@@ -1,17 +1,32 @@
 """Telegram's live updates, passed on to every app of the account over /ws (broadcast).
 """
+import copy
+
 from telethon import errors, events, types, utils
+
+import module_loader
 
 from tgflip.account import account, client, on
 from tgflip.messages import call_of, custom_emoji_of, forget_forum_unread, image_of, is_edited, learn_live_custom_emoji, reactions_list, reactions_of, reply_of, round_of, sender_id_of, sender_name, sticker_of, topic_of, video_of, voice_of
 
 
 async def broadcast(data):
-    """To all of the current account's apps (each phone keeps its own live connection)."""
-    clients = account().ws_clients
+    """To all of the current account's apps (each phone keeps its own live connection). With
+    modules' live.event filters (since 1.4.0), each connection gets the event as they made it
+    for that app (they see the app's version): on a copy of its own, or not at all (DROP)."""
+    acc = account()
+    clients = acc.ws_clients
+    filtering = module_loader.has_filter("live.event")
     for ws in list(clients):
+        payload = data
+        if filtering:
+            info = module_loader.Traffic(account=acc.name, host=ws.client.host if ws.client else None,
+                                         client_version=getattr(ws.state, "app_version", None))
+            payload = await module_loader.call_filters("live.event", copy.deepcopy(data), info)
+            if payload is module_loader.DROP:
+                continue
         try:
-            await ws.send_json(data)
+            await ws.send_json(payload)
         except Exception:
             clients.discard(ws)
 

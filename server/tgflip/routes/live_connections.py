@@ -3,6 +3,7 @@
 import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
 
+from tgflip import clients
 from tgflip.account import _current_account, account, account_with_token, use_account
 from tgflip.api import live_router
 from tgflip.log_capture import log_lines, log_listeners
@@ -30,6 +31,7 @@ async def ws_endpoint(ws: WebSocket):
         if not await ws_token_ok(ws):
             return
         log_app(ws)
+        remember_app(ws)
         account().ws_clients.add(ws)
         while True:
             await ws.receive_text()  # keeps the connection open
@@ -39,6 +41,14 @@ async def ws_endpoint(ws: WebSocket):
         acc = _current_account.get(None)
         if acc is not None:
             acc.ws_clients.discard(ws)
+
+
+def remember_app(ws):
+    """The app's version, for modules' filters: on the connection itself (live.event), and per
+    address for the plain requests that follow from it (clients.py)."""
+    version = ws.headers.get("x-app-version")
+    ws.state.app_version = version
+    clients.note(account().name, ws.client.host if ws.client else "?", version)
 
 
 def client_host(ws):
@@ -54,7 +64,7 @@ async def ws_token_ok(ws):
     connection when it is wrong."""
     first = await asyncio.wait_for(ws.receive_text(), timeout=5)
     acc = account_with_token(first)
-    if acc is not None:
+    if acc is not None and acc.client is not None:  # (not an unavailable demo account)
         use_account(acc)
         return True
     await ws.close(code=1008)
@@ -89,6 +99,7 @@ async def logs_endpoint(ws: WebSocket):
     try:
         if not await ws_token_ok(ws):
             return
+        remember_app(ws)
         if app_is_older_than(ws, LOGS_MIN_APP):
             # Stays open, so the app doesn't keep reconnecting, but nothing more is sent
             await ws.send_json([LOGS_OLD_APP_LINE])

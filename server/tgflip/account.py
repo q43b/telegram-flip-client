@@ -10,6 +10,7 @@ from contextvars import ContextVar
 from fastapi import Header, HTTPException, Request
 from telethon import TelegramClient
 import accounts
+import module_loader
 
 from tgflip.settings import proxy_args
 
@@ -18,13 +19,24 @@ class Account:
     """One Telegram account the server works for: its Telegram connection and everything that
     belongs to that account alone, made from its entry in accounts.json (accounts.py). Code
     working for an account gets it with account(), and `client` below is always the current
-    account's TelegramClient."""
+    account's TelegramClient.
 
-    def __init__(self, name, token, session, local_favorites, admin=False):
+    Since 1.5.0 an account has a kind: "telegram" (a real one, the only kind before) or another
+    kind (like "mockgram"), whose client a module makes at startup (make_client, the
+    account.make hook): such an account is not real (`real` False), so the server doesn't
+    reconnect it, watch it, or use the proxy for it, and the app is told it's a demo account."""
+
+    def __init__(self, name, token, session, local_favorites, admin=False, kind="telegram", settings=None):
         self.name = name
         self.token = token  # the app token that means this account
         self.admin = admin  # may see the live log on a shared server
-        self.client = TelegramClient(session, int(os.environ["API_ID"]), os.environ["API_HASH"], **proxy_args)
+        self.kind = kind
+        self.settings = settings or {}  # for the module that owns a non-telegram kind
+        self.real = kind == "telegram"
+        self.unavailable = None  # why a non-real account has no client (no module, or it failed)
+        # None until make_client for a non-real account: then its apps get 503
+        self.client = (TelegramClient(session, int(os.environ["API_ID"]), os.environ["API_HASH"], **proxy_args)
+                       if self.real else None)
         self.ws_clients = set()  # its apps' live connections (several phones can share one account)
         self.telegram_config = None  # Telegram's settings as this account gets them
         self.forum_unread_cache = {}  # chat_id -> (time counted, total unread), see forum_unread
@@ -83,6 +95,21 @@ def on(event):
     return register
 
 
+async def make_client(acc):
+    """A non-real account's client, asked of the modules (the account.make hook) at startup:
+    function(info) -> client or None, info = {name, kind, settings, session} (never the token).
+    A module answers only for the kinds it owns. True when the account got its client; else it
+    stays unavailable (its apps get 503) and the server starts anyway."""
+    info = {"name": acc.name, "kind": acc.kind, "settings": copy.deepcopy(acc.settings), "session": acc.cache_folder}
+    made = await module_loader.call_hook("account.make", info)
+    if made is None:
+        acc.unavailable = f'no module that is on makes accounts of the kind "{acc.kind}"'
+        print(f'Account "{acc.name}" is unavailable: {acc.unavailable}')
+        return False
+    acc.client = made
+    return True
+
+
 def register_handlers(acc):
     for event, handler in event_handlers:
         async def run_as_account(update, handler=handler):
@@ -107,6 +134,8 @@ async def current_account(request: Request, x_token: str = Header(default="")):
     acc = account_with_token(x_token)
     if acc is None:
         raise HTTPException(status_code=401, detail="Bad token")
+    if acc.client is None:  # a non-real account whose module isn't there (make_client)
+        raise HTTPException(status_code=503, detail=f"Account unavailable: {acc.unavailable or 'not started yet'}")
     use_account(acc)
     request.scope["tgflip_account"] = acc.name  # for its line in the log (AccessLog)
     return acc

@@ -8,12 +8,13 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import module_loader
 
-from tgflip.account import ACCOUNTS, register_handlers, use_account
+from tgflip.account import ACCOUNTS, make_client, register_handlers, use_account
 from tgflip.api import api, live_router
 from tgflip.cache import clean_caches, describe_cache_setting, keep_caches_clean, move_old_caches
 from tgflip.log_capture import start_log_capture
 from tgflip.settings import CODENAME, VERSION, shared_server
 from tgflip.telegram import connect_telegram, watchdog
+from tgflip.traffic import TrafficFilter
 # Loaded for what they register: the endpoints (on api and live_router) and the Telegram
 # update handlers (@on), which lifespan then registers on every account
 from tgflip import live, update_check  # noqa: F401
@@ -34,6 +35,21 @@ async def lifespan(app: FastAPI):
     update_checker = asyncio.create_task(update_check.keep_checking())  # in the background
     for acc in ACCOUNTS:
         use_account(acc)  # the tasks started here keep it (they copy the context)
+        if not acc.real:
+            # A module's kind of account (a demo account): its module made the client; the
+            # server only connects it. A broken one is left out, it must not stop the others.
+            if not await make_client(acc):
+                continue
+            register_handlers(acc)
+            try:
+                await acc.client.connect()
+            except Exception as e:
+                acc.unavailable = f"{type(e).__name__}: {e}"
+                acc.client = None
+                print(f'Account "{acc.name}" is unavailable: {acc.unavailable}')
+                continue
+            print(f'Account "{acc.name}" ({acc.kind}) is ready: a demo account, not Telegram')
+            continue
         register_handlers(acc)
         if await connect_telegram() is None:
             raise RuntimeError(f"Account \"{acc.name}\" is not logged in to Telegram. "
@@ -51,8 +67,10 @@ async def lifespan(app: FastAPI):
     cleaner.cancel()
     update_checker.cancel()
     for acc in ACCOUNTS:
-        acc.watchdog.cancel()
-        await acc.client.disconnect()
+        if acc.watchdog is not None:
+            acc.watchdog.cancel()
+        if acc.client is not None:
+            await acc.client.disconnect()
 
 
 class AccessLog:
@@ -92,6 +110,9 @@ class AccessLog:
 app = FastAPI(lifespan=lifespan)
 
 
+# Added first, so it sits inside the access log: modules' http.json filters change the answer
+# before it is logged and sent (traffic.py; nothing happens while no module has one)
+app.add_middleware(TrafficFilter)
 app.add_middleware(AccessLog)
 
 

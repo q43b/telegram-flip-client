@@ -6,14 +6,20 @@ Each entry is one Telegram account the server works for:
   session          its Telegram session file (without ".session"); never changes
   local_favorites  its local favourite stickers' file; never changes
   admin            may see the live log ("Under the hood") on a shared server
+  kind             optional (since 1.5.0), "telegram" when missing: a real Telegram account. Any other
+                   kind (like "mockgram") is an account a module makes the client for (the
+                   account.make hook): a demo account, with no Telegram login and no network
+  settings         optional object for the module that owns the kind (like {"scene": "showcase"})
 
 Kept apart from server.py so the maintenance menu (run_server.py --maintenancemode) can read
 and change the list without connecting to Telegram.
 """
 import json
 import os
+import re
 
 ACCOUNTS_FILE = "accounts.json"
+KIND = re.compile(r"[a-z0-9_]{1,40}")  # like a module's id
 
 
 class AccountsError(Exception):
@@ -42,6 +48,12 @@ def check(entries):
         if len(set(values)) != len(values):
             # Two accounts with one token: requests couldn't tell whose they are
             raise AccountsError(f"Two accounts in {ACCOUNTS_FILE} have the same {field}.")
+    for e in entries:
+        kind = e.get("kind", "telegram")
+        if not isinstance(kind, str) or not KIND.fullmatch(kind):
+            raise AccountsError(f"The kind of account \"{e['name']}\" must be lowercase letters, digits and _.")
+        if not isinstance(e.get("settings", {}), dict):
+            raise AccountsError(f"The settings of account \"{e['name']}\" must be an object.")
 
 
 def load():

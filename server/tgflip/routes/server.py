@@ -20,7 +20,10 @@ async def server_info():
             "log": not shared or account().admin,
             # What installed modules add, e.g. {"animated_stickers": 1} (since 0.15.0-beta).
             # Apps ask for these, never for a module's name (docs/modules-plan.md)
-            "capabilities": module_loader.capabilities()}
+            "capabilities": module_loader.capabilities(),
+            # Since 1.5.0: the account's kind ("telegram", or a module's, like "mockgram") and
+            # whether it's a demo account (not Telegram): the app says so in Under the hood
+            "kind": account().kind, "demo": not account().real}
 
 
 # The installed modules (since 0.15.0-beta): status "on", "off" or "failed: <reason>"
@@ -34,7 +37,8 @@ def server_info_text():
     acc = account()
     who = f'your account is "{acc.name}"' + (", an admin" if acc.admin else "")
     mode = "Shared server" if shared_server() else "Private server"
-    return (f'TG Flip server {VERSION} "{CODENAME}". {mode}, {who}. '
+    demo = f' It is a demo account ({acc.kind}), not Telegram.' if not acc.real else ""
+    return (f'TG Flip server {VERSION} "{CODENAME}". {mode}, {who}.{demo} '
             f"Server cache: {describe_cache_setting()}.")
 
 

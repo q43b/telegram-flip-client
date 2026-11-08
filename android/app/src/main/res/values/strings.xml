@@ -324,11 +324,13 @@
     <string name="under_the_hood_modules">Modules</string>
     <string name="modules_title">Modules on the server</string>
     <string name="modules_provides">provides: %1$s</string>
+    <string name="modules_uses">uses: %1$s</string>
     <string name="modules_none">No modules installed on this server (they are added on the PC, in Maintenance mode)</string>
     <string name="modules_old_server">This server is older than 0.15.0-beta and has no modules</string>
     <string name="under_the_hood_server_messages_waiting">● Messages from the server (%1$d)</string>
     <string name="under_the_hood_server">🖥 Server %1$s \"%2$s\" · %3$s</string>
     <string name="under_the_hood_private">private</string>
+    <string name="under_the_hood_demo">This is a demo account (%1$s), not Telegram</string>
     <string name="under_the_hood_shared">shared (its log is private)</string>
     <string name="under_the_hood_shared_admin">shared, you are an admin</string>
     <string name="under_the_hood_server_asking">🖥 Server: asking…</string>
