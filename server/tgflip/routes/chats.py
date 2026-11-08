@@ -13,7 +13,7 @@ from telethon.tl import custom
 from tgflip.account import client
 from tgflip.api import api
 from tgflip.bodies import DeleteBody, EditBody, ForwardBody, SendBody
-from tgflip.messages import call_of, custom_emoji_ids, file_of, custom_emoji_of, forget_forum_unread, forum_unread, get_forum_topics, image_of, is_edited, last_message_preview, learn_custom_emoji, photo_id_of, reactions_of, reply_of, reply_target, round_of, sender_id_of, sender_name, sticker_of, topic_messages, video_of, voice_of
+from tgflip.messages import call_of, custom_emoji_ids, file_of, read_mark, read_outbox_max_id, custom_emoji_of, forget_forum_unread, forum_unread, get_forum_topics, image_of, is_edited, last_message_preview, learn_custom_emoji, photo_id_of, reactions_of, reply_of, reply_target, round_of, sender_id_of, sender_name, sticker_of, topic_messages, video_of, voice_of
 from tgflip.telegram import bad_request, can_delete_others, get_telegram_config, is_cluster_error, recovering
 
 
@@ -183,15 +183,42 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
     except errors.RPCError as e:
         bad_request(e)
     await learn_custom_emoji([i for m in found for i in custom_emoji_ids(getattr(m, "reactions", None))])
+    # Whether the other person has read my messages: one more question, only when there are any
+    outbox = await read_outbox_max_id(chat_id) if any(m.out for m in found) else None
     msgs = [
         {"id": m.id, "text": m.raw_text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
          "voice": voice_of(m), "image": image_of(m), "video": video_of(m),
-         "round": round_of(m), "file": file_of(m), "reactions": reactions_of(m),
+         "round": round_of(m), "file": file_of(m), "read": read_mark(m, outbox), "reactions": reactions_of(m),
          "sticker": sticker_of(m), "custom_emoji": custom_emoji_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
         for m in found
     ]
     return list(reversed(msgs))
+
+
+# Who has read one of my messages in a group (Telegram only tells for small groups and recent
+# messages: otherwise it answers with an error, which goes back as a 400 with its own words).
+@api.get("/read_by/{chat_id}/{message_id}")
+@recovering
+async def get_read_by(chat_id: int, message_id: int):
+    try:
+        peer = await client.get_input_entity(chat_id)
+        readers = await client(functions.messages.GetMessageReadParticipantsRequest(peer=peer, msg_id=message_id))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    people = []
+    for r in readers:
+        try:
+            who = await client.get_entity(r.user_id)
+            name = getattr(who, "first_name", None) or getattr(who, "title", None) or str(r.user_id)
+        except (ValueError, errors.RPCError) as e:
+            if is_cluster_error(e):
+                raise
+            name = str(r.user_id)
+        people.append({"id": r.user_id, "name": name, "date": r.date.isoformat() if r.date else None})
+    return {"readers": people}
 
 
 @api.post("/send")

@@ -1,7 +1,7 @@
 {
   "id": "mockgram",
   "name": "Mockgram",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "api": 1,
   "min_server": "1.4.0",
   "python": "any",

@@ -59,6 +59,9 @@ class Message:
         self.entities = []  # (offset, length, custom emoji key), UTF-16 units
         self.reply_key = data.get("reply")
         self.edited = bool(data.get("edited", False))
+        # My messages: has the other person read it ("seen": false = not yet); in a group, who read it
+        self.seen = bool(data.get("seen", True))
+        self.read_by = data.get("read_by", [])  # person ids
         self.reactions = data.get("reactions", [])  # [{"emoji", "count", "mine", "custom"}]
         self.media = data.get("media")
         self.topic_key = data.get("topic")
@@ -116,6 +119,8 @@ class Chat:
         self.title = data.get("title", "")
         self.unread = int(data.get("unread", 0))
         self.pinned = bool(data.get("pinned", False))
+        # In a private chat: this long after I send something, the other person reads it
+        self.reads_after = data.get("reads_after")
         self.color = int(data.get("color", 0))
         self.photo = bool(data.get("photo", True))
         if self.kind == "private":
@@ -177,6 +182,12 @@ class Scene:
         self.finish()
         self.events = self._events(data.get("live", {}).get("events", []))
         for chat in self.chats:
+            if chat.reads_after is not None:
+                chat.reads_after = parse_ago(chat.reads_after, f"reads_after of {chat.title!r}").total_seconds()
+            for m in chat.messages:
+                for who in m.read_by:
+                    if who not in self.people:
+                        raise SceneError(f"a message in {chat.title!r}: read_by {who!r} is not in the scene's people")
             for reply in chat.auto_replies:
                 self._check_actor(reply, f"an auto reply in {chat.title!r}")
                 reply["delay"] = parse_ago(reply.get("after", "2s"), f"an auto reply in {chat.title!r}").total_seconds()
@@ -218,6 +229,8 @@ class Scene:
         for number, e in enumerate(raw, 1):
             where = f"live event {number}"
             chat = self.chat_named(e["chat"])
+            if e.get("seen") and chat.kind != "private":
+                raise SceneError(f"{where}: only a private chat can be read by the other person")
             self._check_actor(e, where)
             keys = {m.key for m in chat.messages if m.key}
             if (e.get("react") or e.get("edit")) and e.get("message") not in keys:

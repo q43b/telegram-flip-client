@@ -74,6 +74,10 @@ class ChatActivity : AppCompatActivity() {
         MessageAction(R.string.action_play_round, isAvailable = { it.round != null }) {
             VideoActivity.start(this, chatId, it.id, round = true)
         },
+        // In a group: ask Telegram who has read my message (it only tells for small groups, recent messages)
+        MessageAction(R.string.action_request_reads, isAvailable = { it.out && it.call == null && !isPrivateChat() && !isChannel() }) {
+            requestReads(it)
+        },
         MessageAction(R.string.action_download_file, isAvailable = { it.file != null }) {
             downloadFile(it)
         },
@@ -390,6 +394,30 @@ class ChatActivity : AppCompatActivity() {
                 optimized.delete()
                 showStatus(getString(R.string.video_optimize_failed))
             }
+        }
+    }
+
+    // Request reads: the names of the people who read my message, and when
+    private fun requestReads(message: Message) {
+        showStatus(getString(R.string.reads_asking))
+        lifecycleScope.launch {
+            val readers = try {
+                withContext(Dispatchers.IO) { api.getReadBy(chatId, message.id) }
+            } catch (e: IOException) {
+                showStatus(getString(R.string.reads_failed))
+                hideStatusLater(getString(R.string.reads_failed))
+                return@launch
+            }
+            status.visibility = View.GONE
+            val text = if (readers.isEmpty()) getString(R.string.reads_nobody)
+            else readers.joinToString("\n", prefix = getString(R.string.reads_title, readers.size) + "\n") { (name, date) ->
+                if (date == null) name else "$name · ${MessageFormat.time(date)}"
+            }
+            AlertDialog.Builder(this@ChatActivity)
+                .setMessage(text)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+                .also { Themer.apply(it) }
         }
     }
 
@@ -851,7 +879,14 @@ class ChatActivity : AppCompatActivity() {
             "edited" -> onLiveEdit(event)
             "reactions" -> onLiveReactions(event)
             "read" -> refreshUnread()  // read on another device, maybe only partly
+            "read_outbox" -> if (isPrivateChat()) onLiveReadOutbox(event.optLong("max_id"))
         }
+    }
+
+    // The other person read my messages up to maxId: they get the read mark
+    private fun onLiveReadOutbox(maxId: Long) {
+        val newlyRead = messages.filter { it.out && it.id <= maxId && it.read != true }
+        newlyRead.forEach { replaceMessage(it.copy(read = true)) }
     }
 
     // Edited here or on another device. Only messages on screen are updated.
@@ -1179,7 +1214,8 @@ class ChatActivity : AppCompatActivity() {
             ?: message.file?.let { fileLines(it, message.text) }
             ?: message.sticker?.let(::stickerLine)
             ?: message.text.ifEmpty { getString(R.string.media) }
-        val time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
+        var time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
+        if (message.read == true) time += " ${getString(R.string.read_mark)}"  // the other person has read it
         val line = SpannableStringBuilder("$time ")
         val sender = message.sender
         when {

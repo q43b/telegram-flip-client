@@ -305,6 +305,12 @@
     <string name="menu_send_photo">🖼 Send photo</string>
     <string name="menu_send_video">🎬 Send video</string>
     <string name="menu_send_file">📄 Send file</string>
+    <string name="read_mark">✓✓</string>
+    <string name="action_request_reads">👁 Request reads</string>
+    <string name="reads_asking">Asking who read it…</string>
+    <string name="reads_title">Read by %1$d:</string>
+    <string name="reads_nobody">Nobody has read it yet.</string>
+    <string name="reads_failed">Couldn\'t find out who read it (Telegram only tells for small groups and recent messages)</string>
     <string name="file">File</string>
     <string name="action_download_file">⬇ Download file</string>
     <string name="file_server_fetching">The server is getting the file from Telegram…</string>

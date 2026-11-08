@@ -249,6 +249,16 @@ class Writes:
         self.topic_read[key] = max(self.topic_read[key], request.read_max_id)
         return True
 
+    def messages_GetMessageReadParticipants(self, request):
+        """Who read one of my messages in a group (Telegram: small groups, recent messages)."""
+        peer_id = self.peer_id_of(request.peer)
+        chat = self.by_peer[peer_id]
+        message = self._find(peer_id, request.msg_id, request)
+        if chat.kind not in ("group", "supergroup", "forum") or not message.out:
+            raise errors.MessageIdInvalidError(request)
+        return [types.ReadParticipantDate(user_id=who, date=message.date + datetime.timedelta(minutes=5 * (i + 1)))
+                for i, who in enumerate(self.read_by.get((peer_id, message.id), []))]
+
     # ---- stickers ---------------------------------------------------------------------------------------
     def messages_FaveSticker(self, request):
         document_id = request.id.id

@@ -76,6 +76,14 @@ class Backend(Writes, Script):
         self.faved_ids = [self.sticker_docs[k].id for k in self.scene.faved]
         self.upload_parts = {}  # file id -> {part number: bytes}
         self.uploaded_photos = {}  # photo id -> JPEG bytes (a photo I sent)
+        self.read_outbox = {}  # peer id -> up to which id the other person has read my messages
+        self.read_by = {}  # (peer id, message id) -> person ids who read my message in a group
+        for peer_id, chat in self.by_peer.items():
+            unseen = [m.id for m in chat.messages if m.sender == "me" and not m.seen]
+            self.read_outbox[peer_id] = (min(unseen) - 1) if unseen else (self._top(peer_id).id if self.messages[peer_id] else 0)
+            for m in chat.messages:
+                if m.read_by:
+                    self.read_by[(peer_id, m.id)] = list(m.read_by)
         self.keys = {}  # (peer id, scene key) -> message id, for scripted reactions and edits
         for peer_id, chat in self.by_peer.items():
             for m in chat.messages:
@@ -319,7 +327,7 @@ class Backend(Writes, Script):
         top = self._top(peer_id)
         read = top.id if chat.kind == "forum" else self.read_inbox[peer_id]
         return types.Dialog(
-            peer=self.peer_of(chat), top_message=top.id, read_inbox_max_id=read, read_outbox_max_id=top.id,
+            peer=self.peer_of(chat), top_message=top.id, read_inbox_max_id=read, read_outbox_max_id=self.read_outbox[peer_id],
             unread_count=self.unread_count(peer_id), unread_mentions_count=0, unread_reactions_count=0,
             unread_poll_votes_count=0, notify_settings=types.PeerNotifySettings(), pinned=True if chat.pinned else None)
 

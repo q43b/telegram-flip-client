@@ -180,6 +180,16 @@ class ApiClient(baseUrl: String?, val token: String) {
         return if (json.isNull("reactions")) null else Reaction.listFromJson(json.getJSONArray("reactions"))
     }
 
+    // Who has read one of my messages in a group: (name, when it was read, ISO date or null) each.
+    // Telegram only tells for small groups and recent messages; otherwise this throws IOException.
+    fun getReadBy(chatId: Long, messageId: Long): List<Pair<String, String?>> {
+        val json = JSONObject(call(Request.Builder().url(endpoint("/read_by/$chatId/$messageId")))).getJSONArray("readers")
+        return List(json.length()) { i ->
+            val reader = json.getJSONObject(i)
+            reader.getString("name") to (if (reader.isNull("date")) null else reader.getString("date"))
+        }
+    }
+
     // My installed sticker packs (the picker adds Recent and Favorites itself)
     fun getStickerPacks(): List<StickerPack> {
         val json = JSONObject(call(Request.Builder().url(endpoint("/sticker_sets")))).getJSONArray("packs")

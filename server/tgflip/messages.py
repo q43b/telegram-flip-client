@@ -138,6 +138,31 @@ def file_of(message):
     return {"name": name, "ext": os.path.splitext(name)[1].lower(), "size": document.size, "mime": document.mime_type or ""}
 
 
+async def read_outbox_max_id(chat_id):
+    """In a private chat: the id up to which the other person has read my messages (my messages
+    with a smaller or equal id are read). None where Telegram says nothing: groups and channels
+    (the read state of a group needs GET /read_by, one message at a time), Saved Messages, and
+    when the question fails (the marks are a nicety, they must never break the messages)."""
+    try:
+        peer = await client.get_input_entity(chat_id)
+        if not isinstance(peer, types.InputPeerUser):
+            return None
+        result = await client(functions.messages.GetPeerDialogsRequest([types.InputDialogPeer(peer)]))
+    except (ValueError, errors.RPCError) as e:
+        if is_cluster_error(e):
+            raise
+        return None
+    return result.dialogs[0].read_outbox_max_id if result.dialogs else None
+
+
+def read_mark(message, outbox_max_id):
+    """True / False: my message has / hasn't been read by the other person; None = unknown (not
+    my message, or no read information for this chat)."""
+    if not message.out or outbox_max_id is None:
+        return None
+    return message.id <= outbox_max_id
+
+
 CUSTOM_EMOJI = "✦"  # for a custom emoji whose plain emoji isn't known (yet)
 
 

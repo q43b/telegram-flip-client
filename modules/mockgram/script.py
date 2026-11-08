@@ -30,15 +30,31 @@ class Script:
 
     def _run_event(self, event):
         chat = event["chat_obj"]
-        if event.get("react"):
+        if event.get("seen"):
+            self.read_by_them(chat)
+        elif event.get("react"):
             self.react_by(chat, event)
         elif event.get("edit"):
             self.edit_by(chat, event)
         else:
             self.incoming(chat, event)
 
+    def read_by_them(self, chat):
+        """The other person reads all my messages in a private chat (Telegram: UpdateReadHistoryOutbox)."""
+        peer_id = chat.peer_id
+        top = self._top(peer_id).id
+        if top <= self.read_outbox[peer_id]:
+            return
+        self.read_outbox[peer_id] = top
+        self._deliver(types.UpdateReadHistoryOutbox(peer=self.peer_of(chat), max_id=top, pts=1, pts_count=0), [peer_id])
+
     def after_send(self, chat):
-        """I just sent something to this chat: if it has auto replies, the next one is on its way."""
+        """I just sent something to this chat: it may be read soon, and if it has auto replies, the next one is on its way."""
+        if chat.reads_after is not None:
+            try:
+                asyncio.get_running_loop().call_later(chat.reads_after, self._safely, self.read_by_them, chat)
+            except RuntimeError:
+                pass  # no running loop (a test calling the backend directly)
         if not chat.auto_replies:
             return
         number = self.reply_count.get(chat.peer_id, 0)

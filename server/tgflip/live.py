@@ -146,6 +146,13 @@ async def on_deleted(event):
     await broadcast({"type": "deleted", "chat_id": event.chat_id, "ids": event.deleted_ids})
 
 
+# The other person read my messages up to max_id (private chats; supergroups send it too, the app
+# ignores those)
+@on(events.MessageRead(inbox=False))
+async def on_read_outbox(event):
+    await broadcast({"type": "read_outbox", "chat_id": event.chat_id, "max_id": event.max_id})
+
+
 @on(events.MessageRead(inbox=True))
 async def on_read(event):
     forget_forum_unread(event.chat_id)

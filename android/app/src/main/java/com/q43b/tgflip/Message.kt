@@ -10,6 +10,7 @@ import org.json.JSONObject
 // image = set for a photo, video = set for a video (text is then the caption).
 // round = set for a round video message. sticker = set for a sticker.
 // file = set for a file sent as a document (text is then the caption).
+// read = my message: true once the other person has read it (private chats), else null or false.
 // customEmoji = where custom emoji sit in text (their plain emoji is in the text there).
 // reactions = people's reactions, in Telegram's order.
 // sender = who wrote it, only for other people's messages in groups; senderId = their user
@@ -32,6 +33,7 @@ data class Message(
     val sticker: StickerInfo? = null,
     val customEmoji: List<CustomEmoji> = emptyList(),
     val file: FileInfo? = null,
+    val read: Boolean? = null,
 ) {
     // Same keys as the server sends, so saved messages read back with fromJson
     fun toJson(): JSONObject = JSONObject()
@@ -49,6 +51,7 @@ data class Message(
         .put("sticker", sticker?.toJson() ?: JSONObject.NULL)
         .put("custom_emoji", CustomEmoji.toJson(customEmoji))
         .put("file", file?.toJson() ?: JSONObject.NULL)
+        .put("read", read ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = Message(
@@ -70,6 +73,7 @@ data class Message(
             sticker = json.optJSONObject("sticker")?.let(StickerInfo::fromJson),
             customEmoji = CustomEmoji.listFromJson(json.optJSONArray("custom_emoji")),
             file = json.optJSONObject("file")?.let(FileInfo::fromJson),
+            read = if (json.isNull("read")) null else json.getBoolean("read"),
         )
     }
 }
