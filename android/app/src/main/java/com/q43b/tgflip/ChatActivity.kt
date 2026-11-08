@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
@@ -59,6 +60,7 @@ class ChatActivity : AppCompatActivity() {
     private var hasOlder = false  // the "Load older messages" row is shown
     private var unread = 0
     private var sending = false
+    private var downloadingFile = false
     private var markingRead = false
 
     // Entries of the menu that OK on a message opens. New message features go here.
@@ -71,6 +73,9 @@ class ChatActivity : AppCompatActivity() {
         },
         MessageAction(R.string.action_play_round, isAvailable = { it.round != null }) {
             VideoActivity.start(this, chatId, it.id, round = true)
+        },
+        MessageAction(R.string.action_download_file, isAvailable = { it.file != null }) {
+            downloadFile(it)
         },
         MessageAction(R.string.action_view_sticker, isAvailable = { it.sticker != null && StickerSetting.showsPictures(this) }) {
             ImageActivity.startSticker(this, chatId, it.id, it.sticker!!.id, it.sticker.kind)
@@ -128,6 +133,9 @@ class ChatActivity : AppCompatActivity() {
     }
     private val pickVideo = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         result.data?.data?.let(::chooseHowToSendVideo)
+    }
+    private val pickFile = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.data?.let(::sendFile)
     }
     private var chatId = 0L
     private var chatReactions: List<String>? = null  // what this chat allows, asked once per screen
@@ -310,11 +318,12 @@ class ChatActivity : AppCompatActivity() {
 
     // Send media: a photo, or (later) a video
     private fun showMediaMenu() {
-        val items = listOf(R.string.menu_send_photo, R.string.menu_send_video)
+        val items = listOf(R.string.menu_send_photo, R.string.menu_send_video, R.string.menu_send_file)
         MessageMenu.choose(this, getString(R.string.menu_media_title), items.map(::getString)) { which ->
             when (items[which]) {
                 R.string.menu_send_photo -> startPick(pickPhoto, "image/*")
                 R.string.menu_send_video -> startPick(pickVideo, "video/*")
+                R.string.menu_send_file -> startPick(pickFile, "*/*")
                 else -> showComingLater()
             }
         }
@@ -380,6 +389,112 @@ class ChatActivity : AppCompatActivity() {
                 sending = false
                 optimized.delete()
                 showStatus(getString(R.string.video_optimize_failed))
+            }
+        }
+    }
+
+    // OK on a file: the server gets it from Telegram, then it is saved in Downloads/TG Flip
+    // (through the media store, no permission needed from Android 10 on), where the phone's
+    // own file manager finds it. The status line follows both steps.
+    private fun downloadFile(message: Message) {
+        val info = message.file ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            showStatus(getString(R.string.file_needs_10))
+            hideStatusLater(getString(R.string.file_needs_10))
+            return
+        }
+        if (downloadingFile) return
+        if (info.size > FileSender.MAX_BYTES) {
+            showStatus(getString(R.string.file_too_big))
+            hideStatusLater(getString(R.string.file_too_big))
+            return
+        }
+        downloadingFile = true
+        showStatus(getString(R.string.file_server_fetching))
+        val temp = File(cacheDir, "download_${chatId}_${message.id}.part")
+        var lastProgress = 0L
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    api.downloadTo(api.fileCall(chatId, message.id), temp) { done, total ->
+                        val now = System.currentTimeMillis()
+                        if (now - lastProgress >= 300) {
+                            lastProgress = now
+                            runOnUiThread {
+                                showStatus(getString(R.string.video_downloading,
+                                    Formatter.formatShortFileSize(this@ChatActivity, done),
+                                    Formatter.formatShortFileSize(this@ChatActivity, if (total > 0) total else info.size)))
+                            }
+                        }
+                    }
+                    FileSender.saveToDownloads(this@ChatActivity, temp, info.name.ifEmpty { "TGFlip_${chatId}_${message.id}${info.ext}" }, info.mime)
+                    getString(R.string.file_saved)
+                } catch (e: ApiClient.TooBigException) {
+                    getString(R.string.file_too_big)
+                } catch (e: IOException) {
+                    getString(R.string.file_not_loaded)
+                } finally {
+                    temp.delete()
+                }
+            }
+            downloadingFile = false
+            showStatus(result)
+            hideStatusLater(result)
+        }
+    }
+
+    // Sends the file as a plain document, as a reply if one is being written; text in the
+    // message box becomes its caption. If sending fails, a dialog offers to try again.
+    private fun sendFile(uri: Uri) {
+        if (sending) return
+        sending = true
+        showStatus(getString(R.string.file_preparing))
+        val caption = if (editing == null) messageInput.text.toString().trim() else ""
+        val replyToId = replyingTo?.id
+        var lastProgress = 0L
+        lifecycleScope.launch {
+            try {
+                val (id, file) = withContext(Dispatchers.IO) {
+                    val file = FileSender.prepare(this@ChatActivity, uri)
+                    val id = api.sendFile(
+                        chatId, topicId, file, { FileSender.open(this@ChatActivity, uri) }, caption, replyToId,
+                        onProgress = { done, total ->
+                            val now = System.currentTimeMillis()
+                            if (now - lastProgress >= 300) {
+                                lastProgress = now
+                                runOnUiThread {
+                                    showStatus(getString(R.string.file_sending,
+                                        Formatter.formatShortFileSize(this@ChatActivity, done),
+                                        Formatter.formatShortFileSize(this@ChatActivity, total)))
+                                }
+                            }
+                        },
+                        onSent = { runOnUiThread { showStatus(getString(R.string.file_server_sending)) } },
+                    )
+                    id to file
+                }
+                if (caption.isNotEmpty()) messageInput.text.clear()
+                if (replyToId != null) cancelCompose()
+                status.visibility = View.GONE
+                val ext = file.name.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".${it.lowercase()}" }
+                val sent = Message(id, caption, out = true, date = MessageFormat.now(), replyToId = replyToId,
+                    file = FileInfo(file.name, ext, file.size, ""))
+                addMessage(sent, follow = true)
+            } catch (e: FileSender.TooLargeException) {
+                showStatus(getString(R.string.file_send_too_big))
+            } catch (e: ApiClient.TooBigException) {
+                showStatus(getString(R.string.file_send_too_big))
+            } catch (e: IOException) {
+                status.visibility = View.GONE
+                AlertDialog.Builder(this@ChatActivity)
+                    .setMessage(R.string.file_send_failed)
+                    .setPositiveButton(R.string.voice_retry) { _, _ -> sendFile(uri) }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setCancelable(false)
+                    .show()
+                    .also { Themer.apply(it) }
+            } finally {
+                sending = false
             }
         }
     }
@@ -1061,6 +1176,7 @@ class ChatActivity : AppCompatActivity() {
             ?: message.image?.let { MessageFormat.photo(this, message.text) }
             ?: message.video?.let { MessageFormat.video(this, it, message.text) }
             ?: message.round?.let { MessageFormat.round(this, it) }
+            ?: message.file?.let { fileLines(it, message.text) }
             ?: message.sticker?.let(::stickerLine)
             ?: message.text.ifEmpty { getString(R.string.media) }
         val time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
@@ -1082,6 +1198,14 @@ class ChatActivity : AppCompatActivity() {
             SpannableStringBuilder("↪ $quoted\n").append(line)
         }
         return withReactions(body, message.reactions)
+    }
+
+    // A file message starts on a new line after the time and sender, with the file's own line(s)
+    // ("📄 File: name · size", wrapped as long as the name needs) and the caption on a line below,
+    // so the name never runs into other text
+    private fun fileLines(file: FileInfo, caption: String): String {
+        val line = MessageFormat.file(this, file, "")
+        return if (caption.isEmpty()) "\n$line" else "\n$line\n$caption"
     }
 
     // "🏷 Sticker 😂", and in data saver mode (no picture) my description: "🏷 Sticker 😂: cat laughing"
@@ -1169,6 +1293,7 @@ class ChatActivity : AppCompatActivity() {
             ?: message.image?.let { MessageFormat.photo(this, message.text) }
             ?: message.video?.let { MessageFormat.video(this, it, message.text) }
             ?: message.round?.let { MessageFormat.round(this, it) }
+            ?: message.file?.let { MessageFormat.file(this, it, message.text) }
             ?: message.sticker?.let(::stickerLine)
             ?: message.text.ifEmpty { getString(R.string.media) }
         return MessageFormat.snippet(text, SNIPPET_LENGTH)

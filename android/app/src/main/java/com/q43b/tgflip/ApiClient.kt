@@ -263,6 +263,62 @@ class ApiClient(baseUrl: String?, val token: String) {
     fun videoCall(chatId: Long, messageId: Long): Call =
         videos.newCall(Request.Builder().url(endpoint("/video/$chatId/$messageId")).header("x-token", token).build())
 
+    // A file sent as a document: like a video, the server answers only once it has the whole file
+    fun fileCall(chatId: Long, messageId: Long): Call =
+        videos.newCall(Request.Builder().url(endpoint("/file/$chatId/$messageId")).header("x-token", token).build())
+
+    // Sends a file as a document: the body is the file itself, streamed from openFile (never held
+    // in memory); returns its id. onProgress(bytes sent, total) while it goes to the server,
+    // then onSent() while the server passes it on to Telegram.
+    fun sendFile(
+        chatId: Long,
+        topicId: Long?,
+        file: FileSender.Prepared,
+        openFile: () -> InputStream,
+        caption: String,
+        replyToId: Long?,
+        onProgress: (Long, Long) -> Unit,
+        onSent: () -> Unit,
+    ): Long {
+        val url = endpoint("/send_file").toHttpUrl().newBuilder()
+            .addQueryParameter("chat_id", chatId.toString())
+            .addQueryParameter("name", file.name)
+            .apply {
+                if (caption.isNotEmpty()) addQueryParameter("caption", caption)
+                if (topicId != null) addQueryParameter("topic_id", topicId.toString())
+                if (replyToId != null) addQueryParameter("reply_to_id", replyToId.toString())
+            }
+            .build()
+        val body = object : RequestBody() {
+            override fun contentType() = "application/octet-stream".toMediaType()
+
+            // Unknown up front (-1, sent in chunks): a picker's size isn't always exact
+            override fun contentLength() = -1L
+
+            override fun writeTo(sink: BufferedSink) {
+                var done = 0L
+                openFile().use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        sink.write(buffer, 0, read)
+                        done += read
+                        onProgress(done, file.size)
+                    }
+                }
+                onSent()
+            }
+        }
+        val request = Request.Builder().url(url).post(body).header("x-token", token).build()
+        videos.newCall(request).execute().use { response ->
+            if (response.code == 401) throw BadTokenException()
+            if (response.code == 413) throw TooBigException()
+            if (!response.isSuccessful) throw IOException("Server error ${response.code}")
+            return JSONObject(response.body!!.string()).getLong("id")
+        }
+    }
+
     // Writes the answer of a download call to file, reporting (bytes so far, total) as it goes.
     // Cancelling the call (from another thread) stops it with an IOException.
     fun downloadTo(call: Call, file: File, onProgress: (Long, Long) -> Unit) {

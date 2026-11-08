@@ -69,6 +69,21 @@ object MessageFormat {
         return if (caption.isEmpty()) label else "$label: $caption"
     }
 
+    // "📄 File: report.docx · 1.2 MB", or with " - caption"; in the chat list (short) "📄 File .docx"
+    fun file(context: Context, file: FileInfo?, caption: String, short: Boolean = false): String {
+        var label = "📄 ${context.getString(R.string.file)}"
+        if (file != null) {
+            if (short) {
+                if (file.ext.isNotEmpty()) label += " ${file.ext}"
+            } else {
+                val shown = file.name.ifEmpty { file.ext }
+                if (shown.isNotEmpty()) label += ": $shown"
+                if (file.size > 0) label += " · ${Formatter.formatShortFileSize(context, file.size)}"
+            }
+        }
+        return if (caption.isEmpty()) label else "$label - $caption"
+    }
+
     // "🏷 Sticker 😂" (the emoji it stands for)
     fun sticker(context: Context, emoji: String): String {
         val label = "🏷 ${context.getString(R.string.sticker)}"

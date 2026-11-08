@@ -2,6 +2,7 @@
 """
 import os
 import asyncio
+import shutil
 import tempfile
 from io import BytesIO
 from fastapi import HTTPException, Request, Response
@@ -14,7 +15,7 @@ from telethon import errors, types
 from tgflip.account import account, client
 from tgflip.api import api
 from tgflip.cache import IMAGE_CACHE, PHOTO_CACHE, VIDEO_CACHE, cache_path, in_cache, sent, stored
-from tgflip.messages import photo_id_of, photo_sizes, reply_target, round_of, video_of, voice_of
+from tgflip.messages import file_of, photo_id_of, photo_sizes, reply_target, round_of, video_of, voice_of
 from tgflip.telegram import bad_request, recovering
 
 
@@ -257,6 +258,87 @@ async def send_photo(request: Request, chat_id: int, caption: str = "",
     except errors.RPCError as e:
         bad_request(e)
     return {"id": msg.id}
+
+
+MAX_FILE_BYTES = MAX_VIDEO_BYTES  # files follow videos: more takes minutes through the proxy
+
+
+BACKSLASH = chr(92)
+BAD_NAME_CHARS = '<>:"/|?*' + BACKSLASH
+
+
+def safe_name(name):
+    """A file name without folders or characters Windows refuses (the name only travels to Telegram)."""
+    name = os.path.basename((name or "").replace(BACKSLASH, "/"))
+    name = "".join("_" if c in BAD_NAME_CHARS or ord(c) < 32 else c for c in name).strip(" .")
+    return name[:120] or "file"
+
+
+def ascii_name(name):
+    return "".join(c if 32 <= ord(c) < 127 and c not in '"' + BACKSLASH else "_" for c in name) or "file"
+
+
+# A file sent as a document, as Telegram keeps it. Downloaded to a temporary folder and sent from
+# there; the answer starts when the download is done, the temporary file goes once it is sent (the
+# phone keeps its own copy). The name comes in Content-Disposition (the phone knows it anyway).
+@api.get("/file/{chat_id}/{message_id}")
+@recovering
+async def get_file(chat_id: int, message_id: int):
+    try:
+        message = await client.get_messages(chat_id, ids=message_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    info = file_of(message) if message is not None else None
+    if info is None:
+        raise HTTPException(status_code=404, detail="No such file")
+    if info["size"] > MAX_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="File too big (over 100 MB)")
+    folder = tempfile.mkdtemp(prefix="tgflip_file_")
+    path = os.path.join(folder, safe_name(info["name"]))
+    try:
+        await client.download_media(message, file=path)
+    except errors.RPCError as e:
+        shutil.rmtree(folder, ignore_errors=True)
+        bad_request(e)
+    except BaseException:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
+    return FileResponse(path, media_type=info["mime"] or "application/octet-stream",
+                        headers={"Content-Disposition": f'attachment; filename="{ascii_name(info["name"])}"'},
+                        background=BackgroundTask(shutil.rmtree, folder, True))
+
+
+# Sends a file as a plain document (never recompressed). The body is the file itself, the
+# name and the rest come in the query. Written to disk as it arrives (up to 100 MB, never held
+# in memory), then uploaded; a reconnect retries only the upload.
+@api.post("/send_file")
+async def send_file(request: Request, chat_id: int, name: str, caption: str = "",
+                    topic_id: Optional[int] = None, reply_to_id: Optional[int] = None):
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, safe_name(name))
+        received = 0
+        with open(path, "wb") as out:
+            async for chunk in request.stream():
+                out.write(chunk)
+                received += len(chunk)
+                if received > MAX_FILE_BYTES:
+                    raise HTTPException(status_code=413, detail="File too big (over 100 MB)")
+        if received == 0:
+            raise HTTPException(status_code=400, detail="Empty file")
+        msg = await upload_file(chat_id, path, caption, reply_target(topic_id, reply_to_id))
+    return {"id": msg.id}
+
+
+@recovering
+async def upload_file(chat_id, path, caption, reply_to):
+    try:
+        return await client.send_file(chat_id, path, caption=caption or None, reply_to=reply_to, force_document=True)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
 
 
 MAX_THUMB_BYTES = 200 * 1024  # Telegram's limit for a video's preview picture

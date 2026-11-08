@@ -58,6 +58,8 @@
       {"from": 1004, "ago": "4h50m", "text": "Thanks! I'll start tonight", "reactions": [{"emoji": "👍", "count": 3, "mine": true}]},
       {"from": 1001, "ago": "4h", "text": "Here is the whiteboard from today", "media": {"type": "photo", "picture": "city", "w": 1280, "h": 960}},
       {"from": "me", "ago": "3h55m", "text": "That diagram saved me", "reactions": [{"emoji": "❤", "count": 2}]},
+      {"from": 1004, "ago": "3h", "text": "Lab report draft, comments welcome", "media": {"type": "file", "name": "Lab report draft.docx", "size": 1250000}},
+      {"from": 1003, "ago": "2h", "text": "And the final one", "media": {"type": "file", "name": "Databases course - lab report - final version (really final) v7.docx", "size": 2300000}},
       {"from": 1003, "ago": "2h", "text": "Anyone up for the library tomorrow?", "key": "library"},
       {"from": 1002, "ago": "1h40m", "text": "I am. 10 o'clock?", "reply": "library"},
       {"from": "me", "ago": "1h30m", "text": "Works for me", "reply": "library", "reactions": [{"custom": "party", "count": 1}]},
@@ -103,7 +105,8 @@
       {"from": "me", "ago": "2d", "text": "Home on Sunday!"},
       {"from": 1007, "ago": "1d", "text": "Great, mom is cooking"},
       {"from": 1007, "ago": "3h30m", "media": {"type": "voice", "duration": 27}},
-      {"from": 1007, "ago": "3h", "media": {"type": "call", "video": false, "reason": "missed"}}
+      {"from": 1007, "ago": "3h", "media": {"type": "call", "video": false, "reason": "missed"}},
+      {"from": 1007, "ago": "2h", "text": "Grandma's recipe", "media": {"type": "file", "name": "Pierogi recipe.pdf", "size": 340000}}
     ]},
 
     {"kind": "private", "person": 1003, "messages": [
@@ -112,7 +115,10 @@
       {"from": 1003, "ago": "5h55m", "text": "And a short clip from today", "media": {"type": "video", "duration": 12, "w": 480, "h": 270, "size": 2400000}},
       {"from": "me", "ago": "5h40m", "media": {"type": "sticker", "key": "heart"}, "reactions": [{"emoji": "😂", "count": 1}]},
       {"from": 1003, "ago": "5h30m", "text": "Okay the party one is my favourite [[ce:party]]", "reactions": [{"custom": "party", "count": 1, "mine": true}]},
-      {"from": "me", "ago": "5h", "media": {"type": "call", "video": true, "reason": "hangup", "duration": 754}}
+      {"from": "me", "ago": "5h", "media": {"type": "call", "video": true, "reason": "hangup", "duration": 754}},
+      {"from": 1003, "ago": "4h", "text": "All the photos from the trip", "media": {"type": "file", "name": "trip-photos.zip", "size": 48000000}},
+      {"from": "me", "ago": "3h50m", "media": {"type": "file", "name": "palette.png", "size": 82000}},
+      {"from": 1003, "ago": "3h45m", "media": {"type": "file", "name": "README", "size": 2100}}
     ]},
 
     {"kind": "private", "person": 1006, "messages": [

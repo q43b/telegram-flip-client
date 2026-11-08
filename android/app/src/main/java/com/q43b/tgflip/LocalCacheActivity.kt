@@ -187,6 +187,7 @@ class LocalCacheActivity : AppCompatActivity() {
             m.round != null -> MessageFormat.round(this, m.round)
             m.video != null -> MessageFormat.video(this, m.video, m.text)
             m.image != null -> MessageFormat.photo(this, m.text)
+            m.file != null -> MessageFormat.file(this, m.file, m.text)
             else -> m.text
         }
         return "${MessageFormat.time(m.date)} ${if (who.isEmpty()) "" else "$who: "}$body"

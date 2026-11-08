@@ -11,7 +11,7 @@ load_dotenv()
 
 
 # Printed at startup; build_server.ps1 also names the zip after it
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 
 CODENAME = "Melted"  # the era's name, printed after the version (from 0.13.0-beta; Melted from 1.0.0)

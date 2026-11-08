@@ -114,7 +114,10 @@ object MediaCache {
         LocalCache(context).clear()
     }
 
-    private fun root(context: Context) = File(context.cacheDir, "media")
+    const val ROOT = "media"
+
+    // Each account has its own media folder: chat and message ids repeat between accounts
+    private fun root(context: Context) = File(context.cacheDir, ROOT + Profiles.suffix(context))
 
     private fun files(context: Context) = root(context).walkTopDown().filter { it.isFile }.toList()
 

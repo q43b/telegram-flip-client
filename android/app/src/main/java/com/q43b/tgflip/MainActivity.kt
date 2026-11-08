@@ -513,6 +513,7 @@ class MainActivity : AppCompatActivity() {
             last.kind == "voice" && last.voice != null -> MessageFormat.voice(this, last.voice)
             last.kind == "photo" -> MessageFormat.snippet(MessageFormat.photo(this, last.text), PREVIEW_LENGTH)
             last.kind == "video" -> MessageFormat.snippet(MessageFormat.video(this, null, last.text), PREVIEW_LENGTH)
+            last.kind == "file" -> MessageFormat.snippet(MessageFormat.file(this, last.file, last.text, short = true), PREVIEW_LENGTH)
             last.kind == "round" -> MessageFormat.round(this, null)
             last.kind == "sticker" -> MessageFormat.sticker(this, last.text)
             last.kind == "media" -> getString(R.string.media)

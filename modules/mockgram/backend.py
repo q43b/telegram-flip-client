@@ -8,6 +8,7 @@ a method (and named once in the log), so what's missing writes itself.
 """
 import copy
 import datetime
+import mimetypes
 
 from telethon import errors, types, utils
 from telethon.tl.types import messages as m_types
@@ -224,6 +225,13 @@ class Backend(Writes, Script):
                                       [types.DocumentAttributeVideo(duration=int(spec["duration"]), w=384, h=384, round_message=True)])
             document.size = int(spec.get("size", len(assets.MP4_STUB)))
             return types.MessageMediaDocument(document=document, round=True)
+        if kind == "file":  # a document: its name and the size shown; the content is a small stub
+            name = spec["name"]
+            mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
+            data = f"Made-up file {name}".encode()
+            document = self._document(mime, data, [types.DocumentAttributeFilename(file_name=name)])
+            document.size = int(spec.get("size", len(data)))  # what the app shows ("1.2 MB")
+            return types.MessageMediaDocument(document=document)
         raise ValueError(f"unknown media {kind}")
 
     def _message(self, chat, m):

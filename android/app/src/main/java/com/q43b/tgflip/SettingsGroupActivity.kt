@@ -139,7 +139,11 @@ class SettingsGroupActivity : AppCompatActivity() {
                 ServerSettingsDialog.show(this, settings, m, cancelable = true) { saved() }
             }
         }
-        return listOf(mode) + servers
+        // Which saved account the app talks as; its own token, addresses, chats and folders
+        val account = SettingRow(getString(R.string.setting_account, Profiles.current(this).name)) {
+            AccountMenu.show(this) { saved() }
+        }
+        return listOf(account, mode) + servers
     }
 
     // The theme (docs/themes-plan.md), light or dark, the UI size, and the server's themes

@@ -87,13 +87,13 @@ for c in chats:
         continue
     st, ms = call(f"/messages/{c['id']}?limit=50")
     for m in ms or []:
-        for kind in ("image", "video", "voice", "sticker", "round"):
+        for kind in ("image", "video", "voice", "sticker", "round", "file"):
             # Small videos only: a big one would take minutes through the proxy
-            if kind in ("video", "round") and m.get(kind) and m[kind]["size"] > 5_000_000:
+            if kind in ("video", "round", "file") and m.get(kind) and m[kind]["size"] > 5_000_000:
                 continue
             if m.get(kind) and kind not in found:
                 found[kind] = (c["id"], m)
-    if len(found) == 5:
+    if len(found) == 6:
         break
 for kind, (cid, m) in sorted(found.items()):
     if kind == "image":
@@ -102,6 +102,8 @@ for kind, (cid, m) in sorted(found.items()):
         check(kind, f"/video/{cid}/{m['id']}")
     elif kind == "voice":
         check("voice", f"/voice/{cid}/{m['id']}")
+    elif kind == "file":
+        check("file", f"/file/{cid}/{m['id']}")
     elif kind == "sticker":
         check("sticker", f"/sticker/{m['sticker']['id']}?size=96&chat_id={cid}&message_id={m['id']}")
         check("sticker pack of", f"/sticker_set_of/{m['sticker']['id']}?chat_id={cid}&message_id={m['id']}")

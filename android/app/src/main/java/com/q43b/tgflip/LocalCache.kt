@@ -13,7 +13,8 @@ import java.io.IOException
 // Stored in noBackupFilesDir: private to the app and never copied into phone backups,
 // since it holds message text. Reads and writes files, so call from a background thread.
 class LocalCache(context: Context) {
-    private val dir = File(context.noBackupFilesDir, "cache")
+    private val dir = File(context.noBackupFilesDir, DIR + Profiles.suffix(context))
+    private val all = context.noBackupFilesDir
 
     fun loadChats(): List<Chat>? = load("chats", Chat::fromJson)
 
@@ -60,8 +61,9 @@ class LocalCache(context: Context) {
     fun delete(name: String) = synchronized(LOCK) { file(name).delete() }
 
     // Settings > Cache > Delete all saved data
+    // Every account's saved copies, not only the current one's
     fun clear() = synchronized(LOCK) {
-        dir.deleteRecursively()
+        all.listFiles { f -> f.name == DIR || f.name.startsWith(DIR + "_") }?.forEach { it.deleteRecursively() }
     }
 
     private fun messagesName(chatId: Long, topicId: Long?) =
@@ -98,8 +100,9 @@ class LocalCache(context: Context) {
 
     private fun file(name: String) = AtomicFile(File(dir, "$name.json"))
 
-    private companion object {
-        const val MAX_MESSAGES = 100
-        val LOCK = Any()  // one writer at a time, even across screens
+    companion object {
+        const val DIR = "cache"
+        private const val MAX_MESSAGES = 100
+        private val LOCK = Any()  // one writer at a time, even across screens
     }
 }

@@ -67,7 +67,7 @@ class Message:
         self.topic_id = None
         self.creates = None  # a topic, for the service message that creates it
         self.where = where
-        if self.media is not None and self.media.get("type") not in ("photo", "sticker", "voice", "video", "round", "call"):
+        if self.media is not None and self.media.get("type") not in ("photo", "sticker", "voice", "video", "round", "call", "file"):
             raise SceneError(f"{where}: unknown media type {self.media.get('type')!r}")
         self._tokens()
 

@@ -9,6 +9,7 @@ import org.json.JSONObject
 // voice = set for a voice message (text is then its caption, usually empty).
 // image = set for a photo, video = set for a video (text is then the caption).
 // round = set for a round video message. sticker = set for a sticker.
+// file = set for a file sent as a document (text is then the caption).
 // customEmoji = where custom emoji sit in text (their plain emoji is in the text there).
 // reactions = people's reactions, in Telegram's order.
 // sender = who wrote it, only for other people's messages in groups; senderId = their user
@@ -30,6 +31,7 @@ data class Message(
     val reactions: List<Reaction> = emptyList(),
     val sticker: StickerInfo? = null,
     val customEmoji: List<CustomEmoji> = emptyList(),
+    val file: FileInfo? = null,
 ) {
     // Same keys as the server sends, so saved messages read back with fromJson
     fun toJson(): JSONObject = JSONObject()
@@ -46,6 +48,7 @@ data class Message(
         .put("reactions", Reaction.toJson(reactions))
         .put("sticker", sticker?.toJson() ?: JSONObject.NULL)
         .put("custom_emoji", CustomEmoji.toJson(customEmoji))
+        .put("file", file?.toJson() ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = Message(
@@ -66,6 +69,7 @@ data class Message(
             reactions = Reaction.listFromJson(json.optJSONArray("reactions")),
             sticker = json.optJSONObject("sticker")?.let(StickerInfo::fromJson),
             customEmoji = CustomEmoji.listFromJson(json.optJSONArray("custom_emoji")),
+            file = json.optJSONObject("file")?.let(FileInfo::fromJson),
         )
     }
 }
@@ -117,6 +121,22 @@ data class VideoInfo(val duration: Int, val width: Int, val height: Int, val siz
             width = json.optInt("w"),
             height = json.optInt("h"),
             size = json.optLong("size"),
+        )
+    }
+}
+
+// A file sent as a document: its name (may be empty), extension with the dot (".docx", may be
+// empty), size in bytes and type. The file itself comes from GET /file.
+data class FileInfo(val name: String, val ext: String, val size: Long, val mime: String) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("name", name).put("ext", ext).put("size", size).put("mime", mime)
+
+    companion object {
+        fun fromJson(json: JSONObject) = FileInfo(
+            name = json.optString("name"),
+            ext = json.optString("ext"),
+            size = json.optLong("size"),
+            mime = json.optString("mime"),
         )
     }
 }

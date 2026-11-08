@@ -1,6 +1,7 @@
 """Turning Telegram's messages into what the apps get as JSON: replies, topics, calls, voice,
 photos, videos, stickers, reactions, custom emoji, senders and previews.
 """
+import os
 import time
 from telethon import errors, functions, types
 
@@ -119,6 +120,22 @@ def round_of(message):
         return None
     attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeVideo)), None)
     return {"duration": int(attr.duration or 0) if attr else 0, "size": document.size}
+
+
+def file_of(message):
+    """For a file sent as a document (anything that isn't a voice message, video, round video,
+    GIF or sticker): {name, ext, size, mime}; None for anything else. name is the file name
+    the sender gave (may be empty), ext its extension with the dot (".docx", may be empty).
+    The file itself comes from GET /file."""
+    document = getattr(message, "document", None)
+    if document is None or not isinstance(message.media, types.MessageMediaDocument):
+        return None
+    if (voice_of(message) is not None or video_of(message) is not None or round_of(message) is not None
+            or getattr(message, "gif", None) is not None or getattr(message, "sticker", None) is not None):
+        return None
+    attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeFilename)), None)
+    name = attr.file_name if attr else ""
+    return {"name": name, "ext": os.path.splitext(name)[1].lower(), "size": document.size, "mime": document.mime_type or ""}
 
 
 CUSTOM_EMOJI = "✦"  # for a custom emoji whose plain emoji isn't known (yet)
@@ -270,6 +287,8 @@ def last_message_preview(message):
         text, kind = "", "round"
     elif sticker_of(message) is not None:
         text, kind = sticker_of(message)["emoji"], "sticker"
+    elif file_of(message) is not None:
+        text, kind = message.raw_text or "", "file"
     elif isinstance(message, types.MessageService):
         text, kind = "", "event"
     else:
@@ -283,6 +302,7 @@ def last_message_preview(message):
         "kind": kind,
         "call": call,
         "voice": voice,
+        "file": file_of(message),
     }
 
 

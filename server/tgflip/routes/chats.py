@@ -13,7 +13,7 @@ from telethon.tl import custom
 from tgflip.account import client
 from tgflip.api import api
 from tgflip.bodies import DeleteBody, EditBody, ForwardBody, SendBody
-from tgflip.messages import call_of, custom_emoji_ids, custom_emoji_of, forget_forum_unread, forum_unread, get_forum_topics, image_of, is_edited, last_message_preview, learn_custom_emoji, photo_id_of, reactions_of, reply_of, reply_target, round_of, sender_id_of, sender_name, sticker_of, topic_messages, video_of, voice_of
+from tgflip.messages import call_of, custom_emoji_ids, file_of, custom_emoji_of, forget_forum_unread, forum_unread, get_forum_topics, image_of, is_edited, last_message_preview, learn_custom_emoji, photo_id_of, reactions_of, reply_of, reply_target, round_of, sender_id_of, sender_name, sticker_of, topic_messages, video_of, voice_of
 from tgflip.telegram import bad_request, can_delete_others, get_telegram_config, is_cluster_error, recovering
 
 
@@ -187,7 +187,7 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
         {"id": m.id, "text": m.raw_text or "", "out": m.out, "date": m.date.isoformat(),
          "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
          "voice": voice_of(m), "image": image_of(m), "video": video_of(m),
-         "round": round_of(m), "reactions": reactions_of(m),
+         "round": round_of(m), "file": file_of(m), "reactions": reactions_of(m),
          "sticker": sticker_of(m), "custom_emoji": custom_emoji_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
         for m in found
     ]

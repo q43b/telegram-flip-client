@@ -24,9 +24,10 @@ data class FolderChat(val id: Long, val name: String)
 // Stored as a JSON list in the app's private settings file
 class Folders(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val key = KEY + Profiles.suffix(context)  // each account has its own folders
 
     fun load(): List<Folder> {
-        val saved = prefs.getString(KEY, null) ?: return emptyList()
+        val saved = prefs.getString(key, null) ?: return emptyList()
         return try {
             val json = JSONArray(saved)
             List(json.length()) { i ->
@@ -81,10 +82,10 @@ class Folders(context: Context) {
                 .put("hidden", f.hidden).put("count_unread", f.countUnread)
                 .put("chats", JSONArray(f.chats.map { JSONObject().put("id", it.id).put("name", it.name) }))
         })
-        prefs.edit().putString(KEY, json.toString()).apply()
+        prefs.edit().putString(key, json.toString()).apply()
     }
 
-    private companion object {
+    companion object {
         const val KEY = "folders"
     }
 }

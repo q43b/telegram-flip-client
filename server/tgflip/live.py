@@ -7,7 +7,7 @@ from telethon import errors, events, types, utils
 import module_loader
 
 from tgflip.account import account, client, on
-from tgflip.messages import call_of, custom_emoji_of, forget_forum_unread, image_of, is_edited, learn_live_custom_emoji, reactions_list, reactions_of, reply_of, round_of, sender_id_of, sender_name, sticker_of, topic_of, video_of, voice_of
+from tgflip.messages import call_of, custom_emoji_of, file_of, forget_forum_unread, image_of, is_edited, learn_live_custom_emoji, reactions_list, reactions_of, reply_of, round_of, sender_id_of, sender_name, sticker_of, topic_of, video_of, voice_of
 
 
 async def broadcast(data):
@@ -54,6 +54,7 @@ async def on_new_message(event):
         "image": image_of(event.message),
         "video": video_of(event.message),
         "round": round_of(event.message),
+        "file": file_of(event.message),
         "reactions": reactions_of(event.message),
         "sticker": sticker_of(event.message),
         "custom_emoji": custom_emoji_of(event.message),
