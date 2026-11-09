@@ -24,6 +24,7 @@ object ServerMessages {
     val KNOWN_KINDS = listOf(
         "server_info",  // since 0.14.1-beta: the first line of Under the hood (UnderTheHoodActivity)
         "modules",  // since 0.15.1-beta: Under the hood > Modules (ModulesActivity)
+        "logging",  // since 1.8.0: the server has no logging module, so no live log (Under the hood > Live logs says so itself)
         "animated_stickers",  // since 0.16.0-beta: Settings > Stickers > Animated, played in chats
         "admin_messages",  // since 1.0.0: admin news, a dot trail to them (AdminMessages)
         "themes_host",  // since 1.2.1: Appearance > Get themes from the server (ThemeMenu)

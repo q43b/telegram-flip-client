@@ -139,7 +139,8 @@ async def live():
     async with websockets.connect(WS + "/logs") as lg:
         await lg.send(TOKEN)
         kept = json.loads(await asyncio.wait_for(lg.recv(), 10))
-        print(f"{'logs':28} kept lines>0={len(kept) > 0}")
+        # Without the logging module (since 1.8.0) the one "line" says so
+        print(f"{'logs':28} kept lines>0={len(kept) > 0} needs module={len(kept) == 1 and 'logging module' in kept[0]}")
 
 
 asyncio.run(live())

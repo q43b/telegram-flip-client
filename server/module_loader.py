@@ -34,9 +34,14 @@ KNOWN_USES = {
     "traffic.http": "read and change the answers the server gives to apps",
     "traffic.live": "read and change the live events the server sends to apps",
     "telegram.transport": "act as the Telegram connection of accounts of its own kind (a made-up Telegram instead of the real one)",
+    "server.log": "see the server's console output and every request made to it, with the addresses and accounts they come from, and keep and share them",
 }
 # filter name -> the use it needs
 FILTER_USES = {"http.json": "traffic.http", "live.event": "traffic.live"}
+# Since 1.8.0: observers (see ModuleContext.observe) and the hooks that hand a connection over, and the use each needs
+OBSERVER_USES = {"request.done": "server.log", "app.connected": "server.log"}
+HOOK_USES = {"logs.serve": "server.log"}
+observers = {}  # observer name -> [(module, function)], in load order (since 1.8.0)
 
 
 class _Drop:
@@ -203,6 +208,7 @@ class ModuleContext:
         self._notices = []
         self._hooks = []
         self._filters = []
+        self._observers = []
 
     def commit(self):
         """Makes the notices and hooks count. They stay silent whenever the module isn't on
@@ -214,6 +220,8 @@ class ModuleContext:
             hooks.setdefault(name, []).append((module, function))
         for name, function in self._filters:
             filters.setdefault(name, []).append((module, function))
+        for name, function in self._observers:
+            observers.setdefault(name, []).append((module, function))
 
     def log(self, text):
         print(f"[{self.id}] {text}")
@@ -229,8 +237,37 @@ class ModuleContext:
         return register
 
     def hook(self, name):
+        """A hook: the first module's answer that is not None wins (call_hook). Hooks that hand a
+        live connection or console output over need the use named in HOOK_USES.
+        - "logs.serve" (server.log, since 1.8.0): async function(ws) -> True. The server's /logs
+          connection (a WebSocket whose app is known and may see the log) is handed over; the
+          function sends the log until the app goes away. Without a module that answers it, /logs
+          only tells apps that the server has no logging module."""
+        needed = HOOK_USES.get(name)
+        if needed is not None and needed not in self._module.uses:
+            raise ModuleError(f'the hook {name} needs "uses": ["{needed}"] in module.json')
+
         def register(function):
             self._hooks.append((name, function))
+            return function
+        return register
+
+    def observe(self, name):
+        """An observer (since server 1.8.0): the server tells every module that observes this name what
+        happened, after the fact; the function returns nothing and can't change anything. A failing one
+        is skipped. The module must say it uses server.log in module.json (shown to the owner).
+        - "request.done": function(info) after each HTTP request is answered; info has host, port,
+          account (name or None), method, path, query, http_version and status.
+        - "app.connected": function(info) when an app opens a live connection; info has host, account
+          and version (the app's, or None for apps older than 0.7.1)."""
+        if name not in OBSERVER_USES:
+            raise ModuleError(f"there is nothing to observe called {name!r}")
+        needed = OBSERVER_USES[name]
+        if needed not in self._module.uses:
+            raise ModuleError(f'observing {name} needs "uses": ["{needed}"] in module.json')
+
+        def register(function):
+            self._observers.append((name, function))
             return function
         return register
 
@@ -413,6 +450,24 @@ async def call_filters(name, value, info):
         if answer is not None:
             value = answer
     return value
+
+
+_observer_failed = {}  # (module id, observer name) -> when it was last reported
+
+
+def notify(name, info):
+    """Tells every module that is on and observes this name (ModuleContext.observe). Cheap and
+    silent while none does; a failing observer is reported at most once a minute."""
+    for module, function in observers.get(name, []):
+        if not module.on:
+            continue
+        try:
+            function(info)
+        except Exception as e:
+            key = (module.id, name)
+            if time.monotonic() - _observer_failed.get(key, -60) >= 60:
+                _observer_failed[key] = time.monotonic()
+                print(f"Observer {name} of module {module.id} failed: {type(e).__name__}: {e}")
 
 
 def has_hook(name):

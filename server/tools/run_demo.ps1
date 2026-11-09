@@ -19,7 +19,9 @@ $data = Join-Path $env:TEMP "tgflip-demo"
 # A fresh folder each time, so the scene starts from the top (relative times, unread counts)
 if (Test-Path $data) { Remove-Item -Recurse -Force $data }
 New-Item -ItemType Directory -Force (Join-Path $data "modules") | Out-Null
-Copy-Item -Recurse (Join-Path $repo "modules\mockgram") (Join-Path $data "modules\mockgram")
+foreach ($m in "mockgram", "logs") {
+    Copy-Item -Recurse (Join-Path $repo "modules\$m") (Join-Path $data "modules\$m")
+}
 
 "API_ID=1`nAPI_HASH=00000000000000000000000000000000`nAPI_TOKEN=unused`nPROXY_HOST=`nPORT=$Port`n" |
     Set-Content -Encoding ascii (Join-Path $data ".env")

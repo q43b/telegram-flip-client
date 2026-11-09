@@ -12,6 +12,7 @@ import android.widget.ArrayAdapter
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -35,6 +36,7 @@ class UnderTheHoodActivity : AppCompatActivity() {
     private var rows = emptyList<SettingRow>()
     private lateinit var adapter: ArrayAdapter<CharSequence>
     private var serverLine = ""
+    private var noLogModule = false  // the server (1.8.0 or newer) says it has no logging module
     private var messageCount = 0  // server messages waiting for this app
     private var messagesRow: SettingRow? = null
 
@@ -108,6 +110,8 @@ class UnderTheHoodActivity : AppCompatActivity() {
         lifecycleScope.launch {
             serverLine = try {
                 val info = withContext(Dispatchers.IO) { api.getServerInfo() }
+                // From 1.8.0 the live log is an optional server module (capability live_logs); older servers always have it
+                noLogModule = info != null && atLeast(info.version, 1, 8) && "live_logs" !in info.capabilities
                 when {
                     info == null -> getString(R.string.under_the_hood_server_old)
                     else -> getString(R.string.under_the_hood_server, info.version, info.codename,
@@ -128,13 +132,29 @@ class UnderTheHoodActivity : AppCompatActivity() {
 
     private fun rows() = listOf(
         SettingRow(serverLine) { loadServerInfo() },
-        SettingRow(getString(R.string.under_the_hood_live_logs)) { LogActivity.start(this) },
+        if (noLogModule) SettingRow(getString(R.string.under_the_hood_live_logs_missing)) { showNoLogModule() }
+        else SettingRow(getString(R.string.under_the_hood_live_logs)) { LogActivity.start(this) },
         SettingRow(getString(R.string.under_the_hood_server_messages)) { ServerMessagesActivity.start(this) }
             .also { messagesRow = it },
         SettingRow(getString(R.string.under_the_hood_modules)) { ModulesActivity.start(this) },
         SettingRow(getString(R.string.under_the_hood_local_cache)) { LocalCacheActivity.start(this) },
         SettingRow(getString(R.string.under_the_hood_load_theme)) { pickTheme.launch("*/*") },
     )
+
+    private fun showNoLogModule() {
+        AlertDialog.Builder(this)
+            .setMessage(R.string.under_the_hood_logging_missing)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+            .also { Themer.apply(it) }
+    }
+
+    // "1.8.0" or "1.8.0-dev": is this version at least major.minor? (Servers don't send tags, but be safe.)
+    private fun atLeast(version: String, major: Int, minor: Int): Boolean {
+        val parts = version.substringBefore('-').split('.').map { it.toIntOrNull() ?: return false }
+        val have = parts.getOrElse(0) { 0 } * 1000 + parts.getOrElse(1) { 0 }
+        return have >= major * 1000 + minor
+    }
 
     // Left goes back, like the screens of Settings
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {

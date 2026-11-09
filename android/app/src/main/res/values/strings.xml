@@ -352,6 +352,8 @@
     <string name="app_version">TG Flip %1$s \"%2$s\"</string>
     <string name="under_the_hood_title">Under the hood</string>
     <string name="under_the_hood_live_logs">Live logs</string>
+    <string name="under_the_hood_live_logs_missing">Live logs (needs the logging module)</string>
+    <string name="under_the_hood_logging_missing">This server has no logging module, so there is no live log to show. The server\'s owner can install it in Maintenance mode (x, Modules).</string>
     <string name="under_the_hood_server_messages">Messages from the server</string>
     <string name="under_the_hood_modules">Modules</string>
     <string name="modules_title">Modules on the server</string>

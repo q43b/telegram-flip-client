@@ -1,0 +1,11 @@
+{
+  "id": "logs",
+  "name": "Logging",
+  "version": "1.0.0",
+  "api": 1,
+  "min_server": "1.8.0",
+  "python": "any",
+  "provides": {"live_logs": 1},
+  "uses": ["server.log"],
+  "description": "Keeps the server's console output and shows it live in the app (Under the hood > Live logs), with a line per request and per app connecting"
+}

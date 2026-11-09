@@ -3,7 +3,6 @@
 import os
 import asyncio
 from contextlib import asynccontextmanager
-from http import HTTPStatus
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import module_loader
@@ -56,10 +55,7 @@ async def lifespan(app: FastAPI):
                                "Log it in with tgflip-server --maintenancemode.")
         print(f"Account \"{acc.name}\" connected to Telegram")
         acc.watchdog = asyncio.create_task(watchdog())
-    if shared_server():
-        print("Shared server: only admin accounts' apps may see this log")
-    else:
-        print("Private server: every account's app may see this log")
+    print("Shared server" if shared_server() else "Private server")
     await module_loader.start_all()
     print(f"TG Flip server {VERSION} \"{CODENAME}\" started successfully")
     yield
@@ -74,9 +70,9 @@ async def lifespan(app: FastAPI):
 
 
 class AccessLog:
-    """One line per request, like uvicorn's own access log (turned off at startup:
-    start_log_capture), plus the account it was for. uvicorn's runs before the token is read,
-    so it can't say whose request it was; this one prints when the answer has gone."""
+    """Tells the modules that observe "request.done" (the logging module prints a line per request,
+    like uvicorn's own access log, turned off at startup: start_log_capture, plus the account it was
+    for) when each request has been answered. The server itself prints and keeps nothing."""
 
     def __init__(self, app):
         self.app = app
@@ -95,16 +91,12 @@ class AccessLog:
         try:
             await self.app(scope, receive, send_noting_status)
         finally:
-            host, port = scope.get("client") or ("?", 0)
-            name = scope.get("tgflip_account")
-            whose = f" [{name}]" if name else ""
-            path = scope["path"] + (f"?{scope['query_string'].decode()}" if scope["query_string"] else "")
-            try:
-                phrase = HTTPStatus(status).phrase
-            except ValueError:
-                phrase = ""
-            print(f'INFO:     {host}:{port}{whose} - "{scope["method"]} {path} '
-                  f'HTTP/{scope["http_version"]}" {status} {phrase}')
+            if module_loader.observers.get("request.done"):
+                host, port = scope.get("client") or ("?", 0)
+                module_loader.notify("request.done", {
+                    "host": host, "port": port, "account": scope.get("tgflip_account"),
+                    "method": scope["method"], "path": scope["path"],
+                    "query": scope["query_string"].decode(), "http_version": scope["http_version"], "status": status})
 
 
 app = FastAPI(lifespan=lifespan)

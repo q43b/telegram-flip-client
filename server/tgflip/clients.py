@@ -29,7 +29,7 @@ def note(account_name, host, version):
     recent = sorted(v for v, when in versions.items() if now - when < RECENT)
     if len(recent) > 1 and (account_name, host, tuple(recent)) not in warned:
         warned.add((account_name, host, tuple(recent)))
-        print(f"Several app versions behind {host} [{account_name}]: {', '.join(recent)}; "
+        print(f"Several app versions behind one address of [{account_name}]: {', '.join(recent)}; "
               "modules that adapt to the app's version go by the newest")
 
 

@@ -17,7 +17,8 @@ from tgflip.settings import CODENAME, VERSION, shared_server
 async def server_info():
     shared = shared_server()
     return {"version": VERSION, "codename": CODENAME, "shared": shared,
-            "log": not shared or account().admin,
+            # (since 1.8.0 also: a logging module is installed, see the "logs.serve" hook)
+            "log": module_loader.has_hook("logs.serve") and (not shared or account().admin),
             # What installed modules add, e.g. {"animated_stickers": 1} (since 0.15.0-beta).
             # Apps ask for these, never for a module's name (docs/modules-plan.md)
             "capabilities": module_loader.capabilities(),
@@ -40,6 +41,16 @@ def server_info_text():
     demo = f' It is a demo account ({acc.kind}), not Telegram.' if not acc.real else ""
     return (f'TG Flip server {VERSION} "{CODENAME}". {mode}, {who}.{demo} '
             f"Server cache: {describe_cache_setting()}.")
+
+
+# For apps that don't know the logging module (docs/logging-module-plan.md): without it there is no
+# live log to see. Apps that know it say so in Under the hood themselves (capability live_logs).
+@notice("logging")
+def logging_text():
+    if module_loader.has_hook("logs.serve"):
+        return None
+    return ("This server has no logging module, so the app's Live logs aren't available. "
+            "The server's owner can install it in Maintenance mode (x, Modules).")
 
 
 @notice("modules")

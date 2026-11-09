@@ -35,8 +35,9 @@ def main():
     scene = sys.argv[1] if len(sys.argv) > 1 else "showcase"
     work = tempfile.mkdtemp(prefix="tgflip-mockgram-check-")
     try:
-        shutil.copytree(os.path.join(REPO, "modules", "mockgram"), os.path.join(work, "modules", "mockgram"),
-                        ignore=shutil.ignore_patterns("__pycache__"))
+        for module in ("mockgram", "logs"):  # logs: the check also looks at the live log
+            shutil.copytree(os.path.join(REPO, "modules", module), os.path.join(work, "modules", module),
+                            ignore=shutil.ignore_patterns("__pycache__"))
         with open(os.path.join(work, ".env"), "w") as f:
             f.write(f"API_ID=1\nAPI_HASH={'0' * 32}\nAPI_TOKEN=unused\nPROXY_HOST=\nPORT={PORT}\n")
         with open(os.path.join(work, "accounts.json"), "w") as f:
