@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
         override fun handleOnBackPressed() = switchFolder(null)
     }
 
-    private var api: ApiClient? = null
+    private var api: Backend? = null
     private var live: LiveConnection? = null
     private var wasConnected = false
     // Between onStart and onStop. Android's own lifecycle state only becomes STARTED
@@ -538,7 +538,7 @@ class MainActivity : AppCompatActivity() {
             if (wasConnected) loadChats(quiet = true)
             wasConnected = true
             // Admin news: a dot on the Settings tab leads the way to them
-            api?.let { AdminMessages.check(this, it, lifecycleScope) { showSettingsDot() } }
+            (api as? ApiClient)?.let { AdminMessages.check(this, it, lifecycleScope) { showSettingsDot() } }
         }
     }
 

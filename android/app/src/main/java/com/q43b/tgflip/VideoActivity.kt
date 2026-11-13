@@ -19,7 +19,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.Call
 import java.io.File
 import java.io.IOException
 
@@ -32,7 +31,7 @@ class VideoActivity : AppCompatActivity() {
     private lateinit var video: VideoView
     private lateinit var status: TextView
     private lateinit var time: TextView
-    private var download: Call? = null
+    private var download: Download? = null
     private var ticker: Job? = null
     private var ready = false
 
@@ -70,7 +69,7 @@ class VideoActivity : AppCompatActivity() {
         val chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         val messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
         val settings = ServerSettings(this)
-        val api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        val api = Backends.create(this)
         val file = File(MediaCache.folder(this, "videos"), "${chatId}_$messageId.mp4")
         if (file.exists()) {
             MediaCache.touch(file)
@@ -103,18 +102,18 @@ class VideoActivity : AppCompatActivity() {
 
     // First the server gets it from Telegram (no progress to show), then it comes to the
     // phone, counted against its size. Written to a .part file, renamed when complete.
-    private fun fetch(api: ApiClient, chatId: Long, messageId: Long, file: File) {
+    private fun fetch(api: Backend, chatId: Long, messageId: Long, file: File) {
         status.setText(R.string.video_server_fetching)
         val part = File(file.path + ".part")
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 try {
                     file.parentFile?.mkdirs()
-                    val call = api.videoCall(chatId, messageId).also { download = it }
-                    api.downloadTo(call, part) { done, total -> showProgress(done, total) }
+                    api.download(Download.Kind.VIDEO, chatId, messageId).also { download = it }
+                        .saveTo(part) { done, total -> showProgress(done, total) }
                     if (!part.renameTo(file)) throw IOException("Can't save the video")
                     null
-                } catch (e: ApiClient.TooBigException) {
+                } catch (e: TooBigException) {
                     R.string.video_too_big
                 } catch (e: IOException) {
                     part.delete()

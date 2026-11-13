@@ -38,7 +38,7 @@ class PhotoLoader(
     private val onLoaded: () -> Unit,
 ) {
     // A new server (or none): photos that failed may work now
-    var api: ApiClient? = null
+    var api: Backend? = null
         set(value) {
             field = value
             failed.clear()

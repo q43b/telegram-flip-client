@@ -25,7 +25,7 @@ class VoicePlayer(
     private val scope: CoroutineScope,
     private val onChange: (messageId: Long) -> Unit,
 ) {
-    var api: ApiClient? = null
+    var api: Backend? = null
 
     // The message being loaded or played, or null
     var currentId: Long? = null

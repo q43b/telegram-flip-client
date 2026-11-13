@@ -37,7 +37,7 @@ import java.io.IOException
 // local favourites (the app's own list, kept on the server, no limit), and add, edit or
 // remove my own description of it (shown in data saver mode).
 class StickerPickerActivity : AppCompatActivity() {
-    private lateinit var api: ApiClient
+    private lateinit var api: Backend
     private lateinit var cache: LocalCache  // the lists, saved for offline (the pictures are in the media cache)
     private lateinit var title: TextView
     private lateinit var status: TextView
@@ -68,7 +68,7 @@ class StickerPickerActivity : AppCompatActivity() {
             insets
         }
         val settings = ServerSettings(this)
-        api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        api = Backends.create(this)
         cache = LocalCache(this)
         title = findViewById(R.id.picker_title)
         status = findViewById(R.id.status)

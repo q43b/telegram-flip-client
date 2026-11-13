@@ -40,7 +40,7 @@ class StickerLoader(
     animatedKept: Int = MEMORY_ANIMATED,  // how many playing stickers stay loaded (the picker's "all play" mode needs more)
     private val onLoaded: () -> Unit,
 ) {
-    var api: ApiClient? = null
+    var api: Backend? = null
 
     private val dir = MediaCache.folder(context, "stickers")
     private val sizePx = (sizeDp * context.resources.displayMetrics.density).roundToInt().coerceIn(32, 512)

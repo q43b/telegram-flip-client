@@ -50,7 +50,7 @@ class ProfileActivity : AppCompatActivity() {
         status = findViewById(R.id.status)
         photos = PhotoLoader(this, lifecycleScope, PhotoLoader.PROFILE_SIZE_DP) { showPhoto() }
         val settings = ServerSettings(this)
-        photos.api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        photos.api = Backends.create(this)
 
         val list = findViewById<ListView>(R.id.profile_rows)
         adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())

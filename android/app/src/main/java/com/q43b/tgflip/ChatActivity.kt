@@ -122,7 +122,7 @@ class ChatActivity : AppCompatActivity() {
         override fun handleOnBackPressed() = cancelCompose()
     }
 
-    private lateinit var api: ApiClient
+    private lateinit var api: Backend
     private lateinit var cache: LocalCache
     private lateinit var voice: VoicePlayer
     private lateinit var stickers: StickerLoader
@@ -170,7 +170,7 @@ class ChatActivity : AppCompatActivity() {
         // Without a server for the current mode the screen still opens from the saved copy;
         // sending and the other actions then fail with their usual messages
         val settings = ServerSettings(this)
-        api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        api = Backends.create(this)
         cache = LocalCache(this)
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         if (intent.hasExtra(EXTRA_TOPIC_ID)) topicId = intent.getLongExtra(EXTRA_TOPIC_ID, 0)
@@ -457,7 +457,7 @@ class ChatActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 try {
-                    api.downloadTo(api.fileCall(chatId, message.id), temp) { done, total ->
+                    api.download(Download.Kind.FILE, chatId, message.id).saveTo(temp) { done, total ->
                         val now = System.currentTimeMillis()
                         if (now - lastProgress >= 300) {
                             lastProgress = now
@@ -470,7 +470,7 @@ class ChatActivity : AppCompatActivity() {
                     }
                     FileSender.saveToDownloads(this@ChatActivity, temp, info.name.ifEmpty { "TGFlip_${chatId}_${message.id}${info.ext}" }, info.mime)
                     getString(R.string.file_saved)
-                } catch (e: ApiClient.TooBigException) {
+                } catch (e: TooBigException) {
                     getString(R.string.file_too_big)
                 } catch (e: IOException) {
                     getString(R.string.file_not_loaded)
@@ -523,7 +523,7 @@ class ChatActivity : AppCompatActivity() {
                 addMessage(sent, follow = true)
             } catch (e: FileSender.TooLargeException) {
                 showStatus(getString(R.string.file_send_too_big))
-            } catch (e: ApiClient.TooBigException) {
+            } catch (e: TooBigException) {
                 showStatus(getString(R.string.file_send_too_big))
             } catch (e: IOException) {
                 status.visibility = View.GONE
@@ -583,7 +583,7 @@ class ChatActivity : AppCompatActivity() {
             } catch (e: VideoSender.TooLargeException) {
                 cleanup?.delete()
                 showStatus(getString(R.string.video_send_too_big))
-            } catch (e: ApiClient.TooBigException) {
+            } catch (e: TooBigException) {
                 cleanup?.delete()
                 showStatus(getString(R.string.video_send_too_big))
             } catch (e: IOException) {

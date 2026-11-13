@@ -48,7 +48,7 @@ class ImageActivity : AppCompatActivity() {
     private lateinit var image: ImageView
     private lateinit var modeHint: TextView
     private lateinit var softKeys: SoftKeyBar
-    private lateinit var api: ApiClient
+    private lateinit var api: Backend
     private var chatId = 0L
     private var messageId = 0L
     private var stickerId = 0L  // set when showing a sticker instead of a photo
@@ -97,7 +97,7 @@ class ImageActivity : AppCompatActivity() {
         softKeys.onRightTap(::showMenu)
 
         val settings = ServerSettings(this)
-        api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        api = Backends.create(this)
         lifecycleScope.launch {
             val loaded = withContext(Dispatchers.IO) {
                 try {
@@ -299,14 +299,14 @@ class ImageActivity : AppCompatActivity() {
         null
     }
 
-    private fun still(api: ApiClient): Drawable? =
+    private fun still(api: Backend): Drawable? =
         BitmapFactory.decodeFile(file(api, chatId, messageId).path)?.let { BitmapDrawable(resources, it) }
 
     // On the IO thread: the saved moving copy (<id>_<ANIMATED_PX>_anim.webp), or one from the
     // server, saved. null when the server sent a still picture (no animated stickers module, or
     // an older server): then the still one at full size is shown instead.
     @SuppressLint("NewApi")  // only with StickerSetting.plays, which needs Android 9
-    private fun animatedSticker(api: ApiClient): Drawable? {
+    private fun animatedSticker(api: Backend): Drawable? {
         val dir = MediaCache.folder(this, "stickers")
         val file = File(dir, "${stickerId}_${ANIMATED_PX}_anim.webp")
         val bytes = if (file.exists()) {
@@ -335,7 +335,7 @@ class ImageActivity : AppCompatActivity() {
 
     // The saved copy, or a fresh download that is then saved. A sticker comes at its full
     // 512 px from GET /sticker, into the stickers folder next to the chat-sized copies.
-    private fun file(api: ApiClient, chatId: Long, messageId: Long): File {
+    private fun file(api: Backend, chatId: Long, messageId: Long): File {
         val sticker = stickerId != 0L
         val dir = MediaCache.folder(this, if (sticker) "stickers" else "images")
         val file = File(dir, if (sticker) "${stickerId}_$STICKER_PX.png" else "${chatId}_$messageId.jpg")

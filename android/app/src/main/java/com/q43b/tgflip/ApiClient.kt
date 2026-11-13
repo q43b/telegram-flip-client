@@ -10,8 +10,10 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.WebSocket
+import okhttp3.Response
 import okhttp3.WebSocketListener
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import okio.BufferedSink
 import java.io.File
@@ -22,11 +24,11 @@ import java.util.concurrent.TimeUnit
 // Talks to the server's HTTP API. Every request carries the token header.
 // baseUrl may be missing or invalid (a connection mode not set up yet): screens still
 // open from the saved copy, and every request fails with NoServerException.
-class ApiClient(baseUrl: String?, val token: String) {
+class ApiClient(baseUrl: String?, val token: String) : Backend {
     private val baseUrl = baseUrl?.takeIf { it.toHttpUrlOrNull() != null }
 
     // false = no usable server address; do not start a live connection
-    val hasServer get() = baseUrl != null
+    override val hasServer get() = baseUrl != null
 
     private fun endpoint(path: String) = (baseUrl ?: throw NoServerException()) + path
 
@@ -42,13 +44,38 @@ class ApiClient(baseUrl: String?, val token: String) {
         }
         .build()
 
-    // Opens /ws. The listener must send the token as the first message.
-    // The version header lets the server print which app version connected.
-    fun openSocket(listener: WebSocketListener): WebSocket {
+    // Opens /ws and sends the token as its first message. The version header lets the server
+    // print which app version connected. Callbacks come on OkHttp's threads.
+    override fun openEvents(listener: LiveListener): LiveStream {
         val request = Request.Builder().url(endpoint("/ws"))
             .header("x-app-version", BuildConfig.VERSION_NAME)
             .build()
-        return http.newWebSocket(request, listener)
+        val socket = http.newWebSocket(request, object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                webSocket.send(token)
+                listener.onOpen()
+            }
+
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                try {
+                    listener.onEvent(JSONObject(text))
+                } catch (e: JSONException) {
+                    // Not something we understand; ignore it
+                }
+            }
+
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                webSocket.close(1000, null)
+                listener.onDropped()
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = listener.onDropped()
+        })
+        return object : LiveStream {
+            override fun close() {
+                socket.close(1000, null)
+            }
+        }
     }
 
     // Opens /logs (the server's console log, for the "under the hood" screen). The listener
@@ -62,20 +89,20 @@ class ApiClient(baseUrl: String?, val token: String) {
     }
 
     // The functions below block until the server answers, so call them from a background thread.
-    fun getChats(limit: Int = 20): List<Chat> {
+    override fun getChats(limit: Int): List<Chat> {
         val json = JSONArray(call(Request.Builder().url(endpoint("/chats?limit=$limit"))))
         return List(json.length()) { i -> Chat.fromJson(json.getJSONObject(i)) }
     }
 
     // Only these chats (an app folder), newest activity first
-    fun getChatsByIds(ids: Collection<Long>): List<Chat> {
+    override fun getChatsByIds(ids: Collection<Long>): List<Chat> {
         if (ids.isEmpty()) return emptyList()
         val json = JSONArray(call(Request.Builder().url(endpoint("/chats?ids=" + ids.joinToString(",")))))
         return List(json.length()) { i -> Chat.fromJson(json.getJSONObject(i)) }
     }
 
     // Topics of a forum group, most recently active first
-    fun getTopics(chatId: Long, limit: Int = 50): List<Topic> {
+    override fun getTopics(chatId: Long, limit: Int): List<Topic> {
         val json = JSONArray(call(Request.Builder().url(endpoint("/topics/$chatId?limit=$limit"))))
         return List(json.length()) { i -> Topic.fromJson(json.getJSONObject(i)) }
     }
@@ -83,14 +110,14 @@ class ApiClient(baseUrl: String?, val token: String) {
     // In all functions below, topicId = null means an ordinary chat (no topics).
 
     // Oldest first
-    fun getMessages(chatId: Long, topicId: Long?, limit: Int = 20): List<Message> {
+    override fun getMessages(chatId: Long, topicId: Long?, limit: Int): List<Message> {
         val url = endpoint("/messages/$chatId?limit=$limit") + topicParam(topicId, "&")
         val json = JSONArray(call(Request.Builder().url(url)))
         return List(json.length()) { i -> Message.fromJson(json.getJSONObject(i)) }
     }
 
     // Returns the new message's id. replyToId = the message being replied to, if any.
-    fun sendMessage(chatId: Long, topicId: Long?, text: String, replyToId: Long? = null): Long {
+    override fun sendMessage(chatId: Long, topicId: Long?, text: String, replyToId: Long?): Long {
         val body = JSONObject().put("chat_id", chatId).put("text", text)
         if (topicId != null) body.put("topic_id", topicId)
         if (replyToId != null) body.put("reply_to_id", replyToId)
@@ -99,7 +126,7 @@ class ApiClient(baseUrl: String?, val token: String) {
     }
 
     // Sends a recording (OGG/Opus bytes) as a voice message; returns its id
-    fun sendVoice(chatId: Long, topicId: Long?, audio: ByteArray, seconds: Int, replyToId: Long? = null): Long {
+    override fun sendVoice(chatId: Long, topicId: Long?, audio: ByteArray, seconds: Int, replyToId: Long?): Long {
         var url = endpoint("/send_voice?chat_id=$chatId&duration=$seconds") + topicParam(topicId, "&")
         if (replyToId != null) url += "&reply_to_id=$replyToId"
         val request = Request.Builder().url(url).post(audio.toRequestBody(OGG)).header("x-token", token).build()
@@ -113,13 +140,13 @@ class ApiClient(baseUrl: String?, val token: String) {
 
     // Sends a picture (JPEG, PNG or WebP bytes) as a photo, with an optional caption;
     // returns its id
-    fun sendPhoto(
+    override fun sendPhoto(
         chatId: Long,
         topicId: Long?,
         photo: ByteArray,
         mimeType: String,
         caption: String,
-        replyToId: Long? = null,
+        replyToId: Long?,
     ): Long {
         val url = endpoint("/send_photo").toHttpUrl().newBuilder()
             .addQueryParameter("chat_id", chatId.toString())
@@ -143,38 +170,38 @@ class ApiClient(baseUrl: String?, val token: String) {
     private val slow by lazy { http.newBuilder().readTimeout(120, TimeUnit.SECONDS).build() }
 
     // Sends a read receipt to the other side, so only call it on a deliberate key press
-    fun markRead(chatId: Long, topicId: Long?) {
+    override fun markRead(chatId: Long, topicId: Long?) {
         val url = endpoint("/read/$chatId") + topicParam(topicId, "?")
         call(Request.Builder().url(url).post("".toRequestBody(null)))
     }
 
-    fun editMessage(chatId: Long, messageId: Long, text: String) {
+    override fun editMessage(chatId: Long, messageId: Long, text: String) {
         val body = JSONObject().put("chat_id", chatId).put("message_id", messageId).put("text", text)
         call(Request.Builder().url(endpoint("/edit")).post(body.toString().toRequestBody(JSON)))
     }
 
     // Which deletes Telegram allows for this message (depends on chat type, age, admin rights)
-    fun getDeleteOptions(chatId: Long, messageId: Long): DeleteOptions {
+    override fun getDeleteOptions(chatId: Long, messageId: Long): DeleteOptions {
         val json = JSONObject(call(Request.Builder().url(endpoint("/delete_options/$chatId/$messageId"))))
         return DeleteOptions(json.getBoolean("for_me"), json.getBoolean("for_everyone"))
     }
 
     // forEveryone = also remove it for the other side (Telegram calls this "revoke")
-    fun deleteMessage(chatId: Long, messageId: Long, forEveryone: Boolean) {
+    override fun deleteMessage(chatId: Long, messageId: Long, forEveryone: Boolean) {
         val body = JSONObject().put("chat_id", chatId).put("message_id", messageId).put("revoke", forEveryone)
         call(Request.Builder().url(endpoint("/delete")).post(body.toString().toRequestBody(JSON)))
     }
 
     // The plain emoji reactions I can choose in this chat, my most used first; empty when the
     // chat turned reactions off
-    fun getReactions(chatId: Long): List<String> {
+    override fun getReactions(chatId: Long): List<String> {
         val json = JSONObject(call(Request.Builder().url(endpoint("/reactions/$chatId")))).getJSONArray("reactions")
         return List(json.length()) { json.getString(it) }
     }
 
     // Sets my reaction (replacing any I had), or takes it back with emoji = null. Returns the
     // message's reactions as they are now, or null when Telegram didn't say (the live event will).
-    fun react(chatId: Long, messageId: Long, emoji: String?): List<Reaction>? {
+    override fun react(chatId: Long, messageId: Long, emoji: String?): List<Reaction>? {
         val body = JSONObject().put("chat_id", chatId).put("message_id", messageId).put("emoji", emoji ?: JSONObject.NULL)
         val json = JSONObject(call(Request.Builder().url(endpoint("/react")).post(body.toString().toRequestBody(JSON))))
         return if (json.isNull("reactions")) null else Reaction.listFromJson(json.getJSONArray("reactions"))
@@ -182,7 +209,7 @@ class ApiClient(baseUrl: String?, val token: String) {
 
     // Who has read one of my messages in a group: (name, when it was read, ISO date or null) each.
     // Telegram only tells for small groups and recent messages; otherwise this throws IOException.
-    fun getReadBy(chatId: Long, messageId: Long): List<Pair<String, String?>> {
+    override fun getReadBy(chatId: Long, messageId: Long): List<Pair<String, String?>> {
         val json = JSONObject(call(Request.Builder().url(endpoint("/read_by/$chatId/$messageId")))).getJSONArray("readers")
         return List(json.length()) { i ->
             val reader = json.getJSONObject(i)
@@ -191,7 +218,7 @@ class ApiClient(baseUrl: String?, val token: String) {
     }
 
     // My installed sticker packs (the picker adds Recent and Favorites itself)
-    fun getStickerPacks(): List<StickerPack> {
+    override fun getStickerPacks(): List<StickerPack> {
         val json = JSONObject(call(Request.Builder().url(endpoint("/sticker_sets")))).getJSONArray("packs")
         return List(json.length()) { i ->
             val item = json.getJSONObject(i)
@@ -200,13 +227,13 @@ class ApiClient(baseUrl: String?, val token: String) {
     }
 
     // One pack's stickers: "recent", "faved", or a pack's id
-    fun getStickerPack(pack: String): List<StickerInfo> {
+    override fun getStickerPack(pack: String): List<StickerInfo> {
         val json = JSONObject(call(Request.Builder().url(endpoint("/sticker_set/$pack")))).getJSONArray("stickers")
         return List(json.length()) { StickerInfo.fromJson(json.getJSONObject(it)) }
     }
 
     // The pack a sticker comes from, and its stickers (chatId/messageId: the message it came in)
-    fun getStickerPackOf(stickerId: Long, chatId: Long, messageId: Long): Pair<PackInfo, List<StickerInfo>> {
+    override fun getStickerPackOf(stickerId: Long, chatId: Long, messageId: Long): Pair<PackInfo, List<StickerInfo>> {
         val json = JSONObject(call(Request.Builder()
             .url(endpoint("/sticker_set_of/$stickerId?chat_id=$chatId&message_id=$messageId"))))
         val pack = json.getJSONObject("pack")
@@ -216,23 +243,23 @@ class ApiClient(baseUrl: String?, val token: String) {
     }
 
     // Adds a sticker to my Telegram Favorites, or takes it out (unfave = true)
-    fun faveSticker(stickerId: Long, unfave: Boolean) {
+    override fun faveSticker(stickerId: Long, unfave: Boolean) {
         call(Request.Builder().url(endpoint("/sticker/$stickerId/fave?unfave=$unfave")).post("".toRequestBody(null)))
     }
 
     // Adds a sticker to the local favourites (the app's own list on the server, no limit), or
     // takes it out (remove = true)
-    fun localFavorite(stickerId: Long, remove: Boolean) {
+    override fun localFavorite(stickerId: Long, remove: Boolean) {
         call(Request.Builder().url(endpoint("/sticker/$stickerId/local_favorite?remove=$remove")).post("".toRequestBody(null)))
     }
 
     // Adds a pack to my packs
-    fun installStickerPack(packId: String) {
+    override fun installStickerPack(packId: String) {
         call(Request.Builder().url(endpoint("/sticker_set/$packId/install")).post("".toRequestBody(null)))
     }
 
     // Returns the new message's id. replyToId = the message being replied to, if any.
-    fun sendSticker(chatId: Long, topicId: Long?, stickerId: Long, replyToId: Long?): Long {
+    override fun sendSticker(chatId: Long, topicId: Long?, stickerId: Long, replyToId: Long?): Long {
         val body = JSONObject().put("chat_id", chatId).put("sticker_id", stickerId)
         if (topicId != null) body.put("topic_id", topicId)
         if (replyToId != null) body.put("reply_to_id", replyToId)
@@ -241,46 +268,51 @@ class ApiClient(baseUrl: String?, val token: String) {
     }
 
     // Returns the forwarded copy's id
-    fun forwardMessage(fromChatId: Long, messageId: Long, toChatId: Long): Long {
+    override fun forwardMessage(fromChatId: Long, messageId: Long, toChatId: Long): Long {
         val body = JSONObject().put("from_chat_id", fromChatId).put("message_id", messageId)
             .put("to_chat_id", toChatId)
         val request = Request.Builder().url(endpoint("/forward")).post(body.toString().toRequestBody(JSON))
         return JSONObject(call(request)).getLong("id")
     }
 
-    fun getProfile(userId: Long): Profile =
+    override fun getProfile(userId: Long): Profile =
         Profile.fromJson(JSONObject(call(Request.Builder().url(endpoint("/profile/$userId")))))
 
     // A group's info with its first `members` members
-    fun getGroup(chatId: Long, members: Int): Group =
+    override fun getGroup(chatId: Long, members: Int): Group =
         Group.fromJson(JSONObject(call(Request.Builder().url(endpoint("/group/$chatId?members=$members")))))
 
     // A chat's profile photo as size×size JPEG bytes, or null when it has none.
     // photoId (from /chats) lets the server answer from its own saved copy.
-    fun getPhoto(chatId: Long, photoId: String, size: Int): ByteArray? =
+    override fun getPhoto(chatId: Long, photoId: String, size: Int): ByteArray? =
         bytes(endpoint("/photo/$chatId?size=$size&photo_id=$photoId"))
 
     // A photo from a message as JPEG bytes, shrunk by the server to fit the phone's screen
-    fun getImage(chatId: Long, messageId: Long): ByteArray =
+    override fun getImage(chatId: Long, messageId: Long): ByteArray =
         bytes(endpoint("/image/$chatId/$messageId")) ?: throw IOException("No such photo")
 
     // A photo's biggest size, unchanged (up to 2560 px, a few MB), for saving on the phone
-    fun getFullImage(chatId: Long, messageId: Long): ByteArray =
+    override fun getFullImage(chatId: Long, messageId: Long): ByteArray =
         bytes(endpoint("/image/$chatId/$messageId?full=true"), slow) ?: throw IOException("No such photo")
 
-    // A video's file. The server answers only once it has the whole video from Telegram,
-    // which can take minutes for a big one, hence its own long wait. Run it with downloadTo.
-    fun videoCall(chatId: Long, messageId: Long): Call =
-        videos.newCall(Request.Builder().url(endpoint("/video/$chatId/$messageId")).header("x-token", token).build())
-
-    // A file sent as a document: like a video, the server answers only once it has the whole file
-    fun fileCall(chatId: Long, messageId: Long): Call =
-        videos.newCall(Request.Builder().url(endpoint("/file/$chatId/$messageId")).header("x-token", token).build())
+    // A video (also a round one) or a file sent as a document. The server answers only once it has the
+    // whole file from Telegram, which can take minutes for a big one, hence its own long wait.
+    override fun download(kind: Download.Kind, chatId: Long, messageId: Long): Download {
+        val path = when (kind) {
+            Download.Kind.VIDEO -> "/video/$chatId/$messageId"
+            Download.Kind.FILE -> "/file/$chatId/$messageId"
+        }
+        val call = videos.newCall(Request.Builder().url(endpoint(path)).header("x-token", token).build())
+        return object : Download {
+            override fun saveTo(file: File, onProgress: (Long, Long) -> Unit) = downloadTo(call, file, onProgress)
+            override fun cancel() = call.cancel()
+        }
+    }
 
     // Sends a file as a document: the body is the file itself, streamed from openFile (never held
     // in memory); returns its id. onProgress(bytes sent, total) while it goes to the server,
     // then onSent() while the server passes it on to Telegram.
-    fun sendFile(
+    override fun sendFile(
         chatId: Long,
         topicId: Long?,
         file: FileSender.Prepared,
@@ -331,7 +363,7 @@ class ApiClient(baseUrl: String?, val token: String) {
 
     // Writes the answer of a download call to file, reporting (bytes so far, total) as it goes.
     // Cancelling the call (from another thread) stops it with an IOException.
-    fun downloadTo(call: Call, file: File, onProgress: (Long, Long) -> Unit) {
+    private fun downloadTo(call: Call, file: File, onProgress: (Long, Long) -> Unit) {
         call.execute().use { response ->
             if (response.code == 401) throw BadTokenException()
             if (response.code == 413) throw TooBigException()
@@ -357,7 +389,7 @@ class ApiClient(baseUrl: String?, val token: String) {
     // Sends a video: the body is its preview picture followed by the file, streamed from
     // openVideo (never held in memory); returns its id. onProgress(bytes sent, total) while
     // it goes to the server, then onSent() while the server passes it on to Telegram.
-    fun sendVideo(
+    override fun sendVideo(
         chatId: Long,
         topicId: Long?,
         video: VideoSender.Prepared,
@@ -411,8 +443,6 @@ class ApiClient(baseUrl: String?, val token: String) {
         }
     }
 
-    // The server refused: the file is over its size limit
-    class TooBigException : IOException("Too big")
 
     private val videos by lazy { http.newBuilder().readTimeout(10, TimeUnit.MINUTES).build() }
 
@@ -421,14 +451,14 @@ class ApiClient(baseUrl: String?, val token: String) {
     // has to look again; null for a custom emoji (found by its id alone).
     // animated = true: an animated WebP if the server can make one (its animated stickers
     // module), otherwise it answers with the still PNG as always (so do older servers)
-    fun getSticker(id: Long, size: Int, chatId: Long?, messageId: Long?, animated: Boolean = false): ByteArray? {
+    override fun getSticker(id: Long, size: Int, chatId: Long?, messageId: Long?, animated: Boolean): ByteArray? {
         val from = if (chatId != null && messageId != null) "&chat_id=$chatId&message_id=$messageId" else ""
         val anim = if (animated) "&animated=true" else ""
         return bytes(endpoint("/sticker/$id?size=$size$from$anim"))
     }
 
     // A voice message's OGG/Opus file
-    fun getVoice(chatId: Long, messageId: Long): ByteArray =
+    override fun getVoice(chatId: Long, messageId: Long): ByteArray =
         bytes(endpoint("/voice/$chatId/$messageId")) ?: throw IOException("No such voice message")
 
     // A file's bytes, or null for 404

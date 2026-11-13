@@ -26,7 +26,7 @@ class TopicsActivity : AppCompatActivity() {
     private lateinit var topicAdapter: ArrayAdapter<String>
     private var topics: List<Topic> = emptyList()
 
-    private lateinit var api: ApiClient
+    private lateinit var api: Backend
     private lateinit var cache: LocalCache
     private lateinit var chat: Chat
     private var live: LiveConnection? = null
@@ -45,7 +45,7 @@ class TopicsActivity : AppCompatActivity() {
         // The list screen only opens this after settings are saved, but be safe
         // Without a server for the current mode the screen still opens from the saved copy
         val settings = ServerSettings(this)
-        api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        api = Backends.create(this)
         cache = LocalCache(this)
         chat = Chat(
             id = intent.getLongExtra(EXTRA_CHAT_ID, 0),

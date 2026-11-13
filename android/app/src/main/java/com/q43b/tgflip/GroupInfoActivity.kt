@@ -49,7 +49,7 @@ class GroupInfoActivity : AppCompatActivity() {
         status = findViewById(R.id.status)
         status.visibility = View.VISIBLE  // here it also holds the member count
         val settings = ServerSettings(this)
-        val api = ApiClient(settings.getAddress(), settings.getToken().orEmpty())
+        val api = Backends.create(this)
         photos = PhotoLoader(this, lifecycleScope, PhotoLoader.PROFILE_SIZE_DP) { showPhoto() }
         memberPhotos = PhotoLoader(this, lifecycleScope) { adapter.notifyDataSetChanged() }
         photos.api = api
