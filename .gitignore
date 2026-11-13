@@ -34,3 +34,7 @@ server/modules/
 server/modules.json
 server/module_cache/
 server/module_data/
+
+# TDLib for Direct mode (2.0): the built library and its generated Java, made by android/tdlib/build.sh
+android/tdlib/libs/
+android/tdlib/java/

@@ -139,7 +139,12 @@ class UnderTheHoodActivity : AppCompatActivity() {
         SettingRow(getString(R.string.under_the_hood_modules)) { ModulesActivity.start(this) },
         SettingRow(getString(R.string.under_the_hood_local_cache)) { LocalCacheActivity.start(this) },
         SettingRow(getString(R.string.under_the_hood_load_theme)) { pickTheme.launch("*/*") },
-    )
+    ) + listOfNotNull(tdlibTest?.let { test ->
+        SettingRow(getString(R.string.under_the_hood_tdlib_test)) { startActivity(Intent(this, test)) }
+    })
+
+    // The TDLib test screen (2.0 spike) exists in dev builds only
+    private val tdlibTest: Class<*>? = runCatching { Class.forName("com.q43b.tgflip.TdlibSpikeActivity") }.getOrNull()
 
     private fun showNoLogModule() {
         AlertDialog.Builder(this)

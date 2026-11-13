@@ -59,6 +59,7 @@
     <string name="theme_error_not_zip">This file isn\'t a theme zip.</string>
     <string name="theme_error_too_big">This theme is too big (over 2 MB).</string>
     <string name="under_the_hood_load_theme">Load a theme from a file</string>
+    <string name="under_the_hood_tdlib_test">🧪 TDLib test (dev builds)</string>
     <!-- Under the hood > Local cache (LocalCacheActivity) -->
     <string name="under_the_hood_local_cache">Local cache</string>
     <string name="local_cache_title">Local cache</string>

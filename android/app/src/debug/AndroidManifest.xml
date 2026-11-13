@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dev builds only: the TDLib test screen (2.0 spike). Exported so the PC can hand it api_id, api_hash
+     and a proxy over adb. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="com.q43b.tgflip.TdlibSpikeActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation"
+            android:exported="true" />
+    </application>
+</manifest>

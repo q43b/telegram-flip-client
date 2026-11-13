@@ -43,7 +43,7 @@ Telegram is blocked where the owner lives, so Direct mode needs a way through, s
    `LiveStream`, `Download`), `ApiClient : Backend`, `Backends.create(context)` instead of building
    `ApiClient` in every screen; live events and video/file downloads no longer hand OkHttp objects
    to the screens. Checked against Mockgram and the real server: everything as before.
-2. **Spike**: TDLib for Android (prebuilt or built with the NDK; the Kyocera's CPU architecture),
+2. **Spike** (done, results below): TDLib for Android (prebuilt or built with the NDK; the Kyocera's CPU architecture),
    loads in the app, connects through an MTProto proxy. Measure the APK size it adds.
 3. **Account setup for Direct mode**: Settings, Network, Account gets "Server" or "Direct" per
    account; Direct asks for api_id and api_hash (the user's own, from my.telegram.org, like the
@@ -61,6 +61,41 @@ Telegram is blocked where the owner lives, so Direct mode needs a way through, s
    pictures in Direct mode.
 7. **Proxy settings screen**, then the embedded tg-ws-proxy.
 8. **Release 2.0.**
+
+## Spike results (step 2, 2026-11-13)
+- The Kyocera is 32-bit ARM only (`armeabi-v7a`), 862 MB of RAM (a low-RAM device), 597 MB free in phone
+  memory, plus a 29 GB SD card (10 GB free) mounted as removable ("portable") storage.
+- TDLib has no official Android download, so it is built from source: `android/tdlib/build.sh`, run in
+  WSL (Debian), pinned to TDLib 1.8.70 (commit c8828d5), NDK 23.2, OpenSSL 1.1.1w, armeabi-v7a only,
+  Java interface, API 24, everything linked statically. The first build took about 45 minutes; the
+  result (`android/tdlib/libs`, `android/tdlib/java`) is git-ignored.
+- Only dev builds carry it for now (`sourceSets` "debug" in app/build.gradle.kts), with a test screen
+  (`app/src/debug/.../TdlibSpikeActivity.kt`, Under the hood > "🧪 TDLib test (dev builds)"): api_id,
+  api_hash, a `tg://proxy` / `tg://socks` link (also handed over with `adb shell am start ... --es`),
+  start/stop, authorization and connection state, proxy ping, memory, storage. It never logs in.
+- **Works**: TDLib loaded on the Kyocera and reached "connection ready" and "waiting for a phone number"
+  through the owner's fake-TLS MTProto proxy (secret starting with `ee`).
+- **Size**: `libtdjni.so` is 16 MB, stored uncompressed in the APK and used from there (minSdk 24 means
+  no unpacked copy in phone memory). TdApi.java (5.5 MB of source) becomes a few MB of code. Expected
+  release APK with TDLib: about 22-23 MB (1.9.0 is 4.9 MB), well under the owner's 60 MB line, so
+  installing on the SD card is not needed (Android 10 only allows it on cards set up as phone memory).
+- **Memory** while connected and idle (dev build): about 92 MB in use in total, of which TDLib's own
+  memory (native heap) 14 MB and its library about 8 MB; the dev build's unshrunk code is 23 MB of it and
+  shrinks in a release build. The phone had about 250 MB available meanwhile.
+- **Storage** before any login: database 360 KB (phone memory), files nothing yet (SD card).
+- Lesson: anything slow (here `Debug.getMemoryInfo`) must stay off the screen's thread; doing it every
+  second there made Android show "not responding". TDLib itself runs on its own thread; Direct mode's
+  screens get only finished results, like from the server today.
+
+## Storage (owner, 2026-11-13)
+- TDLib's **database** (chats, messages, settings; small, written all the time) stays in phone memory:
+  a removed card must not damage it.
+- Its **files** (photos, videos, voice, stickers, documents: the big part) go where the user chooses:
+  phone or SD card (the app's own folder on the card, `getExternalFilesDirs`, no permission needed).
+  A missing card falls back to phone memory with a note. The same choice can later hold Server mode's
+  media cache too.
+- TDLib's own file cache limits (`optimizeStorage`) follow the app's existing cache settings.
+- Installing the app itself on the SD card: only if the app ever grows past about 60 MB (not expected).
 
 ## Not available in Direct mode (by nature)
 Modules, Maintenance mode, the server cache, shared servers and admins, Live logs, local favourites

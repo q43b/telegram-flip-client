@@ -58,6 +58,15 @@ android {
             versionNameSuffix = "-dev"
         }
     }
+    // TDLib (2.0 spike, docs/direct-mode-plan.md): built from source in WSL by android/tdlib/build.sh,
+    // copied into android/tdlib/ (git-ignored: a 20 MB library and generated Java). Only dev builds
+    // carry it for now, so releases stay as they are until Direct mode is real.
+    sourceSets {
+        getByName("debug") {
+            jniLibs.directories.add("../tdlib/libs")
+            java.directories.add("../tdlib/java")
+        }
+    }
     buildFeatures {
         buildConfig = true  // BuildConfig.VERSION_NAME, sent to the server
     }
