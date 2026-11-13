@@ -15,7 +15,7 @@ from telethon import errors, types
 from tgflip.account import account, client
 from tgflip.api import api
 from tgflip.cache import IMAGE_CACHE, PHOTO_CACHE, VIDEO_CACHE, cache_path, in_cache, sent, stored
-from tgflip.messages import file_of, photo_id_of, photo_sizes, reply_target, round_of, video_of, voice_of
+from tgflip.messages import file_of, gif_of, photo_id_of, photo_sizes, reply_target, round_of, video_of, voice_of
 from tgflip.telegram import bad_request, recovering
 
 
@@ -154,7 +154,7 @@ async def download_video(chat_id, message_id, path):
         message = await client.get_messages(chat_id, ids=message_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Chat not found")
-    info = (video_of(message) or round_of(message)) if message is not None else None
+    info = (video_of(message) or round_of(message) or gif_of(message)) if message is not None else None
     if info is None:
         raise HTTPException(status_code=404, detail="No such video")
     if info["size"] > MAX_VIDEO_BYTES:
@@ -163,6 +163,36 @@ async def download_video(chat_id, message_id, path):
     await client.download_media(message, file=part)
     os.replace(part, path)
     stored()
+
+
+# A still picture of a GIF or a video (Telegram's own preview of it), at most size px on its long side,
+# as JPEG (since 1.9.0: the GIF's picture in the chat until it plays). Kept in image_cache.
+@api.get("/thumb/{chat_id}/{message_id}")
+@recovering
+async def get_thumb(chat_id: int, message_id: int, size: int = 256):
+    size = max(32, min(size, 512))
+    path = cache_path(IMAGE_CACHE, f"{chat_id}_{message_id}_thumb_{size}.jpg")
+    if in_cache(path):
+        return FileResponse(path, media_type="image/jpeg", background=BackgroundTask(sent, path))
+    try:
+        message = await client.get_messages(chat_id, ids=message_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    if message is None or (gif_of(message) or video_of(message)) is None:
+        raise HTTPException(status_code=404, detail="No such GIF or video")
+    try:
+        data = await client.download_media(message, file=bytes, thumb=-1)
+    except errors.RPCError as e:
+        bad_request(e)
+    if not data:
+        raise HTTPException(status_code=404, detail="No picture of it")
+    image = Image.open(BytesIO(data)).convert("RGB")
+    image.thumbnail((size, size), Image.LANCZOS)
+    image.save(path, "JPEG", quality=80)
+    stored()
+    return FileResponse(path, media_type="image/jpeg", background=BackgroundTask(sent, path))
 
 
 # A video or round video message, as Telegram keeps it (no converting yet). Downloaded once from Telegram into

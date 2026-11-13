@@ -259,6 +259,66 @@ class Writes:
         return [types.ReadParticipantDate(user_id=who, date=message.date + datetime.timedelta(minutes=5 * (i + 1)))
                 for i, who in enumerate(self.read_by.get((peer_id, message.id), []))]
 
+    # ---- pins and polls ------------------------------------------------------------------------------
+    def pin_update(self, chat, ids, pinned):
+        if chat.is_channel_like:
+            return types.UpdatePinnedChannelMessages(channel_id=chat.raw_id, messages=ids, pts=1, pts_count=1,
+                                                     pinned=True if pinned else None)
+        return types.UpdatePinnedMessages(peer=self.peer_of(chat), messages=ids, pts=1, pts_count=1, pinned=True if pinned else None)
+
+    def pin_service(self, chat, target_id, by_me, person=None):
+        """The "pinned a message" service message, added to the chat."""
+        peer_id = chat.peer_id
+        from_id = None
+        if chat.kind != "channel":
+            from_id = types.PeerUser(self.me.id if by_me else person)
+        service = types.MessageService(
+            id=self.next_message_id(peer_id), peer_id=self.peer_of(chat), date=self.now(), out=True if by_me else None,
+            from_id=from_id if chat.kind in ("group", "supergroup", "forum") or not by_me else None,
+            reply_to=types.MessageReplyHeader(reply_to_msg_id=target_id), action=types.MessageActionPinMessage())
+        self.messages[peer_id].append(service)
+        return service
+
+    def messages_UpdatePinnedMessage(self, request):
+        peer_id = self.peer_id_of(request.peer)
+        chat = self.by_peer[peer_id]
+        if chat.kind == "channel":
+            raise errors.ChatAdminRequiredError(request)
+        message = self._find(peer_id, request.id, request)
+        message.pinned = None if request.unpin else True
+        updates = [self.pin_update(chat, [message.id], not request.unpin)]
+        messages = []
+        if not request.unpin:
+            service = self.pin_service(chat, message.id, by_me=True)
+            new = types.UpdateNewChannelMessage if self._channel_like(peer_id) else types.UpdateNewMessage
+            updates.append(new(message=copy.copy(service), pts=1, pts_count=1))
+            messages.append(service)
+        users, chats = self._entities_of([peer_id], messages)
+        return types.Updates(updates=updates, users=users, chats=chats, date=self.now(), seq=0)
+
+    def messages_SendVote(self, request):
+        peer_id = self.peer_id_of(request.peer)
+        state = self.polls.get((peer_id, request.msg_id))
+        if state is None:
+            raise errors.MessageIdInvalidError(request)
+        poll = state["media"].poll
+        if poll.closed:
+            raise errors.MessagePollClosedError(request)
+        chosen = sorted({option[0] for option in request.options})
+        if state["chosen"] and poll.quiz:
+            raise errors.RevoteNotAllowedError(request)
+        if len(chosen) > 1 and not poll.multiple_choice:
+            raise errors.OptionInvalidError(request)
+        for i in state["chosen"]:
+            state["votes"][i] -= 1
+        for i in chosen:
+            state["votes"][i] += 1
+        state["chosen"] = chosen
+        self.set_poll_results(state)
+        update = types.UpdateMessagePoll(poll_id=poll.id, results=state["media"].results,
+                                         peer=self.peer_of(self.by_peer[peer_id]), msg_id=request.msg_id)
+        return types.Updates(updates=[update], users=[], chats=[], date=self.now(), seq=0)
+
     # ---- stickers ---------------------------------------------------------------------------------------
     def messages_FaveSticker(self, request):
         document_id = request.id.id

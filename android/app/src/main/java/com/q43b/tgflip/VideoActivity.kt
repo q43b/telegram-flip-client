@@ -149,7 +149,11 @@ class VideoActivity : AppCompatActivity() {
             status.visibility = View.VISIBLE
             true
         }
-        video.setOnPreparedListener {
+        video.setOnPreparedListener { player ->
+            if (intent.getBooleanExtra(EXTRA_GIF, false)) {
+                player.isLooping = true
+                player.setVolume(0f, 0f)
+            }
             ready = true
             time.visibility = View.VISIBLE
             video.start()
@@ -189,15 +193,18 @@ class VideoActivity : AppCompatActivity() {
         private const val EXTRA_CHAT_ID = "chat_id"
         private const val EXTRA_MESSAGE_ID = "message_id"
         private const val EXTRA_ROUND = "round"
+        private const val EXTRA_GIF = "gif"
         private const val SEEK_MS = 10_000
 
         // round = a round video message: shown under a round mask
-        fun start(activity: Activity, chatId: Long, messageId: Long, round: Boolean = false) {
+        // gif = a GIF: plays over and over, silent (since 1.9.0)
+        fun start(activity: Activity, chatId: Long, messageId: Long, round: Boolean = false, gif: Boolean = false) {
             activity.startActivity(
                 Intent(activity, VideoActivity::class.java)
                     .putExtra(EXTRA_CHAT_ID, chatId)
                     .putExtra(EXTRA_MESSAGE_ID, messageId)
                     .putExtra(EXTRA_ROUND, round)
+                    .putExtra(EXTRA_GIF, gif)
             )
         }
     }

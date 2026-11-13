@@ -19,6 +19,20 @@
         android:ellipsize="end"
         android:textStyle="bold" />
 
+    <!-- The newest pinned message, fixed under the title (since 1.9.0); F2 > Pinned messages lists them all -->
+    <TextView
+        android:id="@+id/pinned_bar"
+        android:tag="theme:secondary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/status"
         android:layout_width="match_parent"

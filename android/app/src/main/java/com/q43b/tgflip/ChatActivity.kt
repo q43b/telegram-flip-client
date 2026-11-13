@@ -58,6 +58,14 @@ class ChatActivity : AppCompatActivity() {
     // "Load older messages" row) and whether it is that message's media row. A message with media
     // has two rows, kept together by MessageRowAdapter.
     private class RowRef(val messageIndex: Int, val media: Boolean)
+
+    private var pinnedMessages: List<Message> = emptyList()  // newest first; the newest shows in pinnedBar
+    private lateinit var pinnedBar: TextView
+    private lateinit var gifs: GifLoader
+    private val gifPlayer = GifPlayer()
+    private val openPoll = registerForActivityResult(PollActivity.Open()) { result ->
+        result?.let { (id, poll) -> messages.find { it.id == id }?.let { replaceMessage(it.copy(poll = poll)) } }
+    }
     private val refs = mutableListOf<RowRef>()
     private var lastGroup = -2  // the message that had the focus when the rows were last drawn
     private lateinit var messageInput: EditText
@@ -100,12 +108,16 @@ class ChatActivity : AppCompatActivity() {
         },
         MessageAction(R.string.action_stop, isAvailable = { voice.currentId == it.id }) { voice.stop() },
         // Call records can only be deleted: Telegram refuses replies to them and forwarding them
-        MessageAction(R.string.action_reply, isAvailable = { it.call == null }, perform = ::startReply),
-        MessageAction(R.string.action_react, isAvailable = { it.call == null }, perform = ::startReact),
+        MessageAction(R.string.action_open_poll, isAvailable = { it.poll != null }) { openMedia(it) },
+        MessageAction(R.string.action_play_gif, isAvailable = { it.gif != null }) { openMedia(it) },
+        MessageAction(R.string.action_reply, isAvailable = { it.call == null && it.service == null }, perform = ::startReply),
+        MessageAction(R.string.action_react, isAvailable = { it.call == null && it.service == null }, perform = ::startReact),
         MessageAction(R.string.action_go_to_original, isAvailable = { it.replyToId != null }, perform = ::goToOriginal),
         // Own text messages only; Telegram itself refuses edits after its time limit
         MessageAction(R.string.action_edit, isAvailable = { it.out && it.text.isNotEmpty() }, perform = ::startEdit),
-        MessageAction(R.string.action_forward, isAvailable = { it.call == null }, perform = ::startForward),
+        MessageAction(R.string.action_forward, isAvailable = { it.call == null && it.service == null }, perform = ::startForward),
+        MessageAction(R.string.action_pin, isAvailable = { !it.pinned && it.service == null && it.call == null }) { startPin(it) },
+        MessageAction(R.string.action_unpin, isAvailable = { it.pinned }) { pin(it, unpin = true, both = true) },
         MessageAction(R.string.action_delete, perform = ::startDelete),
         // Other people's messages: in groups senderId says whose, in a private chat it's the chat's person
         MessageAction(R.string.action_view_profile, isAvailable = { senderOf(it) != null }, perform = ::viewSenderProfile),
@@ -183,6 +195,7 @@ class ChatActivity : AppCompatActivity() {
         // arrive (at most a few times a second while many come in)
         customEmoji = StickerLoader(this, lifecycleScope, StickerLoader.EMOJI_SIZE_DP) { redrawRowsSoon() }
             .also { it.api = api }
+        gifs = GifLoader(this, lifecycleScope) { messageAdapter.notifyDataSetChanged() }.also { it.api = api }
         recorder = VoiceRecorder(this, ::sendVoice)
         volumeControlStream = AudioManager.STREAM_MUSIC  // the volume keys set how loud voice messages play
 
@@ -191,8 +204,10 @@ class ChatActivity : AppCompatActivity() {
         messageList = findViewById(R.id.message_list)
         messageList.wrapsDown = false  // Down on the newest message goes to the message box
         findViewById<TextView>(R.id.chat_title).text = intent.getStringExtra(EXTRA_TITLE)
+        pinnedBar = findViewById(R.id.pinned_bar)
+        pinnedBar.setOnClickListener { showPinned() }  // touchscreens; the d-pad goes through F2 > Pinned messages
         // Sticker pictures under sticker messages, unless Settings says data saver
-        messageAdapter = MessageRowAdapter(this, rows, ::rowInfo)
+        messageAdapter = MessageRowAdapter(this, rows, gifPlayer, ::rowInfo)
         messageList.adapter = messageAdapter
         // The partner row of the focused row gets a faint tint: redraw when the focus moves to another
         // message, or leaves the list
@@ -253,12 +268,14 @@ class ChatActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) { cache.loadMessages(chatId, topicId) }?.let(::showMessages)
             }
             loadMessages(quiet = false)
+            loadPinned()
         }
         refreshUnread()  // may have changed while the app was in the background
     }
 
     override fun onStop() {
         stickers.pause()  // nothing plays while the chat isn't shown
+        gifPlayer.stop()
         voice.stop()
         recorder.cancel()
         live?.stop()
@@ -320,12 +337,14 @@ class ChatActivity : AppCompatActivity() {
         // On a sticker's media row the menu starts with its pack
         val sticker = focusedRef()?.takeIf { it.media }?.let { messages[it.messageIndex] }?.takeIf { it.sticker != null }
         val items = listOfNotNull(sticker?.let { R.string.action_view_pack }) +
-            listOf(R.string.quick_phrases, R.string.menu_stickers, R.string.menu_media, R.string.menu_record_voice)
+            listOf(R.string.quick_phrases, R.string.menu_stickers, R.string.menu_media, R.string.menu_record_voice) +
+            listOfNotNull(R.string.menu_pinned.takeIf { pinnedMessages.isNotEmpty() })
         MessageMenu.choose(this, getString(R.string.soft_key_menu), items.map(::getString)) { which ->
             when (items[which]) {
                 R.string.action_view_pack -> pickSticker.launch(StickerPickerActivity.PackOf(sticker!!.sticker!!.id, chatId, sticker.id))
                 R.string.quick_phrases -> showQuickPhrases()
                 R.string.menu_record_voice -> startRecording()
+                R.string.menu_pinned -> showPinned()
                 R.string.menu_media -> showMediaMenu()
                 R.string.menu_stickers -> pickSticker.launch(null)
                 else -> showComingLater()
@@ -777,7 +796,8 @@ class ChatActivity : AppCompatActivity() {
 
     // Does a message get a media row under its message row? (Calls have their own line.)
     private fun hasMedia(m: Message) =
-        m.call == null && (m.image != null || m.video != null || m.round != null || m.voice != null || m.file != null || m.sticker != null)
+        m.call == null && m.service == null && (m.image != null || m.video != null || m.round != null || m.voice != null ||
+            m.file != null || m.sticker != null || m.gif != null || m.poll != null)
 
     // The position of a message's own row (its media row, if it has one, follows it)
     private fun positionOf(messageIndex: Int) = refs.indexOfFirst { it.messageIndex == messageIndex && !it.media }
@@ -797,13 +817,24 @@ class ChatActivity : AppCompatActivity() {
         val focused = focusedRef()
         val focusedHere = messageList.hasFocus() && focused != null && focused.messageIndex == ref.messageIndex
         val sticker = message.sticker
+        val pictures = StickerSetting.showsPictures(this)
+        // A GIF: its still picture, and while its message has the focus the GIF itself, playing
+        val gif = message.gif.takeIf { ref.media && pictures }
+        val picture = when {
+            !ref.media || !pictures -> null
+            sticker != null -> stickers.drawable(sticker.id, chatId, message.id, sticker.kind)
+            gif != null -> gifs.thumb(chatId, message.id)
+            else -> null
+        }
         return MessageRowAdapter.Info(
             media = ref.media,
             partnerBelow = refs.getOrNull(position + 1)?.messageIndex == ref.messageIndex,
             partnerAbove = refs.getOrNull(position - 1)?.messageIndex == ref.messageIndex,
             partnerFocused = focusedHere && position != messageList.selectedItemPosition,
-            sticker = if (!ref.media || sticker == null || !StickerSetting.showsPictures(this)) null
-            else stickers.drawable(sticker.id, chatId, message.id, sticker.kind),
+            sticker = picture,
+            gifPlaying = if (gif != null && focusedHere) gifs.video(chatId, message.id) else null,
+            gifWidth = gif?.width ?: 0,
+            gifHeight = gif?.height ?: 0,
         )
     }
 
@@ -811,6 +842,7 @@ class ChatActivity : AppCompatActivity() {
         val group = if (messageList.hasFocus()) focusedRef()?.messageIndex ?: -1 else -1
         if (group == lastGroup) return
         lastGroup = group
+        gifPlayer.stop()  // a GIF plays only while its message has the focus
         messageAdapter.notifyDataSetChanged()
     }
 
@@ -834,6 +866,8 @@ class ChatActivity : AppCompatActivity() {
             m.round != null -> VideoActivity.start(this, chatId, m.id, round = true)
             m.file != null -> downloadFile(m)
             m.voice != null -> if (voice.currentId == m.id) voice.stop() else voice.play(chatId, m.id)
+            m.gif != null -> VideoActivity.start(this, chatId, m.id, gif = true)
+            m.poll != null -> openPoll.launch(Triple(chatId, m.id, m.poll))
             m.sticker != null ->
                 if (StickerSetting.showsPictures(this)) ImageActivity.startSticker(this, chatId, m.id, m.sticker.id, m.sticker.kind)
                 else pickSticker.launch(StickerPickerActivity.PackOf(m.sticker.id, chatId, m.id))
@@ -851,7 +885,12 @@ class ChatActivity : AppCompatActivity() {
     // loaded yet, load older pages until it shows up (at most MAX_SEARCH_PAGES), keeping
     // the highlight on the reply meanwhile.
     private fun goToOriginal(reply: Message) {
-        val originalId = reply.replyToId ?: return
+        goToMessage(reply.replyToId ?: return, keepId = reply.id)
+    }
+
+    // Highlights a message, loading older pages until it shows up (at most MAX_SEARCH_PAGES); keepId: the
+    // message to keep highlighted meanwhile (null: wherever the highlight is)
+    private fun goToMessage(originalId: Long, keepId: Long?) {
         if (highlight(originalId)) return
         lifecycleScope.launch {
             showStatus(getString(R.string.searching_original))
@@ -866,7 +905,7 @@ class ChatActivity : AppCompatActivity() {
                     return@launch
                 }
                 val found = loaded.any { it.id == originalId }
-                showMessages(loaded, keepId = if (found) originalId else reply.id)
+                showMessages(loaded, keepId = if (found) originalId else keepId)
                 if (found) return@launch  // showMessages also hid the status line
                 if (!hasOlder) break  // reached the start of the chat
             }
@@ -929,6 +968,7 @@ class ChatActivity : AppCompatActivity() {
         if (state == LiveConnection.Status.CONNECTED) {
             if (wasConnected) {
                 loadMessages(quiet = true)
+                loadPinned()
                 refreshUnread()
             }
             wasConnected = true
@@ -949,6 +989,10 @@ class ChatActivity : AppCompatActivity() {
             "reactions" -> onLiveReactions(event)
             "read" -> refreshUnread()  // read on another device, maybe only partly
             "read_outbox" -> if (isPrivateChat()) onLiveReadOutbox(event.optLong("max_id"))
+            "poll" -> event.optJSONObject("poll")?.let { poll ->
+                messages.find { it.id == event.optLong("id") }?.let { replaceMessage(it.copy(poll = PollInfo.fromJson(poll))) }
+            }
+            "pinned" -> onLivePinned(event)
         }
     }
 
@@ -1098,7 +1142,9 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // Keeps the highlight on the same message's row when rows come or go above it (the pinned row)
     private fun refreshRows() {
+        val before = refs.getOrNull(messageList.selectedItemPosition)
         rows.clear()
         refs.clear()
         if (hasOlder) {
@@ -1115,6 +1161,83 @@ class ChatActivity : AppCompatActivity() {
         }
         lastGroup = -2
         messageAdapter.notifyDataSetChanged()
+        if (before != null) {
+            val again = refs.indexOfFirst { it.messageIndex == before.messageIndex && it.media == before.media }
+            if (again >= 0 && again != messageList.selectedItemPosition) messageList.setSelection(again)
+        }
+    }
+
+    // The chat's pinned messages, for the row at the top; quietly nothing when the server can't say
+    private fun loadPinned() {
+        lifecycleScope.launch {
+            val pins = try {
+                withContext(Dispatchers.IO) { api.getPinned(chatId, topicId) }
+            } catch (e: IOException) {
+                return@launch
+            }
+            pinnedMessages = pins
+            showPinnedBar()
+        }
+    }
+
+    // "📌 Pinned: <newest>", or "📌 Pinned (3): <newest>", fixed under the title; hidden without pins
+    private fun showPinnedBar() {
+        val newest = pinnedMessages.firstOrNull()
+        if (newest == null) {
+            pinnedBar.visibility = View.GONE
+            return
+        }
+        val text = snippet(newest)
+        pinnedBar.text = if (pinnedMessages.size == 1) getString(R.string.pinned_row, text)
+        else getString(R.string.pinned_row_many, text, pinnedMessages.size)
+        pinnedBar.visibility = View.VISIBLE
+    }
+
+    // F2 > Pinned messages (or a tap on the bar): one pin goes straight to it, more give a list (newest first)
+    private fun showPinned() {
+        val pins = pinnedMessages
+        if (pins.size == 1) {
+            goToMessage(pins[0].id, keepId = null)
+            return
+        }
+        MessageMenu.choose(this, getString(R.string.pinned_title), pins.map(::snippet)) { which ->
+            goToMessage(pins[which].id, keepId = null)
+        }
+    }
+
+    // Pinned or unpinned here or elsewhere: the messages' marks, then the row at the top
+    private fun onLivePinned(event: JSONObject) {
+        val ids = event.optJSONArray("ids") ?: return
+        val pinned = event.optBoolean("pinned")
+        for (i in 0 until ids.length()) {
+            messages.find { it.id == ids.getLong(i) }?.let { if (it.pinned != pinned) replaceMessage(it.copy(pinned = pinned)) }
+        }
+        loadPinned()
+    }
+
+    // Message menu > Pin: in a private chat Telegram can pin for both of us or only for me
+    private fun startPin(message: Message) {
+        if (!isPrivateChat()) {
+            pin(message, unpin = false, both = true)
+            return
+        }
+        val choices = listOf(R.string.pin_both, R.string.pin_me)
+        MessageMenu.choose(this, getString(R.string.action_pin), choices.map(::getString)) { which ->
+            pin(message, unpin = false, both = which == 0)
+        }
+    }
+
+    private fun pin(message: Message, unpin: Boolean, both: Boolean) {
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { api.pin(chatId, message.id, unpin, both) }
+                messages.find { it.id == message.id }?.let { replaceMessage(it.copy(pinned = !unpin)) }
+                loadPinned()
+            } catch (e: IOException) {
+                showStatus(getString(R.string.pin_failed))
+                hideStatusLater(getString(R.string.pin_failed))
+            }
+        }
     }
 
     // Only this message's line, e.g. while its voice message plays
@@ -1298,9 +1421,14 @@ class ChatActivity : AppCompatActivity() {
         val call = message.call
         if (call != null) return formatCall(message, call)
         // With media only the caption stays here; the media has its own row below (mediaLine)
-        val text = if (hasMedia(message)) message.text else message.text.ifEmpty { getString(R.string.media) }
+        val text = when {
+            message.service == "pin" -> MessageFormat.pinned(this)
+            hasMedia(message) -> message.text
+            else -> message.text.ifEmpty { getString(R.string.media) }
+        }
         var time = if (message.edited) "${formatDate(message.date)} ${getString(R.string.edited)}" else formatDate(message.date)
         if (message.read == true) time += " ${getString(R.string.read_mark)}"  // the other person has read it
+        if (message.pinned) time += " 📌"
         val line = SpannableStringBuilder("$time ")
         val sender = message.sender
         when {
@@ -1330,6 +1458,8 @@ class ChatActivity : AppCompatActivity() {
             ?: message.round?.let { MessageFormat.round(this, it) }
             ?: message.file?.let { MessageFormat.file(this, it, "") }
             ?: message.sticker?.let(::stickerLine)
+            ?: message.gif?.let { MessageFormat.gif(this) }
+            ?: message.poll?.let { MessageFormat.poll(this, it, it.question) }
             ?: ""
 
     // "🏷 Sticker 😂", and in data saver mode (no picture) my description: "🏷 Sticker 😂: cat laughing"
@@ -1419,6 +1549,9 @@ class ChatActivity : AppCompatActivity() {
             ?: message.round?.let { MessageFormat.round(this, it) }
             ?: message.file?.let { MessageFormat.file(this, it, message.text) }
             ?: message.sticker?.let(::stickerLine)
+            ?: message.gif?.let { MessageFormat.gif(this) }
+            ?: message.poll?.let { MessageFormat.poll(this, it, it.question) }
+            ?: if (message.service == "pin") MessageFormat.pinned(this) else null
             ?: message.text.ifEmpty { getString(R.string.media) }
         return MessageFormat.snippet(text, SNIPPET_LENGTH)
     }

@@ -35,6 +35,8 @@ class Backend(Writes, Script):
         self.unknown = set()
         self._next_id = 100000
         self.files = {}  # document id -> bytes
+        self.thumb_images = {}  # document id -> its thumbnail's JPEG, where it isn't drawn from the file (GIFs)
+        self.polls = {}  # (peer id, message id) -> {"votes", "chosen", "correct", "solution", "media"}
         self.photos = {}  # photo id -> (picture name, w, h)
         self.avatars = {}  # profile photo id -> (letter, color index)
         self.channel_photos = {}  # peer id -> Photo (what GetFullChannel gives as chat_photo)
@@ -240,7 +242,53 @@ class Backend(Writes, Script):
             document = self._document(mime, data, [types.DocumentAttributeFilename(file_name=name)])
             document.size = int(spec.get("size", len(data)))  # what the app shows ("1.2 MB")
             return types.MessageMediaDocument(document=document)
+        if kind == "gif":  # a real little MP4 (Telegram keeps GIFs as silent videos), with a still thumbnail
+            data = assets.gif_mp4()
+            w, h = int(spec.get("w", assets.GIF_W)), int(spec.get("h", assets.GIF_H))
+            thumb = assets.gif_thumb_jpeg()
+            document = self._document("video/mp4", data, [
+                types.DocumentAttributeVideo(duration=int(spec.get("duration", 2)), w=w, h=h, supports_streaming=True),
+                types.DocumentAttributeAnimated(), types.DocumentAttributeFilename(file_name="animation.mp4")],
+                [types.PhotoSize(type="m", w=assets.GIF_W, h=assets.GIF_H, size=len(thumb))])
+            self.thumb_images[document.id] = thumb
+            return types.MessageMediaDocument(document=document)
+        if kind == "poll":
+            return self._poll_media(spec)
         raise ValueError(f"unknown media {kind}")
+
+    # ---- polls -----------------------------------------------------------------------------------
+    def _poll_media(self, spec):
+        """A poll from the scene: question, answers, votes (others' votes per answer, mine included),
+        voted (the answers I chose), anonymous (default true), multiple, quiz with correct (an answer's
+        position) and solution, closed. Its state is kept (self.polls) for votes."""
+        answers = spec["answers"]
+        poll = blank(types.Poll, id=self.new_id(), question=types.TextWithEntities(text=spec["question"], entities=[]),
+                     answers=[blank(types.PollAnswer, text=types.TextWithEntities(text=a, entities=[]), option=bytes([i]))
+                              for i, a in enumerate(answers)],
+                     closed=True if spec.get("closed") else None,
+                     public_voters=None if spec.get("anonymous", True) else True,
+                     multiple_choice=True if spec.get("multiple") else None, quiz=True if spec.get("quiz") else None)
+        media = types.MessageMediaPoll(poll=poll, results=None)
+        self._poll_state = {"votes": list(spec.get("votes", [0] * len(answers))), "chosen": list(spec.get("voted", [])),
+                            "correct": spec.get("correct"), "solution": spec.get("solution"), "media": media}
+        self.set_poll_results(self._poll_state)
+        return media
+
+    @staticmethod
+    def set_poll_results(state):
+        """Results as Telegram shows them: the numbers only once I voted or the poll closed (until then
+        only how many voted), the correct answer of a quiz likewise."""
+        media = state["media"]
+        poll = media.poll
+        shown = bool(state["chosen"]) or bool(poll.closed)
+        rows = None
+        if shown:
+            rows = [types.PollAnswerVoters(option=bytes([i]), voters=v, chosen=True if i in state["chosen"] else None,
+                                           correct=True if poll.quiz and i == state["correct"] else None)
+                    for i, v in enumerate(state["votes"])]
+        media.results = types.PollResults(results=rows, total_voters=sum(state["votes"]),
+                                          solution=state["solution"] if shown and poll.quiz else None,
+                                          solution_entities=[] if shown and poll.quiz and state["solution"] else None)
 
     def _message(self, chat, m):
         peer = self.peer_of(chat)
@@ -251,6 +299,11 @@ class Backend(Writes, Script):
                 id=m.id, peer_id=peer, date=m.date,
                 action=types.MessageActionTopicCreate(title=spec["title"], icon_color=spec["color"]),
                 from_id=types.PeerUser(chat.owner.id) if chat.owner else None)
+        if spec.get("type") == "pin":  # "X pinned a message": the pinned one is the message it replies to
+            from_id = types.PeerUser(self.scene.me.id if m.out else m.sender) if chat.kind != "channel" and m.sender else None
+            return types.MessageService(
+                id=m.id, peer_id=peer, date=m.date, out=True if m.out else None, from_id=from_id,
+                reply_to=types.MessageReplyHeader(reply_to_msg_id=m.reply_id), action=types.MessageActionPinMessage())
         if spec.get("type") == "call":
             reasons = {"missed": types.PhoneCallDiscardReasonMissed, "busy": types.PhoneCallDiscardReasonBusy,
                        "hangup": types.PhoneCallDiscardReasonHangup, "disconnect": types.PhoneCallDiscardReasonDisconnect}
@@ -264,9 +317,12 @@ class Backend(Writes, Script):
         from_id = None
         if chat.kind in ("group", "supergroup", "forum") and m.sender is not None:
             from_id = types.PeerUser(self.scene.me.id if m.out else m.sender)
+        media = self._media(m) if m.media else None
+        if isinstance(media, types.MessageMediaPoll):
+            self.polls[(chat.peer_id, m.id)] = self._poll_state
         return types.Message(
             id=m.id, peer_id=peer, date=m.date, message=m.text, out=True if m.out else None, from_id=from_id,
-            post=True if chat.kind == "channel" else None, reply_to=reply_to, media=self._media(m) if m.media else None,
+            post=True if chat.kind == "channel" else None, reply_to=reply_to, media=media, pinned=True if m.pinned else None,
             entities=entities or None, reactions=self._reactions(m),
             edit_date=m.date + datetime.timedelta(minutes=2) if m.edited else None)
 
@@ -385,7 +441,7 @@ class Backend(Writes, Script):
         found = [x for x in reversed(self.messages[peer_id]) if only is None or only(x)]
         if request.offset_id:
             found = [x for x in found if x.id < request.offset_id]
-        if request.offset_date:
+        if getattr(request, "offset_date", None):  # (a search has none)
             found = [x for x in found if x.date < request.offset_date]
         total = len(found)
         if request.max_id:
@@ -424,6 +480,19 @@ class Backend(Writes, Script):
         if header is not None and getattr(header, "forum_topic", False):
             return header.reply_to_top_id or header.reply_to_msg_id
         return GENERAL if chat.kind == "forum" and not isinstance(message, types.MessageService) else None
+
+    def messages_Search(self, request):
+        """Only what the server asks: a chat's (or a topic's) pinned messages, newest first."""
+        if not isinstance(request.filter, types.InputMessagesFilterPinned):
+            raise errors.RPCError(request, "METHOD_NOT_IMPLEMENTED", 501)
+        peer_id = self.peer_id_of(request.peer)
+        chat = self.by_peer[peer_id]
+        top = request.top_msg_id
+
+        def pinned(x):
+            return getattr(x, "pinned", False) and (top is None or self._topic_of(chat, x) == top)
+        found, total = self._page(peer_id, request, only=pinned)
+        return self._messages_result(peer_id, found, total, partial=len(found) < total)
 
     def messages_GetMessages(self, request):
         wanted = {i.id for i in request.id if isinstance(i, types.InputMessageID)}
@@ -547,8 +616,9 @@ class Backend(Writes, Script):
             document = self.documents[location.id]
             data = self.files[location.id]
             kind = types.storage.FileWebp() if document.mime_type == "image/webp" else types.storage.FileUnknown()
-            if location.thumb_size:  # a thumbnail of a sticker or custom emoji
-                data, kind = assets.thumb_jpeg(data, 128), types.storage.FileJpeg()
+            if location.thumb_size:  # a thumbnail: a GIF's own still picture, or one drawn from a sticker
+                data = self.thumb_images.get(location.id) or assets.thumb_jpeg(data, 128)
+                kind = types.storage.FileJpeg()
         else:
             raise errors.LocationInvalidError(request)
         return types.upload.File(type=kind, mtime=0, bytes=data[request.offset:request.offset + request.limit])

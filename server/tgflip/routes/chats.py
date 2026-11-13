@@ -12,8 +12,8 @@ from telethon.tl import custom
 
 from tgflip.account import client
 from tgflip.api import api
-from tgflip.bodies import DeleteBody, EditBody, ForwardBody, SendBody
-from tgflip.messages import call_of, custom_emoji_ids, file_of, read_mark, read_outbox_max_id, custom_emoji_of, forget_forum_unread, forum_unread, get_forum_topics, image_of, is_edited, last_message_preview, learn_custom_emoji, photo_id_of, reactions_of, reply_of, reply_target, round_of, sender_id_of, sender_name, sticker_of, topic_messages, video_of, voice_of
+from tgflip.bodies import DeleteBody, EditBody, ForwardBody, PinBody, SendBody, VoteBody
+from tgflip.messages import call_of, custom_emoji_ids, file_of, message_json, poll_of, read_mark, read_outbox_max_id, custom_emoji_of, forget_forum_unread, forum_unread, get_forum_topics, image_of, is_edited, last_message_preview, learn_custom_emoji, photo_id_of, reactions_of, reply_of, reply_target, round_of, sender_id_of, sender_name, sticker_of, topic_messages, video_of, voice_of
 from tgflip.telegram import bad_request, can_delete_others, get_telegram_config, is_cluster_error, recovering
 
 
@@ -185,15 +185,62 @@ async def get_messages(chat_id: int, limit: int = 20, topic_id: Optional[int] = 
     await learn_custom_emoji([i for m in found for i in custom_emoji_ids(getattr(m, "reactions", None))])
     # Whether the other person has read my messages: one more question, only when there are any
     outbox = await read_outbox_max_id(chat_id) if any(m.out for m in found) else None
-    msgs = [
-        {"id": m.id, "text": m.raw_text or "", "out": m.out, "date": m.date.isoformat(),
-         "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
-         "voice": voice_of(m), "image": image_of(m), "video": video_of(m),
-         "round": round_of(m), "file": file_of(m), "read": read_mark(m, outbox), "reactions": reactions_of(m),
-         "sticker": sticker_of(m), "custom_emoji": custom_emoji_of(m), "sender": sender_name(m), "sender_id": sender_id_of(m)}
-        for m in found
-    ]
-    return list(reversed(msgs))
+    return list(reversed([message_json(m, outbox=outbox) for m in found]))
+
+
+# The pinned messages of a chat (or of one topic), newest first (since 1.9.0)
+@api.get("/pinned/{chat_id}")
+@recovering
+async def get_pinned(chat_id: int, limit: int = 50, topic_id: Optional[int] = None):
+    try:
+        found = [m async for m in client.iter_messages(chat_id, limit=min(limit, 100), reply_to=topic_id,
+                                                       filter=types.InputMessagesFilterPinned())]
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    await learn_custom_emoji([i for m in found for i in custom_emoji_ids(getattr(m, "reactions", None))])
+    return [message_json(m) for m in found]
+
+
+# Pin or unpin a message (since 1.9.0). both: in a private chat, for the other person too (Telegram's
+# pm_oneside is the opposite). Pinned quietly (no notification), as the app has no notifications either.
+@api.post("/pin")
+@recovering
+async def pin(body: PinBody):
+    try:
+        if body.unpin:
+            await client.unpin_message(body.chat_id, body.message_id)
+        else:
+            await client.pin_message(body.chat_id, body.message_id, notify=False, pm_oneside=not body.both)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    return {"ok": True}
+
+
+# Vote in a poll (since 1.9.0): options are the answers' positions; [] takes my vote back. Answers with
+# the poll as it is now.
+@api.post("/vote")
+@recovering
+async def vote(body: VoteBody):
+    try:
+        message = await client.get_messages(body.chat_id, ids=body.message_id)
+        if message is None or poll_of(message) is None:
+            raise HTTPException(status_code=404, detail="No such poll")
+        answers = message.media.poll.answers
+        if any(i < 0 or i >= len(answers) for i in body.options):
+            raise HTTPException(status_code=400, detail="No such answer")
+        await client(functions.messages.SendVoteRequest(
+            peer=await client.get_input_entity(body.chat_id), msg_id=body.message_id,
+            options=[answers[i].option for i in body.options]))
+        message = await client.get_messages(body.chat_id, ids=body.message_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    except errors.RPCError as e:
+        bad_request(e)
+    return {"poll": poll_of(message)}
 
 
 # Who has read one of my messages in a group (Telegram only tells for small groups and recent

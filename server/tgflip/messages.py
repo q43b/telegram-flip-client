@@ -163,6 +163,66 @@ def read_mark(message, outbox_max_id):
     return message.id <= outbox_max_id
 
 
+def gif_of(message):
+    """For a GIF: {w, h, duration, size}; None for anything else. Telegram keeps GIFs as small
+    silent MP4 videos; the file comes from GET /video, a still picture of it from GET /thumb."""
+    document = getattr(message, "gif", None)
+    if document is None or getattr(message, "sticker", None) is not None:
+        return None
+    attr = next((a for a in document.attributes if isinstance(a, types.DocumentAttributeVideo)), None)
+    return {"w": attr.w if attr else 0, "h": attr.h if attr else 0,
+            "duration": int(attr.duration or 0) if attr else 0, "size": document.size}
+
+
+def _plain(text):
+    """Poll texts are TextWithEntities in newer layers, plain strings in older ones."""
+    return getattr(text, "text", text) or ""
+
+
+def poll_of(message):
+    """For a poll: {question, answers: [{text, votes, chosen, correct}], total, closed, public,
+    multiple, quiz, revoting, solution}; None for anything else. votes and total are None while
+    Telegram doesn't show the results (usually until I vote, or until the poll closes). public:
+    the voters are shown (not an anonymous poll); quiz: one answer is correct (shown once known);
+    revoting: a vote can be taken back."""
+    media = getattr(message, "media", None)
+    if not isinstance(media, types.MessageMediaPoll):
+        return None
+    poll, results = media.poll, media.results
+    counts = {r.option: r for r in ((results.results if results else None) or [])}
+    answers = []
+    for a in poll.answers:
+        r = counts.get(a.option)
+        answers.append({"text": _plain(a.text), "votes": r.voters if r is not None else None,
+                        "chosen": bool(r is not None and r.chosen), "correct": bool(r is not None and r.correct)})
+    return {"question": _plain(poll.question), "answers": answers,
+            "total": results.total_voters if results is not None else None,
+            "closed": bool(poll.closed), "public": bool(poll.public_voters), "multiple": bool(poll.multiple_choice),
+            "quiz": bool(poll.quiz), "revoting": not getattr(poll, "revoting_disabled", False),
+            "solution": (results.solution if results is not None else None) or None}
+
+
+def service_of(message):
+    """"pin" for "X pinned a message" (its reply_to_id is the pinned message); None otherwise."""
+    if isinstance(getattr(message, "action", None), types.MessageActionPinMessage):
+        return "pin"
+    return None
+
+
+def message_json(m, sender=None, outbox=None):
+    """A message as the apps get it from /messages, /pinned and (with type, chat_id, topic_id added)
+    the live events. sender: the writer when fetched separately (live events); outbox: the chat's
+    read_outbox_max_id (see read_mark)."""
+    return {"id": m.id, "text": m.raw_text or "", "out": m.out, "date": m.date.isoformat(),
+            "reply_to_id": reply_of(m), "edited": is_edited(m), "call": call_of(m),
+            "voice": voice_of(m), "image": image_of(m), "video": video_of(m),
+            "round": round_of(m), "file": file_of(m), "gif": gif_of(m), "poll": poll_of(m),
+            "pinned": bool(getattr(m, "pinned", False)), "service": service_of(m),
+            "read": read_mark(m, outbox), "reactions": reactions_of(m),
+            "sticker": sticker_of(m), "custom_emoji": custom_emoji_of(m),
+            "sender": sender_name(m, sender), "sender_id": sender_id_of(m, sender)}
+
+
 CUSTOM_EMOJI = "✦"  # for a custom emoji whose plain emoji isn't known (yet)
 
 
@@ -314,6 +374,12 @@ def last_message_preview(message):
         text, kind = sticker_of(message)["emoji"], "sticker"
     elif file_of(message) is not None:
         text, kind = message.raw_text or "", "file"
+    elif gif_of(message) is not None:
+        text, kind = message.raw_text or "", "gif"
+    elif poll_of(message) is not None:
+        text, kind = poll_of(message)["question"], "poll"
+    elif service_of(message) == "pin":
+        text, kind = "", "pin"
     elif isinstance(message, types.MessageService):
         text, kind = "", "event"
     else:

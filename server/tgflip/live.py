@@ -7,7 +7,7 @@ from telethon import errors, events, types, utils
 import module_loader
 
 from tgflip.account import account, client, on
-from tgflip.messages import call_of, custom_emoji_of, file_of, forget_forum_unread, image_of, is_edited, learn_live_custom_emoji, reactions_list, reactions_of, reply_of, round_of, sender_id_of, sender_name, sticker_of, topic_of, video_of, voice_of
+from tgflip.messages import call_of, message_json, poll_of, service_of, custom_emoji_of, file_of, forget_forum_unread, image_of, is_edited, learn_live_custom_emoji, reactions_list, reactions_of, reply_of, round_of, sender_id_of, sender_name, sticker_of, topic_of, video_of, voice_of
 
 
 async def broadcast(data):
@@ -41,48 +41,53 @@ async def on_new_message(event):
         sender = None
     await broadcast({
         "type": "message",
-        "id": event.id,
         "chat_id": event.chat_id,
         "topic_id": topic_of(event.message),  # None in ordinary chats and General
-        "reply_to_id": reply_of(event.message),
-        "text": event.raw_text or "",
-        "out": event.out,
-        "date": event.date.isoformat(),
-        "edited": is_edited(event.message),
-        "call": None,
-        "voice": voice_of(event.message),
-        "image": image_of(event.message),
-        "video": video_of(event.message),
-        "round": round_of(event.message),
-        "file": file_of(event.message),
-        "reactions": reactions_of(event.message),
-        "sticker": sticker_of(event.message),
-        "custom_emoji": custom_emoji_of(event.message),
-        "sender": sender_name(event.message, sender),
-        "sender_id": sender_id_of(event.message, sender),
+        **message_json(event.message, sender),
     })
 
 
-# Telethon's NewMessage skips service messages, but call records are worth showing live.
-# Calls only happen in private chats, which arrive as UpdateNewMessage.
-@on(events.Raw(types.UpdateNewMessage))
-async def on_call_record(update):
+# Telethon's NewMessage skips service messages, but call records and "X pinned a message" are worth
+# showing live. Calls only happen in private chats (UpdateNewMessage); pins happen anywhere.
+@on(events.Raw((types.UpdateNewMessage, types.UpdateNewChannelMessage)))
+async def on_service_message(update):
     message = update.message
-    call = call_of(message)
-    if call is None:
+    if not isinstance(message, types.MessageService):
+        return
+    if call_of(message) is None and service_of(message) is None:
         return
     await broadcast({
         "type": "message",
-        "id": message.id,
         "chat_id": utils.get_peer_id(message.peer_id),
-        "topic_id": None,
-        "reply_to_id": None,
-        "text": "",
-        "out": message.out,
-        "date": message.date.isoformat(),
-        "edited": False,
-        "call": call,
+        "topic_id": topic_of(message),
+        **message_json(message),
     })
+
+
+# Messages were pinned or unpinned (since 1.9.0): the app asks for the chat's pinned messages again
+@on(events.Raw((types.UpdatePinnedMessages, types.UpdatePinnedChannelMessages)))
+async def on_pinned(update):
+    if isinstance(update, types.UpdatePinnedChannelMessages):
+        chat_id = utils.get_peer_id(types.PeerChannel(update.channel_id))
+    else:
+        chat_id = utils.get_peer_id(update.peer)
+    await broadcast({"type": "pinned", "chat_id": chat_id, "ids": list(update.messages), "pinned": bool(update.pinned)})
+
+
+# Someone voted, or the poll closed (since 1.9.0): the poll as it is now, read again (the update may
+# carry only the results)
+@on(events.Raw(types.UpdateMessagePoll))
+async def on_poll(update):
+    if getattr(update, "peer", None) is None or not getattr(update, "msg_id", None):
+        return
+    chat_id = utils.get_peer_id(update.peer)
+    try:
+        message = await client.get_messages(chat_id, ids=update.msg_id)
+    except (ValueError, errors.RPCError):
+        return
+    poll = poll_of(message) if message is not None else None
+    if poll is not None:
+        await broadcast({"type": "poll", "chat_id": chat_id, "id": update.msg_id, "poll": poll})
 
 
 # While a call is ringing, Telegram sends call updates, not messages (the call record

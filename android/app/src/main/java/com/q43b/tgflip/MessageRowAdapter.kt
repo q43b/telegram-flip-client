@@ -7,7 +7,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.ImageView
+import android.view.TextureView
 import android.widget.TextView
+import java.io.File
 
 // The chat screen's rows. A message with media has two: its message row and, under it, a media row
 // that is drawn as part of the same message: indented behind a bar in the theme's media color, with
@@ -17,6 +19,7 @@ import android.widget.TextView
 class MessageRowAdapter(
     context: Context,
     rows: MutableList<CharSequence>,
+    private val gifPlayer: GifPlayer,
     private val infoAt: (Int) -> Info,
 ) : ArrayAdapter<CharSequence>(context, R.layout.message_row, R.id.text, rows) {
 
@@ -29,6 +32,9 @@ class MessageRowAdapter(
         val partnerAbove: Boolean = false,
         val partnerFocused: Boolean = false,
         val sticker: Drawable? = null,
+        val gifPlaying: File? = null,  // a GIF to play in this row (its message has the focus)
+        val gifWidth: Int = 0,
+        val gifHeight: Int = 0,
     )
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
@@ -36,9 +42,22 @@ class MessageRowAdapter(
         val info = infoAt(position)
         val theme = Themes.current(context)
         val palette = theme.palette(context)
+        val playing = info.gifPlaying
+        val gifView = row.findViewById<TextureView>(R.id.gif)
+        if (playing == null) {
+            gifPlayer.releaseIfOn(gifView)
+            gifView.visibility = View.GONE
+        } else {
+            // As wide as a sticker, as tall as the GIF's shape asks
+            val width = gifView.layoutParams.width
+            val height = if (info.gifWidth > 0) width * info.gifHeight / info.gifWidth else width
+            if (gifView.layoutParams.height != height) gifView.layoutParams = gifView.layoutParams.apply { this.height = height }
+            gifView.visibility = View.VISIBLE
+            gifPlayer.show(gifView, playing)
+        }
         row.findViewById<ImageView>(R.id.sticker).apply {
             setImageDrawable(info.sticker)
-            visibility = if (info.sticker == null) View.GONE else View.VISIBLE
+            visibility = if (info.sticker == null || playing != null) View.GONE else View.VISIBLE
         }
         row.findViewById<View>(R.id.bar).apply {
             visibility = if (info.media) View.VISIBLE else View.GONE

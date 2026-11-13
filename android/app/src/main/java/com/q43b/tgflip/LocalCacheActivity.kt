@@ -188,6 +188,9 @@ class LocalCacheActivity : AppCompatActivity() {
             m.video != null -> MessageFormat.video(this, m.video, m.text)
             m.image != null -> MessageFormat.photo(this, m.text)
             m.file != null -> MessageFormat.file(this, m.file, m.text)
+            m.gif != null -> MessageFormat.gif(this)
+            m.poll != null -> MessageFormat.poll(this, m.poll, m.poll.question)
+            m.service == "pin" -> MessageFormat.pinned(this)
             else -> m.text
         }
         return "${MessageFormat.time(m.date)} ${if (who.isEmpty()) "" else "$who: "}$body"

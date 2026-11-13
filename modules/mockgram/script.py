@@ -32,6 +32,10 @@ class Script:
         chat = event["chat_obj"]
         if event.get("seen"):
             self.read_by_them(chat)
+        elif event.get("vote"):
+            self.vote_by(chat, event)
+        elif event.get("pin"):
+            self.pin_by(chat, event)
         elif event.get("react"):
             self.react_by(chat, event)
         elif event.get("edit"):
@@ -108,6 +112,25 @@ class Script:
         message.edit_date = self.now()
         edited = types.UpdateEditChannelMessage if self._channel_like(peer_id) else types.UpdateEditMessage
         self._deliver(edited(message=message, pts=1, pts_count=1), [peer_id], [message])
+
+    def vote_by(self, chat, data):
+        """Someone votes for data["answer"] (a position) in a poll."""
+        peer_id, message = self._keyed(chat, data["message"])
+        state = self.polls[(peer_id, message.id)]
+        state["votes"][data["answer"]] += 1
+        self.set_poll_results(state)
+        poll = state["media"].poll
+        self._deliver(types.UpdateMessagePoll(poll_id=poll.id, results=state["media"].results,
+                                              peer=self.peer_of(chat), msg_id=message.id), [peer_id])
+
+    def pin_by(self, chat, data):
+        """Someone (data["from"]) pins a message: the pin and the "pinned a message" line, both live."""
+        peer_id, message = self._keyed(chat, data["message"])
+        message.pinned = True
+        self._deliver(self.pin_update(chat, [message.id], True), [peer_id])
+        service = self.pin_service(chat, message.id, by_me=False, person=data.get("from"))
+        new = types.UpdateNewChannelMessage if self._channel_like(peer_id) else types.UpdateNewMessage
+        self._deliver(new(message=service, pts=1, pts_count=1), [peer_id], [service])
 
     def _deliver(self, update, peer_ids, messages=()):
         if self.deliver is None:

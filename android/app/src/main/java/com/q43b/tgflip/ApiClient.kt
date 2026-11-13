@@ -461,6 +461,25 @@ class ApiClient(baseUrl: String?, val token: String) : Backend {
     override fun getVoice(chatId: Long, messageId: Long): ByteArray =
         bytes(endpoint("/voice/$chatId/$messageId")) ?: throw IOException("No such voice message")
 
+    override fun getThumb(chatId: Long, messageId: Long, size: Int): ByteArray? =
+        bytes(endpoint("/thumb/$chatId/$messageId?size=$size"))
+
+    override fun vote(chatId: Long, messageId: Long, options: List<Int>): PollInfo {
+        val body = JSONObject().put("chat_id", chatId).put("message_id", messageId).put("options", JSONArray(options))
+        val json = JSONObject(call(Request.Builder().url(endpoint("/vote")).post(body.toString().toRequestBody(JSON))))
+        return PollInfo.fromJson(json.getJSONObject("poll"))
+    }
+
+    override fun getPinned(chatId: Long, topicId: Long?): List<Message> {
+        val json = JSONArray(call(Request.Builder().url(endpoint("/pinned/$chatId?limit=50") + topicParam(topicId, "&"))))
+        return List(json.length()) { Message.fromJson(json.getJSONObject(it)) }
+    }
+
+    override fun pin(chatId: Long, messageId: Long, unpin: Boolean, both: Boolean) {
+        val body = JSONObject().put("chat_id", chatId).put("message_id", messageId).put("unpin", unpin).put("both", both)
+        call(Request.Builder().url(endpoint("/pin")).post(body.toString().toRequestBody(JSON)))
+    }
+
     // A file's bytes, or null for 404
     private fun bytes(url: String, client: OkHttpClient = http): ByteArray? {
         client.newCall(Request.Builder().url(url).header("x-token", token).build()).execute().use { response ->

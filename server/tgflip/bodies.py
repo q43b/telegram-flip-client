@@ -36,6 +36,19 @@ class SendStickerBody(BaseModel):
     reply_to_id: Optional[int] = None
 
 
+class PinBody(BaseModel):
+    chat_id: int
+    message_id: int
+    unpin: bool = False
+    both: bool = True  # private chats: pinned for the other person too
+
+
+class VoteBody(BaseModel):
+    chat_id: int
+    message_id: int
+    options: list[int]  # the answers' positions; [] = take my vote back
+
+
 class ReactBody(BaseModel):
     chat_id: int
     message_id: int

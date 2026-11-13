@@ -59,6 +59,7 @@ class Message:
         self.entities = []  # (offset, length, custom emoji key), UTF-16 units
         self.reply_key = data.get("reply")
         self.edited = bool(data.get("edited", False))
+        self.pinned = bool(data.get("pinned", False))
         # My messages: has the other person read it ("seen": false = not yet); in a group, who read it
         self.seen = bool(data.get("seen", True))
         self.read_by = data.get("read_by", [])  # person ids
@@ -70,7 +71,7 @@ class Message:
         self.topic_id = None
         self.creates = None  # a topic, for the service message that creates it
         self.where = where
-        if self.media is not None and self.media.get("type") not in ("photo", "sticker", "voice", "video", "round", "call", "file"):
+        if self.media is not None and self.media.get("type") not in ("photo", "sticker", "voice", "video", "round", "call", "file", "gif", "poll", "pin"):
             raise SceneError(f"{where}: unknown media type {self.media.get('type')!r}")
         self._tokens()
 
@@ -233,7 +234,7 @@ class Scene:
                 raise SceneError(f"{where}: only a private chat can be read by the other person")
             self._check_actor(e, where)
             keys = {m.key for m in chat.messages if m.key}
-            if (e.get("react") or e.get("edit")) and e.get("message") not in keys:
+            if (e.get("react") or e.get("edit") or e.get("vote") or e.get("pin")) and e.get("message") not in keys:
                 raise SceneError(f"{where}: the message {e.get('message')!r} isn't a message of {chat.title!r} (give it a \"key\")")
             if e.get("react") and not (e.get("emoji") or e.get("custom")):
                 raise SceneError(f"{where}: a reaction needs an emoji or a custom emoji key")

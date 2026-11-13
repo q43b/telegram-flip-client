@@ -3,6 +3,7 @@ square with the initial), photos (little landscapes), stickers and custom emoji.
 Telegram, and nothing from real people. Results are kept (they never change).
 """
 import math
+import os
 from io import BytesIO
 
 from PIL import Image, ImageDraw, ImageFont
@@ -197,6 +198,25 @@ def thumb_jpeg(webp_bytes, size=128):
         background.paste(image, mask=image.split()[3])
         return _jpeg(background)
     return cached(("thumb", len(webp_bytes), hash(webp_bytes), size), make)
+
+
+# The one GIF (scenes/gif_demo.mp4, made by make_gif_demo.py: a real looping MP4, as Telegram keeps
+# GIFs), and its still picture: the same drawing as its first frame.
+GIF_W, GIF_H = 240, 180
+
+
+def gif_mp4():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenes", "gif_demo.mp4")
+    return cached(("gif", path), lambda: open(path, "rb").read())
+
+
+def gif_thumb_jpeg():
+    def make():
+        sky = Image.open(BytesIO(picture_jpeg("sunset", GIF_W, GIF_H))).convert("RGB")
+        sun = Image.open(BytesIO(sticker_webp("sun", 96))).convert("RGBA")
+        sky.paste(sun, ((GIF_W - 96) // 2, 20), sun)
+        return _jpeg(sky)
+    return cached(("gif_thumb",), make)
 
 
 # What a voice message or a video "contains": not playable (a made-up Telegram has no real

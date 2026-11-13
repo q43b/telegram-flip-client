@@ -33,7 +33,17 @@
         android:paddingBottom="4dp"
         android:textAppearance="?android:attr/textAppearanceListItemSmall" />
 
-    <!-- 96dp, as StickerLoader.CHAT_SIZE_DP -->
+    <!-- A GIF playing (its message has the focus); the height follows the GIF's shape -->
+    <TextureView
+        android:id="@+id/gif"
+        android:layout_width="128dp"
+        android:layout_height="96dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="4dp"
+        android:visibility="gone" />
+
+    <!-- 96dp, as StickerLoader.CHAT_SIZE_DP; also a GIF's still picture -->
     <ImageView
         android:id="@+id/sticker"
         android:layout_width="96dp"

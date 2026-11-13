@@ -11,6 +11,8 @@ import org.json.JSONObject
 // round = set for a round video message. sticker = set for a sticker.
 // file = set for a file sent as a document (text is then the caption).
 // read = my message: true once the other person has read it (private chats), else null or false.
+// gif = set for a GIF, poll = set for a poll (since 1.9.0); pinned = the message is pinned;
+// service = "pin" for "X pinned a message" (replyToId is the pinned one), else null.
 // customEmoji = where custom emoji sit in text (their plain emoji is in the text there).
 // reactions = people's reactions, in Telegram's order.
 // sender = who wrote it, only for other people's messages in groups; senderId = their user
@@ -34,6 +36,10 @@ data class Message(
     val customEmoji: List<CustomEmoji> = emptyList(),
     val file: FileInfo? = null,
     val read: Boolean? = null,
+    val gif: GifInfo? = null,
+    val poll: PollInfo? = null,
+    val pinned: Boolean = false,
+    val service: String? = null,
 ) {
     // Same keys as the server sends, so saved messages read back with fromJson
     fun toJson(): JSONObject = JSONObject()
@@ -52,6 +58,10 @@ data class Message(
         .put("custom_emoji", CustomEmoji.toJson(customEmoji))
         .put("file", file?.toJson() ?: JSONObject.NULL)
         .put("read", read ?: JSONObject.NULL)
+        .put("gif", gif?.toJson() ?: JSONObject.NULL)
+        .put("poll", poll?.toJson() ?: JSONObject.NULL)
+        .put("pinned", pinned)
+        .put("service", service ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = Message(
@@ -74,6 +84,10 @@ data class Message(
             customEmoji = CustomEmoji.listFromJson(json.optJSONArray("custom_emoji")),
             file = json.optJSONObject("file")?.let(FileInfo::fromJson),
             read = if (json.isNull("read")) null else json.getBoolean("read"),
+            gif = json.optJSONObject("gif")?.let(GifInfo::fromJson),
+            poll = json.optJSONObject("poll")?.let(PollInfo::fromJson),
+            pinned = json.optBoolean("pinned"),
+            service = if (json.isNull("service")) null else json.getString("service"),
         )
     }
 }
@@ -142,6 +156,69 @@ data class FileInfo(val name: String, val ext: String, val size: Long, val mime:
             size = json.optLong("size"),
             mime = json.optString("mime"),
         )
+    }
+}
+
+// A GIF: its size in pixels, length in seconds and file size. Telegram keeps GIFs as small silent MP4s
+// (GET /video), with a still picture of it (GET /thumb).
+data class GifInfo(val width: Int, val height: Int, val duration: Int, val size: Long) {
+    fun toJson(): JSONObject = JSONObject().put("w", width).put("h", height).put("duration", duration).put("size", size)
+
+    companion object {
+        fun fromJson(json: JSONObject) = GifInfo(json.optInt("w"), json.optInt("h"), json.optInt("duration"), json.optLong("size"))
+    }
+}
+
+// One answer of a poll: votes is null while Telegram doesn't show the results (until I vote, or it
+// closes); chosen = mine; correct = the right answer of a quiz, once known.
+data class PollAnswer(val text: String, val votes: Int?, val chosen: Boolean, val correct: Boolean)
+
+// A poll. public = the voters are shown (not anonymous); quiz = one answer is right (solution: the
+// explanation, once known); revoting = a vote can be taken back; total = how many voted (null: unknown).
+data class PollInfo(
+    val question: String,
+    val answers: List<PollAnswer>,
+    val total: Int?,
+    val closed: Boolean,
+    val public: Boolean,
+    val multiple: Boolean,
+    val quiz: Boolean,
+    val revoting: Boolean,
+    val solution: String?,
+) {
+    val voted get() = answers.any { it.chosen }
+
+    fun toJson(): JSONObject = JSONObject()
+        .put("question", question)
+        .put("answers", JSONArray().apply {
+            answers.forEach {
+                put(JSONObject().put("text", it.text).put("votes", it.votes ?: JSONObject.NULL)
+                    .put("chosen", it.chosen).put("correct", it.correct))
+            }
+        })
+        .put("total", total ?: JSONObject.NULL).put("closed", closed).put("public", public)
+        .put("multiple", multiple).put("quiz", quiz).put("revoting", revoting)
+        .put("solution", solution ?: JSONObject.NULL)
+
+    companion object {
+        fun fromJson(json: JSONObject): PollInfo {
+            val list = json.optJSONArray("answers") ?: JSONArray()
+            return PollInfo(
+                question = json.optString("question"),
+                answers = List(list.length()) { i ->
+                    val a = list.getJSONObject(i)
+                    PollAnswer(a.optString("text"), if (a.isNull("votes")) null else a.getInt("votes"),
+                        a.optBoolean("chosen"), a.optBoolean("correct"))
+                },
+                total = if (json.isNull("total")) null else json.getInt("total"),
+                closed = json.optBoolean("closed"),
+                public = json.optBoolean("public"),
+                multiple = json.optBoolean("multiple"),
+                quiz = json.optBoolean("quiz"),
+                revoting = json.optBoolean("revoting", true),
+                solution = if (json.isNull("solution")) null else json.getString("solution"),
+            )
+        }
     }
 }
 

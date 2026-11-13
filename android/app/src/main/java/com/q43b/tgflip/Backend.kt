@@ -53,6 +53,18 @@ interface Backend {
     fun sendVideo(chatId: Long, topicId: Long?, video: VideoSender.Prepared, openVideo: () -> InputStream, caption: String, replyToId: Long?, onProgress: (Long, Long) -> Unit, onSent: () -> Unit): Long
     fun getSticker(id: Long, size: Int, chatId: Long?, messageId: Long?, animated: Boolean = false): ByteArray?
     fun getVoice(chatId: Long, messageId: Long): ByteArray
+
+    // Since 1.9.0: a GIF's (or a video's) still picture as JPEG, null when there is none
+    fun getThumb(chatId: Long, messageId: Long, size: Int): ByteArray?
+
+    // Vote in a poll (the answers' positions; empty = take my vote back); the poll as it is now
+    fun vote(chatId: Long, messageId: Long, options: List<Int>): PollInfo
+
+    // The pinned messages of a chat or a topic, newest first
+    fun getPinned(chatId: Long, topicId: Long?): List<Message>
+
+    // Pin or unpin a message; both = in a private chat, for the other person too
+    fun pin(chatId: Long, messageId: Long, unpin: Boolean, both: Boolean = true)
 }
 
 interface LiveListener {

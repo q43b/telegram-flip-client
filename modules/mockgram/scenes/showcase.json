@@ -30,6 +30,8 @@
   ],
   "reactions": ["👍", "❤", "🔥", "😂", "🎉", "😮"],
   "live": {"events": [
+    {"chat": "Study group", "after": "35s", "vote": true, "message": "days", "answer": 2},
+    {"chat": "Mia Chen", "after": "45s", "pin": true, "message": "love", "from": 1001},
     {"chat": "Sam Rivera", "after": "40s", "seen": true},
     {"chat": "Mia Chen", "after": "10s", "from": 1001, "text": "Wait, I forgot to say: the cafe is on Pine street"},
     {"chat": "Study group", "after": "16s", "from": 1002, "text": "Slides are posted in the shared folder"},
@@ -49,13 +51,15 @@
       {"from": "me", "ago": "1d1h50m", "text": "Not yet! Send me the link?"},
       {"from": 1001, "ago": "1d1h48m", "text": "Here it is: t.me/addstickers/pixel_pals"},
       {"from": "me", "ago": "1d1h", "text": "Love them, the heart is my favourite", "key": "love"},
+      {"from": 1001, "ago": "22m", "media": {"type": "gif", "duration": 2}},
       {"from": 1001, "ago": "20m", "text": "Are we still on for lunch?", "edited": true},
       {"from": 1001, "ago": "3m", "text": "Also, can you bring the notes from yesterday?"}
     ]},
 
     {"kind": "group", "id": 2001, "title": "Study group", "members": [1001, 1002, 1003, 1004], "owner": 1002, "admins": [1001],
      "unread": 3, "messages": [
-      {"from": 1002, "ago": "5h", "text": "Reminder: the lab report is due on Friday"},
+      {"from": 1002, "ago": "5h", "text": "Reminder: the lab report is due on Friday", "key": "due", "pinned": true},
+      {"from": 1002, "ago": "4h58m", "reply": "due", "media": {"type": "pin"}},
       {"from": 1004, "ago": "4h50m", "text": "Thanks! I'll start tonight", "reactions": [{"emoji": "👍", "count": 3, "mine": true}]},
       {"from": 1001, "ago": "4h", "text": "Here is the whiteboard from today", "media": {"type": "photo", "picture": "city", "w": 1280, "h": 960}},
       {"from": "me", "ago": "3h55m", "text": "That diagram saved me", "reactions": [{"emoji": "❤", "count": 2}], "read_by": [1001, 1002, 1004]},
@@ -67,7 +71,8 @@
       {"from": 1003, "ago": "40m", "text": "See you there [[ce:cool]]"},
       {"from": 1002, "ago": "25m", "text": "Bring coffee, it will be a long day"},
       {"from": 1004, "ago": "24m", "text": "I can do that"},
-      {"from": 1001, "ago": "22m", "text": "Same!"}
+      {"from": 1001, "ago": "22m", "text": "Same!"},
+      {"from": 1002, "ago": "20m", "key": "days", "media": {"type": "poll", "question": "Which days work for the next session?", "answers": ["Monday", "Wednesday", "Friday"], "votes": [2, 1, 0], "anonymous": false, "multiple": true}}
     ]},
 
     {"kind": "forum", "id": 2002, "title": "Pixel Art Club", "members": [1001, 1002, 1003, 1004, 1008], "owner": 1008, "admins": [1002], "participants": 128,
@@ -100,6 +105,7 @@
       {"ago": "3d", "text": "Welcome to Daily Pixel: one small picture, every day."},
       {"ago": "1d", "text": "Today: a quiet evening", "media": {"type": "photo", "picture": "sunset", "w": 1280, "h": 960}, "reactions": [{"emoji": "❤", "count": 214}, {"emoji": "🔥", "count": 87}]},
       {"ago": "2h10m", "text": "Today: morning in the mountains", "media": {"type": "photo", "picture": "mountains", "w": 1280, "h": 960}, "reactions": [{"emoji": "❤", "count": 96}, {"emoji": "😮", "count": 12}]}
+      ,{"ago": "1h", "media": {"type": "poll", "question": "Which colour is #6495ED?", "answers": ["Cornflower blue", "Tomato", "Olive"], "votes": [120, 40, 15], "quiz": true, "correct": 0, "solution": "#6495ED is cornflower blue."}}
     ]},
 
     {"kind": "private", "person": 1007, "messages": [

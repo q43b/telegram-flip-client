@@ -84,6 +84,29 @@ object MessageFormat {
         return if (caption.isEmpty()) label else "$label - $caption"
     }
 
+    // "🎞 GIF"
+    fun gif(context: Context) = "🎞 ${context.getString(R.string.gif)}"
+
+    // "📊 Anonymous poll · multiple choice · closed · ✓: question" (✓ = I voted); without the poll's
+    // details (the chat list's preview) just "📊 Poll: question"
+    fun poll(context: Context, poll: PollInfo?, question: String): String {
+        if (poll == null) return "📊 ${context.getString(R.string.poll)}: $question"
+        val kind = context.getString(when {
+            poll.quiz && poll.public -> R.string.poll_quiz_public
+            poll.quiz -> R.string.poll_quiz_anonymous
+            poll.public -> R.string.poll_public
+            else -> R.string.poll_anonymous
+        })
+        var label = "📊 $kind"
+        if (poll.multiple) label += " · ${context.getString(R.string.poll_multiple)}"
+        if (poll.closed) label += " · ${context.getString(R.string.poll_closed)}"
+        if (poll.voted) label += " · ✓"
+        return "$label: $question"
+    }
+
+    // "📌 pinned a message"
+    fun pinned(context: Context) = "📌 ${context.getString(R.string.pinned_a_message)}"
+
     // "🏷 Sticker 😂" (the emoji it stands for)
     fun sticker(context: Context, emoji: String): String {
         val label = "🏷 ${context.getString(R.string.sticker)}"
