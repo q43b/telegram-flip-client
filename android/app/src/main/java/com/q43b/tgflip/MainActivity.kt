@@ -63,6 +63,7 @@ class MainActivity : AppCompatActivity() {
     // after onStart returns, too late for code that runs during onStart.
     private var visible = false
     private var askedLocalNetwork = false  // asked once per screen, so a refusal doesn't loop
+    private var askedDirectSetup = false  // a Direct account not logged in: its setup opens once per screen
 
     // Android 17+: "Allow TG Flip to access local network devices?"; allowed = connect now
     private val askLocalNetwork = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
@@ -172,6 +173,10 @@ class MainActivity : AppCompatActivity() {
         live = null
         api = null
         photos.api = null
+        if (Profiles.current(this).direct) {
+            startDirect()
+            return
+        }
         val address = settings.getAddress()
         val token = settings.getToken()
         // Why this mode cannot connect, if it cannot
@@ -210,6 +215,28 @@ class MainActivity : AppCompatActivity() {
             wasConnected = false
             live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent).also { it.start() }
             loadChats(quiet = false)
+        }
+    }
+
+    // A Direct mode account (dev builds, 2.0 in progress): not logged in yet = its setup screen opens
+    // (once per screen); logged in = its chats come with the next step (TdlibBackend), so for now only
+    // the saved copy
+    private fun startDirect() {
+        lifecycleScope.launch {
+            showSavedChats()
+            connection.showNoServer()
+            val direct = DirectModes.available
+            when {
+                direct == null -> showStatus(getString(R.string.direct_needs_dev))
+                !direct.isLoggedIn(this@MainActivity, Profiles.currentId(this@MainActivity)) -> {
+                    showStatus(getString(R.string.direct_not_logged_in))
+                    if (!askedDirectSetup) {
+                        askedDirectSetup = true
+                        direct.openSetup(this@MainActivity)
+                    }
+                }
+                else -> showStatus(getString(R.string.direct_chats_later))
+            }
         }
     }
 
@@ -567,6 +594,7 @@ class MainActivity : AppCompatActivity() {
     // First launch or a connection error. Always closable (Back or Cancel): the status line
     // keeps the hint, and Settings (Right) has the same fields.
     private fun askForSettings() {
+        if (Profiles.current(this).direct) return
         if (settingsDialog?.isShowing == true) return
         settingsDialog = ServerSettingsDialog.show(this, settings, settings.getMode(), cancelable = true) { start() }
     }

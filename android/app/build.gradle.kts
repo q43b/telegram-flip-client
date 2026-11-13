@@ -87,6 +87,8 @@ dependencies {
     implementation(libs.media3.transformer)
     implementation(libs.media3.effect)
     implementation(libs.media3.common)
+    // Direct mode's QR login (dev builds until 2.0, like TDLib)
+    debugImplementation(libs.zxing.core)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)

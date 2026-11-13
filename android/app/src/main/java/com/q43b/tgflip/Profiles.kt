@@ -12,7 +12,8 @@ import java.io.File
 // folders the app has always used, so updating changes nothing for it; the others add
 // "_<id>" to theirs (see suffix).
 object Profiles {
-    data class Profile(val id: String, val name: String)
+    // direct: talks to Telegram itself (Direct mode, DirectMode.kt) instead of through a server
+    data class Profile(val id: String, val name: String, val direct: Boolean = false)
 
     const val MAIN = "main"
     private const val KEY_LIST = "profiles"
@@ -24,7 +25,9 @@ object Profiles {
         val saved = prefs(context).getString(KEY_LIST, null)
         val others = try {
             val json = JSONArray(saved ?: "[]")
-            List(json.length()) { i -> json.getJSONObject(i).let { Profile(it.getString("id"), it.getString("name")) } }
+            List(json.length()) { i ->
+                json.getJSONObject(i).let { Profile(it.getString("id"), it.getString("name"), it.optString("kind") == KIND_DIRECT) }
+            }
         } catch (e: Exception) {
             emptyList()
         }
@@ -43,8 +46,8 @@ object Profiles {
     // Added to every key and folder that belongs to one account; empty for main
     fun suffix(context: Context, id: String = currentId(context)) = if (id == MAIN) "" else "_$id"
 
-    fun add(context: Context, name: String): Profile {
-        val profile = Profile(System.currentTimeMillis().toString(36), name)
+    fun add(context: Context, name: String, direct: Boolean = false): Profile {
+        val profile = Profile(System.currentTimeMillis().toString(36), name, direct)
         save(context, list(context) + profile)
         return profile
     }
@@ -60,11 +63,10 @@ object Profiles {
     // removed (there is always one account). The server is not told: its token keeps working.
     fun remove(context: Context, id: String) {
         if (id == MAIN) return
+        if (list(context).any { it.id == id && it.direct }) DirectModes.available?.forget(context, id)
         val suffix = suffix(context, id)
         val edit = prefs(context).edit()
-        edit.putString(KEY_LIST, JSONArray(list(context).filter { it.id != id }.map {
-            JSONObject().put("id", it.id).put("name", it.name)
-        }).toString())
+        edit.putString(KEY_LIST, JSONArray(list(context).filter { it.id != id }.map(::toJson)).toString())
         ServerSettings.keysFor(suffix).forEach { edit.remove(it) }
         edit.remove(Folders.KEY + suffix)
         if (currentId(context) == id) edit.putString(KEY_CURRENT, MAIN)
@@ -75,7 +77,13 @@ object Profiles {
 
     private fun save(context: Context, profiles: List<Profile>) {
         // main is stored too, so that renaming it sticks
-        val json = JSONArray(profiles.map { JSONObject().put("id", it.id).put("name", it.name) })
+        val json = JSONArray(profiles.map(::toJson))
         prefs(context).edit().putString(KEY_LIST, json.toString()).apply()
     }
+
+    private fun toJson(p: Profile) = JSONObject().put("id", p.id).put("name", p.name).apply {
+        if (p.direct) put("kind", KIND_DIRECT)
+    }
+
+    private const val KIND_DIRECT = "direct"
 }

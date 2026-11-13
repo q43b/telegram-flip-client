@@ -59,6 +59,14 @@
     <string name="theme_error_not_zip">This file isn\'t a theme zip.</string>
     <string name="theme_error_too_big">This theme is too big (over 2 MB).</string>
     <string name="under_the_hood_load_theme">Load a theme from a file</string>
+    <string name="account_direct_mark">" (Direct)"</string>
+    <string name="account_kind_title">How does it reach Telegram?</string>
+    <string name="account_kind_server">Through my TG Flip server</string>
+    <string name="account_kind_direct">Directly from this phone (Direct mode, in progress)</string>
+    <string name="setting_direct">Direct mode settings and login…</string>
+    <string name="direct_needs_dev">This account uses Direct mode, which this build of TG Flip doesn\'t have</string>
+    <string name="direct_not_logged_in">Direct mode: not logged in yet (Settings › Network)</string>
+    <string name="direct_chats_later">Direct mode: logged in. Chats come with the next update of the dev build</string>
     <string name="under_the_hood_tdlib_test">🧪 TDLib test (dev builds)</string>
     <!-- Under the hood > Local cache (LocalCacheActivity) -->
     <string name="under_the_hood_local_cache">Local cache</string>

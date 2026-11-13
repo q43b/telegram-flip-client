@@ -143,6 +143,11 @@ class SettingsGroupActivity : AppCompatActivity() {
         val account = SettingRow(getString(R.string.setting_account, Profiles.current(this).name)) {
             AccountMenu.show(this) { saved() }
         }
+        // A Direct mode account has no server: its own settings (api_id, proxy, login) instead
+        val direct = DirectModes.available
+        if (direct != null && Profiles.current(this).direct) {
+            return listOf(account, SettingRow(getString(R.string.setting_direct)) { direct.openSetup(this) })
+        }
         return listOf(account, mode) + servers
     }
 

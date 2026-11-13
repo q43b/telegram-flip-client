@@ -1,4 +1,5 @@
 [versions]
+zxing = "3.5.3"
 agp = "9.4.1"
 coreKtx = "1.19.1"
 junit = "4.13.2"
@@ -12,6 +13,7 @@ okhttp = "4.12.0"
 media3 = "1.11.1"
 
 [libraries]
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

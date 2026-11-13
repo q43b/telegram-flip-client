@@ -13,7 +13,9 @@ object AccountMenu {
     fun show(activity: AppCompatActivity, onChanged: () -> Unit) {
         val profiles = Profiles.list(activity)
         val current = Profiles.currentId(activity)
-        val items = profiles.map { (if (it.id == current) "● " else "○ ") + it.name } +
+        val items = profiles.map {
+            (if (it.id == current) "● " else "○ ") + it.name + if (it.direct) activity.getString(R.string.account_direct_mark) else ""
+        } +
             activity.getString(R.string.account_add) +
             activity.getString(R.string.account_rename) +
             (if (current != Profiles.MAIN) listOf(activity.getString(R.string.account_remove)) else emptyList())
@@ -21,8 +23,9 @@ object AccountMenu {
             when {
                 which < profiles.size -> if (profiles[which].id != current) switchTo(activity, profiles[which].id)
                 which == profiles.size -> askName(activity, R.string.account_add_title, "") { name ->
-                    // The new account has no token yet: the chat list asks for it on its own
-                    switchTo(activity, Profiles.add(activity, name).id)
+                    // The new account has no token (or Telegram login) yet: the chat list asks for it on its own
+                    if (DirectModes.available == null) switchTo(activity, Profiles.add(activity, name).id)
+                    else askKind(activity) { direct -> switchTo(activity, Profiles.add(activity, name, direct).id) }
                 }
                 which == profiles.size + 1 -> askName(activity, R.string.account_rename_title, Profiles.current(activity).name) { name ->
                     Profiles.rename(activity, current, name)
@@ -31,6 +34,12 @@ object AccountMenu {
                 else -> confirmRemove(activity, current)
             }
         }
+    }
+
+    // Dev builds until 2.0: through a TG Flip server, or straight to Telegram (Direct mode)
+    private fun askKind(activity: AppCompatActivity, onKind: (Boolean) -> Unit) {
+        val kinds = listOf(activity.getString(R.string.account_kind_server), activity.getString(R.string.account_kind_direct))
+        MessageMenu.choose(activity, activity.getString(R.string.account_kind_title), kinds) { onKind(it == 1) }
     }
 
     private fun switchTo(activity: AppCompatActivity, id: String) {
