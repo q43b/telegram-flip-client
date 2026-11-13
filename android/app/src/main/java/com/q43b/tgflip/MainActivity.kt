@@ -23,6 +23,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -219,8 +220,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // A Direct mode account (dev builds, 2.0 in progress): not logged in yet = its setup screen opens
-    // (once per screen); logged in = its chats come with the next step (TdlibBackend), so for now only
-    // the saved copy
+    // (once per screen); logged in = TDLib on the phone answers instead of a server (TdlibBackend)
     private fun startDirect() {
         lifecycleScope.launch {
             showSavedChats()
@@ -235,7 +235,16 @@ class MainActivity : AppCompatActivity() {
                         direct.openSetup(this@MainActivity)
                     }
                 }
-                else -> showStatus(getString(R.string.direct_chats_later))
+                else -> {
+                    // From here on exactly like a server account: the same loading, live events and screens
+                    if (!visible) return@launch
+                    val api = direct.backend(this@MainActivity)
+                    this@MainActivity.api = api
+                    photos.api = api
+                    wasConnected = false
+                    live = LiveConnection(api, lifecycleScope, ::showConnection, ::onServerEvent).also { it.start() }
+                    loadChats(quiet = false)
+                }
             }
         }
     }
@@ -577,7 +586,29 @@ class MainActivity : AppCompatActivity() {
         // A new message or a read elsewhere changes unread counts and order;
         // edits and deletes can change the newest message shown in the preview
         when (event.optString("type")) {
-            "message", "read", "edited", "deleted" -> loadChats(quiet = true)
+            "message", "read", "edited", "deleted" -> refreshSoon()
+        }
+    }
+
+    // Many events at once (a busy group, catching up after a reconnect) make one refresh, not one each:
+    // at most one runs, at most one more waits, and they are at least REFRESH_GAP_MS apart
+    private var refreshing = false
+    private var refreshAgain = false
+
+    private fun refreshSoon() {
+        if (refreshing) {
+            refreshAgain = true
+            return
+        }
+        refreshing = true
+        lifecycleScope.launch {
+            loadChats(quiet = true)
+            delay(REFRESH_GAP_MS)
+            refreshing = false
+            if (refreshAgain) {
+                refreshAgain = false
+                refreshSoon()
+            }
         }
     }
 
@@ -601,6 +632,7 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val PAGE_SIZE = 20
+        const val REFRESH_GAP_MS = 1000L
         const val PREVIEW_LENGTH = 32  // about one line of the small preview text
         const val SENDER_LENGTH = 12
     }

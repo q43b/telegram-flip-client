@@ -14,6 +14,9 @@ interface DirectMode {
     // Did this account finish logging in to Telegram (as far as the phone remembers)?
     fun isLoggedIn(context: Context, profileId: String): Boolean
 
+    // The Backend of a logged-in Direct account (starts TDLib for it when it isn't running)
+    fun backend(context: Context): Backend
+
     // The account is being removed from the phone: log out of Telegram and delete its TDLib folders
     fun forget(context: Context, profileId: String)
 }

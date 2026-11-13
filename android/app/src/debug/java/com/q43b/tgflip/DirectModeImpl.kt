@@ -10,5 +10,10 @@ object DirectModeImpl : DirectMode {
 
     override fun isLoggedIn(context: Context, profileId: String) = DirectSettings(context, profileId).loggedIn
 
+    override fun backend(context: Context): Backend {
+        Tdlib.start(context, Profiles.currentId(context))
+        return TdlibBackend()
+    }
+
     override fun forget(context: Context, profileId: String) = Tdlib.forget(context, profileId)
 }

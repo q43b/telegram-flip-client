@@ -19,7 +19,9 @@ fun TextView.showNoServer() = show(R.string.conn_no_server, Themes.current(conte
 
 // color: from the theme's palette (connecting / connected / offline)
 private fun TextView.show(text: Int, color: Int) {
-    val mode = context.getString(ServerSettings(context).getMode().shortLabel)
+    // A Direct mode account reaches Telegram itself, so the server's connection mode says nothing there
+    val mode = if (Profiles.current(context).direct) context.getString(R.string.conn_direct)
+    else context.getString(ServerSettings(context).getMode().shortLabel)
     setText("${context.getString(text)} · $mode")
     setBackgroundColor(color)
 }

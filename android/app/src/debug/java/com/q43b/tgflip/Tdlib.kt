@@ -48,6 +48,8 @@ object Tdlib {
         Client.setLogMessageHandler(2) { level, message -> Log.i("TDLib", "[$level] $message") }
     }
 
+    @Volatile private var generation = 0  // which client's updates count (an old one may still be talking)
+
     val running get() = client != null
 
     fun isFor(id: String) = client != null && profileId == id
@@ -65,8 +67,18 @@ object Tdlib {
             auth = null
             connection = null
             lastError = null
-            lateinit var me: Client
-            me = Client.create({ update -> main.post { onUpdate(me, update) } }, null, null)
+            // Updates come on TDLib's thread, also before create() returns: the cache and the live events
+            // are handled right there (TdlibLive), only the login and connection state on the main thread
+            val gen = ++generation
+            TdlibLive.clear()
+            val ref = arrayOfNulls<Client>(1)
+            val me = Client.create({ update ->
+                if (gen == generation) TdlibLive.onUpdate(update)
+                if (update is TdApi.UpdateAuthorizationState || update is TdApi.UpdateConnectionState) {
+                    main.post { ref[0]?.let { onUpdate(it, update) } }
+                }
+            }, null, null)
+            ref[0] = me
             client = me
             changed()
         }
@@ -75,6 +87,7 @@ object Tdlib {
 
     fun stop() {
         val c = client ?: return
+        generation++
         client = null
         profileId = null
         closing++
@@ -207,6 +220,24 @@ object Tdlib {
         val result = suspendCancellableCoroutine { cont -> c.send(function) { r -> cont.resume(r) } }
         if (result is TdApi.Error) throw TdlibException(result.code, result.message)
         return result
+    }
+
+    // Blocking, for TdlibBackend (which runs on background threads, like ApiClient): the answer, or
+    // TDLib's refusal as an exception with its words; 30 s at most
+    fun callBlocking(function: TdApi.Function<*>, seconds: Long = 30): TdApi.Object {
+        val c = client ?: throw IOException("Direct mode isn't connected")
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var result: TdApi.Object? = null
+        c.send(function) { r -> result = r; latch.countDown() }
+        if (!latch.await(seconds, java.util.concurrent.TimeUnit.SECONDS)) throw IOException("Telegram didn't answer in time")
+        val r = result
+        if (r is TdApi.Error) throw TdlibException(r.code, r.message)
+        return r ?: throw IOException("No answer")
+    }
+
+    // Fire and forget, with the answer handed over on TDLib's thread
+    fun sendRaw(function: TdApi.Function<*>, onResult: (TdApi.Object) -> Unit) {
+        client?.send(function) { r -> onResult(r) }
     }
 
     // A request that only needs sending; a refusal shows on the screen (lastError)
