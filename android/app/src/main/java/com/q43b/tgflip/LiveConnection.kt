@@ -51,7 +51,9 @@ class LiveConnection(
 
             override fun onEvent(event: JSONObject) {
                 scope.launch {
-                    if (mine === stream) onEvent(event)
+                    // this@LiveConnection: a plain onEvent(event) here would be this listener's own
+                    // onEvent (Kotlin picks the nearest one), calling itself forever on the main thread
+                    if (mine === stream) this@LiveConnection.onEvent(event)
                 }
             }
 
